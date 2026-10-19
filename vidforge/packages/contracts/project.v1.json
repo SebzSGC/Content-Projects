@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vidforge.local/schemas/project.v1.json",
+  "title": "Project",
+  "type": "object",
+  "required": ["schema_version", "id", "name", "created_at", "canvas", "language"],
+  "properties": {
+    "schema_version": { "const": "project/1" },
+    "id": { "type": "string" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "created_at": { "type": "string" },
+    "updated_at": { "type": "string" },
+    "language": { "type": "string" },
+    "canvas": {
+      "type": "object",
+      "required": ["width", "height", "fps"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 16, "maximum": 7680 },
+        "height": { "type": "integer", "minimum": 16, "maximum": 4320 },
+        "fps": {
+          "type": "object",
+          "required": ["num", "den"],
+          "properties": {
+            "num": { "type": "integer", "minimum": 1 },
+            "den": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "background": { "type": "string", "default": "#000000" }
+      }
+    },
+    "style_guide": { "type": "string", "default": "" },
+    "providers": {
+      "type": "object",
+      "properties": {
+        "llm": { "type": "string" },
+        "tts": { "type": "string" },
+        "image": { "type": "string" },
+        "video": { "type": "string" }
+      }
+    },
+    "narration_asset_id": { "type": ["string", "null"] },
+    "active_transcript_id": { "type": ["string", "null"] }
+  }
+}

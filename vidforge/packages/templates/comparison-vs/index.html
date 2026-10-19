@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100vw; height: 100vh; overflow: hidden;
+    background: transparent;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .wrap {
+    display: flex; align-items: stretch; gap: 40px;
+    width: 82%; max-width: 1500px;
+  }
+  .panel {
+    flex: 1; padding: 48px; border-radius: 24px;
+    background: rgba(15, 23, 42, 0.92);
+    border: 2px solid rgba(148, 163, 184, 0.3);
+    box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .panel.right {
+    border-color: #22c55e;
+    box-shadow: 0 20px 50px rgba(34, 197, 94, 0.22);
+  }
+  .title { font-size: 46px; font-weight: 800; color: #f8fafc; margin-bottom: 18px; }
+  .panel.right .title { color: #4ade80; }
+  .desc { font-size: 30px; color: #cbd5e1; line-height: 1.35; }
+  .vs {
+    align-self: center; width: 88px; height: 88px; border-radius: 50%;
+    background: #f59e0b; color: #0f172a; font-weight: 900; font-size: 34px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 10px 30px rgba(245, 158, 11, 0.45);
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel left" id="pLeft">
+      <div class="title" id="lt">Opción A</div>
+      <div class="desc" id="lv">Detalle A</div>
+    </div>
+    <div class="vs" id="vs">VS</div>
+    <div class="panel right" id="pRight">
+      <div class="title" id="rt">Opción B</div>
+      <div class="desc" id="rv">Detalle B</div>
+    </div>
+  </div>
+<script>
+  let dur = 4500;
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function easeOut(x) { return 1 - Math.pow(1 - x, 3); }
+  window.__vf = {
+    async init(props = {}) {
+      dur = Math.round((props.duration_us ?? 4500000) / 1000);
+      document.getElementById("lt").textContent = props.left_title ?? "Opción A";
+      document.getElementById("lv").textContent = props.left_value ?? "";
+      document.getElementById("rt").textContent = props.right_title ?? "Opción B";
+      document.getElementById("rv").textContent = props.right_value ?? "";
+      await this.seek(0);
+    },
+    durationMs() { return dur; },
+    async seek(tMs) {
+      const pL = easeOut(clamp(tMs / 500, 0, 1));
+      const pVs = easeOut(clamp((tMs - 200) / 400, 0, 1));
+      const pR = easeOut(clamp((tMs - 350) / 500, 0, 1));
+      const out = tMs > dur - 350 ? clamp((dur - tMs) / 350, 0, 1) : 1;
+
+      const lEl = document.getElementById("pLeft");
+      lEl.style.opacity = (pL * out).toFixed(3);
+      lEl.style.transform = `translateX(${((1 - pL) * -80).toFixed(1)}px)`;
+
+      const vsEl = document.getElementById("vs");
+      vsEl.style.opacity = (pVs * out).toFixed(3);
+      vsEl.style.transform = `scale(${(0.4 + 0.6 * pVs).toFixed(3)})`;
+
+      const rEl = document.getElementById("pRight");
+      rEl.style.opacity = (pR * out).toFixed(3);
+      rEl.style.transform = `translateX(${((1 - pR) * 80).toFixed(1)}px)`;
+    }
+  };
+</script>
+</body>
+</html>

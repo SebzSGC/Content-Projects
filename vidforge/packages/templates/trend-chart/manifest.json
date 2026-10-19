@@ -1,0 +1,25 @@
+{
+  "id": "trend-chart",
+  "version": "1.0.0",
+  "name": "Gráfico de Tendencia",
+  "category": "trend",
+  "entry": "index.html",
+  "supports_alpha": true,
+  "aspect_ratios": ["16:9", "9:16"],
+  "default_duration_us": 4500000,
+  "min_duration_us": 2500000,
+  "props_schema": {
+    "type": "object",
+    "required": ["title", "points"],
+    "properties": {
+      "title": { "type": "string", "default": "Evolución de Rendimiento" },
+      "points": {
+        "type": "array",
+        "items": { "type": "number" },
+        "default": [18, 32, 45, 68, 94]
+      },
+      "accent_color": { "type": "string", "default": "#22c55e" }
+    }
+  },
+  "semantic_rules": []
+}

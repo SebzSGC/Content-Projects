@@ -1,0 +1,21 @@
+{
+  "id": "lower-third",
+  "version": "1.0.0",
+  "name": "Tercio Inferior Informativo",
+  "category": "lower_third",
+  "entry": "index.html",
+  "supports_alpha": true,
+  "aspect_ratios": ["16:9", "9:16"],
+  "default_duration_us": 3500000,
+  "min_duration_us": 1500000,
+  "props_schema": {
+    "type": "object",
+    "required": ["heading"],
+    "properties": {
+      "heading": { "type": "string", "default": "Punto Clave" },
+      "subheading": { "type": "string", "default": "Contexto adicional de la escena" },
+      "accent_color": { "type": "string", "default": "#f59e0b" }
+    }
+  },
+  "semantic_rules": []
+}

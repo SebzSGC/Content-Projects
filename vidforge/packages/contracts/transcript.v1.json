@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vidforge.local/schemas/transcript.v1.json",
+  "title": "Transcript",
+  "type": "object",
+  "required": ["schema_version", "id", "audio_asset_id", "language", "engine", "mode", "duration_us", "words", "segments"],
+  "properties": {
+    "schema_version": { "const": "transcript/1" },
+    "id": { "type": "string" },
+    "audio_asset_id": { "type": "string" },
+    "audio_sha256": { "type": "string" },
+    "language": { "type": "string" },
+    "engine": {
+      "type": "object",
+      "required": ["name", "model"],
+      "properties": {
+        "name": { "type": "string" },
+        "model": { "type": "string" },
+        "device": { "type": "string" },
+        "compute_type": { "type": "string" }
+      }
+    },
+    "mode": { "enum": ["transcribe", "align"] },
+    "duration_us": { "type": "integer", "minimum": 0 },
+    "words": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["i", "text", "start_us", "end_us"],
+        "properties": {
+          "i": { "type": "integer", "minimum": 0 },
+          "text": { "type": "string", "minLength": 1 },
+          "start_us": { "type": "integer", "minimum": 0 },
+          "end_us": { "type": "integer", "minimum": 0 },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "source": { "enum": ["asr", "aligned", "interpolated"] }
+        }
+      }
+    },
+    "segments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "word_range", "start_us", "end_us", "text"],
+        "properties": {
+          "id": { "type": "string" },
+          "word_range": {
+            "type": "array",
+            "items": { "type": "integer" },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "start_us": { "type": "integer", "minimum": 0 },
+          "end_us": { "type": "integer", "minimum": 0 },
+          "text": { "type": "string" },
+          "beat_id": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

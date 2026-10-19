@@ -1,0 +1,131 @@
+{
+  "$defs": {
+    "BeatModel": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "index": {
+          "title": "Index",
+          "type": "integer"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "char_range": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Char Range",
+          "type": "array"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "visual_prompt": {
+          "default": "",
+          "title": "Visual Prompt",
+          "type": "string"
+        },
+        "media_kind": {
+          "default": "image",
+          "enum": [
+            "image",
+            "video",
+            "stock",
+            "motion",
+            "any"
+          ],
+          "title": "Media Kind",
+          "type": "string"
+        },
+        "time_range_us": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Time Range Us"
+        }
+      },
+      "required": [
+        "id",
+        "index",
+        "text"
+      ],
+      "title": "BeatModel",
+      "type": "object"
+    },
+    "CharacterModel": {
+      "properties": {
+        "tag": {
+          "title": "Tag",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "reference_asset_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reference Asset Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "tag",
+        "name"
+      ],
+      "title": "CharacterModel",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "default": "script/1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "text": {
+      "default": "",
+      "title": "Text",
+      "type": "string"
+    },
+    "characters": {
+      "items": {
+        "$ref": "#/$defs/CharacterModel"
+      },
+      "title": "Characters",
+      "type": "array"
+    },
+    "beats": {
+      "items": {
+        "$ref": "#/$defs/BeatModel"
+      },
+      "title": "Beats",
+      "type": "array"
+    }
+  },
+  "title": "ScriptModel",
+  "type": "object"
+}

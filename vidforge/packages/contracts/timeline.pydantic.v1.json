@@ -1,0 +1,434 @@
+{
+  "$defs": {
+    "CanvasConfig": {
+      "properties": {
+        "width": {
+          "default": 1920,
+          "maximum": 7680,
+          "minimum": 16,
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "default": 1080,
+          "maximum": 4320,
+          "minimum": 16,
+          "title": "Height",
+          "type": "integer"
+        },
+        "fps": {
+          "$ref": "#/$defs/Rational"
+        },
+        "background": {
+          "default": "#000000",
+          "title": "Background",
+          "type": "string"
+        }
+      },
+      "title": "CanvasConfig",
+      "type": "object"
+    },
+    "ClipModel": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "asset_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Asset Id"
+        },
+        "start_us": {
+          "minimum": 0,
+          "title": "Start Us",
+          "type": "integer"
+        },
+        "duration_us": {
+          "minimum": 1,
+          "title": "Duration Us",
+          "type": "integer"
+        },
+        "source_in_us": {
+          "default": 0,
+          "title": "Source In Us",
+          "type": "integer"
+        },
+        "volume_db": {
+          "default": 0.0,
+          "title": "Volume Db",
+          "type": "number"
+        },
+        "effects": {
+          "items": {
+            "$ref": "#/$defs/KenBurnsEffect"
+          },
+          "title": "Effects",
+          "type": "array"
+        },
+        "transition_in": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TransitionSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "motion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MotionSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "subtitle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubtitleClipSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "start_us",
+        "duration_us"
+      ],
+      "title": "ClipModel",
+      "type": "object"
+    },
+    "KenBurnsEffect": {
+      "properties": {
+        "type": {
+          "const": "ken_burns",
+          "default": "ken_burns",
+          "title": "Type",
+          "type": "string"
+        },
+        "zoom_from": {
+          "default": 1.03,
+          "title": "Zoom From",
+          "type": "number"
+        },
+        "zoom_to": {
+          "default": 1.1,
+          "title": "Zoom To",
+          "type": "number"
+        },
+        "pan": {
+          "default": "none",
+          "enum": [
+            "none",
+            "left_right",
+            "right_left",
+            "top_bottom",
+            "bottom_top"
+          ],
+          "title": "Pan",
+          "type": "string"
+        },
+        "easing": {
+          "default": "linear",
+          "enum": [
+            "linear",
+            "ease_in_out"
+          ],
+          "title": "Easing",
+          "type": "string"
+        }
+      },
+      "title": "KenBurnsEffect",
+      "type": "object"
+    },
+    "MotionSpec": {
+      "properties": {
+        "template_id": {
+          "title": "Template Id",
+          "type": "string"
+        },
+        "template_version": {
+          "default": "1.0.0",
+          "title": "Template Version",
+          "type": "string"
+        },
+        "props": {
+          "additionalProperties": true,
+          "title": "Props",
+          "type": "object"
+        },
+        "render_asset_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Render Asset Id"
+        },
+        "fullscreen": {
+          "default": false,
+          "title": "Fullscreen",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "template_id"
+      ],
+      "title": "MotionSpec",
+      "type": "object"
+    },
+    "Rational": {
+      "properties": {
+        "num": {
+          "default": 60,
+          "minimum": 1,
+          "title": "Num",
+          "type": "integer"
+        },
+        "den": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Den",
+          "type": "integer"
+        }
+      },
+      "title": "Rational",
+      "type": "object"
+    },
+    "SubtitleClipSpec": {
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "style_id": {
+          "default": "default",
+          "title": "Style Id",
+          "type": "string"
+        },
+        "word_range": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Word Range",
+          "type": "array"
+        },
+        "mode": {
+          "default": "karaoke",
+          "enum": [
+            "block",
+            "karaoke",
+            "word_pop"
+          ],
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "SubtitleClipSpec",
+      "type": "object"
+    },
+    "SubtitleStyleModel": {
+      "properties": {
+        "id": {
+          "default": "default",
+          "title": "Id",
+          "type": "string"
+        },
+        "font_family": {
+          "default": "Segoe UI",
+          "title": "Font Family",
+          "type": "string"
+        },
+        "font_size": {
+          "default": 56,
+          "title": "Font Size",
+          "type": "integer"
+        },
+        "primary_color": {
+          "default": "#FFFFFF",
+          "title": "Primary Color",
+          "type": "string"
+        },
+        "highlight_color": {
+          "default": "#38BDF8",
+          "title": "Highlight Color",
+          "type": "string"
+        },
+        "outline": {
+          "default": 4.0,
+          "title": "Outline",
+          "type": "number"
+        },
+        "shadow": {
+          "default": 2.0,
+          "title": "Shadow",
+          "type": "number"
+        },
+        "position": {
+          "default": "bottom",
+          "enum": [
+            "bottom",
+            "middle",
+            "top"
+          ],
+          "title": "Position",
+          "type": "string"
+        },
+        "max_chars_per_line": {
+          "default": 38,
+          "title": "Max Chars Per Line",
+          "type": "integer"
+        },
+        "uppercase": {
+          "default": true,
+          "title": "Uppercase",
+          "type": "boolean"
+        }
+      },
+      "title": "SubtitleStyleModel",
+      "type": "object"
+    },
+    "TrackModel": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "video",
+            "overlay",
+            "motion",
+            "audio",
+            "subtitle"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "muted": {
+          "default": false,
+          "title": "Muted",
+          "type": "boolean"
+        },
+        "locked": {
+          "default": false,
+          "title": "Locked",
+          "type": "boolean"
+        },
+        "clips": {
+          "items": {
+            "$ref": "#/$defs/ClipModel"
+          },
+          "title": "Clips",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "name"
+      ],
+      "title": "TrackModel",
+      "type": "object"
+    },
+    "TransitionSpec": {
+      "properties": {
+        "kind": {
+          "default": "xfade",
+          "enum": [
+            "cut",
+            "xfade",
+            "gl"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "default": "fade",
+          "title": "Name",
+          "type": "string"
+        },
+        "duration_us": {
+          "default": 500000,
+          "title": "Duration Us",
+          "type": "integer"
+        },
+        "anchor": {
+          "default": "start",
+          "enum": [
+            "start",
+            "center"
+          ],
+          "title": "Anchor",
+          "type": "string"
+        }
+      },
+      "title": "TransitionSpec",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "default": "timeline/1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "revision": {
+      "default": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "canvas": {
+      "$ref": "#/$defs/CanvasConfig"
+    },
+    "duration_us": {
+      "default": 0,
+      "title": "Duration Us",
+      "type": "integer"
+    },
+    "subtitle_styles": {
+      "items": {
+        "$ref": "#/$defs/SubtitleStyleModel"
+      },
+      "title": "Subtitle Styles",
+      "type": "array"
+    },
+    "tracks": {
+      "items": {
+        "$ref": "#/$defs/TrackModel"
+      },
+      "title": "Tracks",
+      "type": "array"
+    }
+  },
+  "title": "TimelineModel",
+  "type": "object"
+}

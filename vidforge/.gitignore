@@ -1,0 +1,28 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+.pytest_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# Node.js & Web builds
+node_modules/
+dist/
+.npm/
+
+# Local isolated runtimes & local project storage
+runtime/
+storage/
+
+# Environment files
+.env
+.env.*
+*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini

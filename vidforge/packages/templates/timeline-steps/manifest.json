@@ -1,0 +1,24 @@
+{
+  "id": "timeline-steps",
+  "version": "1.0.0",
+  "name": "Pasos Secuenciales",
+  "category": "timeline",
+  "entry": "index.html",
+  "supports_alpha": true,
+  "aspect_ratios": ["16:9", "9:16"],
+  "default_duration_us": 4500000,
+  "min_duration_us": 2500000,
+  "props_schema": {
+    "type": "object",
+    "required": ["steps"],
+    "properties": {
+      "title": { "type": "string", "default": "Proceso Clave" },
+      "steps": {
+        "type": "array",
+        "items": { "type": "string" },
+        "default": ["1. Diagnóstico", "2. Ejecución", "3. Resultados"]
+      }
+    }
+  },
+  "semantic_rules": []
+}

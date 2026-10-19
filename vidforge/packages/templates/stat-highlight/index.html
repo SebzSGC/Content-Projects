@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100vw; height: 100vh; overflow: hidden;
+    background: transparent;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card {
+    background: rgba(15, 23, 42, 0.92);
+    border: 2px solid var(--accent, #38bdf8);
+    border-radius: 28px;
+    padding: 56px 84px;
+    text-align: center;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.65), 0 0 40px rgba(56, 189, 248, 0.25);
+    transform-origin: center center;
+  }
+  .value {
+    font-size: 132px;
+    font-weight: 900;
+    color: var(--accent, #38bdf8);
+    letter-spacing: -3px;
+    line-height: 1.05;
+  }
+  .label {
+    margin-top: 16px;
+    font-size: 44px;
+    font-weight: 700;
+    color: #f8fafc;
+  }
+  .sublabel {
+    margin-top: 12px;
+    font-size: 26px;
+    color: #94a3b8;
+  }
+  .bar-bg {
+    margin-top: 28px;
+    width: 100%;
+    height: 10px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent, #38bdf8), #818cf8);
+    width: 0%;
+  }
+</style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="value" id="val">87%</div>
+    <div class="label" id="lbl">Crecimiento Anual</div>
+    <div class="sublabel" id="sub">Datos verificados del sector</div>
+    <div class="bar-bg"><div class="bar-fill" id="bar"></div></div>
+  </div>
+<script>
+  let state = {
+    durationMs: 4000,
+    targetNum: 87,
+    prefix: "",
+    suffix: "%",
+    rawVal: "87%"
+  };
+
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+  function easeOutCubic(x) { return 1 - Math.pow(1 - x, 3); }
+
+  window.__vf = {
+    async init(props = {}, canvas = {}) {
+      const valStr = String(props.value ?? "87%");
+      state.rawVal = valStr;
+      state.durationMs = Math.round((props.duration_us ?? 4000000) / 1000);
+      const m = valStr.match(/^([^0-9+-]*)([+-]?\d+(?:[.,]\d+)?)(.*)$/);
+      if (m) {
+        state.prefix = m[1];
+        state.targetNum = parseFloat(m[2].replace(",", "."));
+        state.suffix = m[3];
+      } else {
+        state.targetNum = null;
+      }
+      document.getElementById("lbl").textContent = props.label ?? "Crecimiento Anual";
+      document.getElementById("sub").textContent = props.sublabel ?? "";
+      document.documentElement.style.setProperty("--accent", props.accent_color || "#38bdf8");
+      await this.seek(0);
+    },
+    durationMs() { return state.durationMs; },
+    async seek(tMs) {
+      const enterP = easeOutCubic(clamp(tMs / 500, 0, 1));
+      const exitStart = Math.max(600, state.durationMs - 400);
+      const exitP = tMs > exitStart ? clamp((state.durationMs - tMs) / 400, 0, 1) : 1;
+      const vis = enterP * exitP;
+      const card = document.getElementById("card");
+      card.style.opacity = vis.toFixed(4);
+      card.style.transform = `scale(${(0.82 + 0.18 * vis).toFixed(4)}) translateY(${((1 - enterP) * 40).toFixed(1)}px)`;
+
+      const countP = easeOutCubic(clamp((tMs - 100) / 1200, 0, 1));
+      const valEl = document.getElementById("val");
+      if (state.targetNum !== null && !Number.isNaN(state.targetNum)) {
+        const cur = state.targetNum * countP;
+        const formatted = Number.isInteger(state.targetNum) ? Math.round(cur) : cur.toFixed(1);
+        valEl.textContent = `${state.prefix}${formatted}${state.suffix}`;
+      } else {
+        valEl.textContent = state.rawVal;
+      }
+      document.getElementById("bar").style.width = `${(countP * 100).toFixed(1)}%`;
+    }
+  };
+</script>
+</body>
+</html>

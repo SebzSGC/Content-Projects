@@ -1,0 +1,144 @@
+@import url('https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,300..700;1,300..700&display=swap');
+@import "tailwindcss";
+
+:root,
+[data-theme="light"] {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-josefin: 'Josefin Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  /* Creative AI Minimalist Color System (Section 3.1) */
+  --background: #FAFAFC;
+  --foreground: #17171B;
+
+  --surface-card: #FFFFFF;
+  --surface-secondary: #F4F4F7;
+  --surface-popover: #FFFFFF;
+  --surface-muted: #EFEFF3;
+
+  --border: #E8E8ED;
+  --border-strong: #D6D6DF;
+
+  --text-primary: #17171B;
+  --text-secondary: #71717A;
+  --text-muted: #9E9EA8;
+
+  /* Creative AI Purple Accent */
+  --primary: #7652E8;
+  --primary-hover: #633ECC;
+  --primary-foreground: #FFFFFF;
+  --primary-subtle: rgba(118, 82, 232, 0.08);
+  --primary-subtle-border: rgba(118, 82, 232, 0.22);
+
+  --secondary: #F4F4F7;
+  --card: #FFFFFF;
+  --sidebar: #FFFFFF;
+  --muted-foreground: #71717A;
+
+  /* Semantic status colors (discrete) */
+  --status-success: #10B981;
+  --status-success-bg: rgba(16, 185, 129, 0.1);
+  --status-warn: #F59E0B;
+  --status-warn-bg: rgba(245, 158, 11, 0.1);
+  --status-error: #EF4444;
+  --status-error-bg: rgba(239, 68, 68, 0.1);
+
+  /* Micro-shadows (subtle & precise) */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.03);
+  --shadow-float: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.03);
+}
+
+.dark,
+[data-theme="dark"] {
+  --font-josefin: 'Josefin Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --background: #0E0E12;
+  --foreground: #F4F4F7;
+
+  --surface-card: #17171F;
+  --surface-secondary: #21212B;
+  --surface-popover: #1B1B24;
+  --surface-muted: #282835;
+
+  --border: #2B2B38;
+  --border-strong: #3B3B4D;
+
+  --text-primary: #F4F4F7;
+  --text-secondary: #9E9EB2;
+  --text-muted: #6E6E80;
+
+  --primary: #8A68F8;
+  --primary-hover: #7652E8;
+  --primary-foreground: #FFFFFF;
+  --primary-subtle: rgba(138, 104, 248, 0.12);
+  --primary-subtle-border: rgba(138, 104, 248, 0.3);
+
+  --secondary: #21212B;
+  --card: #17171F;
+  --sidebar: #13131A;
+  --muted-foreground: #9E9EB2;
+
+  --status-success: #34D399;
+  --status-success-bg: rgba(52, 211, 153, 0.12);
+  --status-warn: #FBBF24;
+  --status-warn-bg: rgba(251, 191, 36, 0.12);
+  --status-error: #F87171;
+  --status-error-bg: rgba(248, 113, 113, 0.12);
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px -1px rgba(0, 0, 0, 0.3);
+  --shadow-float: 0 14px 28px rgba(0, 0, 0, 0.5);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Micro-animations and safe grid */
+.moveable-control-box {
+  border: 1.5px solid #38BDF8;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+.moveable-control-box.screen-focus {
+  border-color: #F97316;
+}
+.moveable-control {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: #FFFFFF;
+  border: 1.5px solid #38BDF8;
+}
+.moveable-CustomGridGuidelines {
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.15) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.15) 1px, transparent 1px);
+  background-size: 33.33% 33.33%;
+}

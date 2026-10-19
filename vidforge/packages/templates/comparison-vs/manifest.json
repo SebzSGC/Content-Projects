@@ -1,0 +1,24 @@
+{
+  "id": "comparison-vs",
+  "version": "1.0.0",
+  "name": "Comparativa Dual",
+  "category": "comparison",
+  "entry": "index.html",
+  "supports_alpha": true,
+  "aspect_ratios": ["16:9", "9:16"],
+  "default_duration_us": 4500000,
+  "min_duration_us": 2500000,
+  "props_schema": {
+    "type": "object",
+    "required": ["left_title", "right_title"],
+    "properties": {
+      "left_title": { "type": "string", "default": "Opción Tradicional" },
+      "left_value": { "type": "string", "default": "Lento y costoso" },
+      "right_title": { "type": "string", "default": "Nuevo Enfoque" },
+      "right_value": { "type": "string", "default": "3x más eficiente" }
+    }
+  },
+  "semantic_rules": [
+    { "rule": "requires_two_entities", "field": "left_title" }
+  ]
+}

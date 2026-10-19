@@ -1,0 +1,48 @@
+# ==========================================
+# REA Workspace specific files (Local Only)
+# ==========================================
+/.agents/
+/docs/
+/projects/
+/.obsidian-docs.json
+/AGENTS.md
+/GEMINI.md
+*.backup*
+README.rea.backup.md
+
+# ==========================================
+# General exclusions
+# ==========================================
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/*.pyd
+**/.pytest_cache/
+**/.hypothesis/
+
+# Node & Builds
+**/node_modules/
+**/.next/
+**/dist/
+**/build/
+
+# Local Runtimes & Media storage
+vidforge/runtime/
+vidforge/storage/
+ClippersIppers/*.mp4
+ClippersIppers/*.ass
+ClippersIppers/tmp_*
+ClippersIppers/scratch-*
+ClippersIppers/test_diag_*
+ClippersIppers/.obsidian-docs.json
+
+# Environment & Logs
+**/.env
+**/.env.*
+*.log
+npm-debug.log*
+
+# OS specific
+.DS_Store
+Thumbs.db
+desktop.ini

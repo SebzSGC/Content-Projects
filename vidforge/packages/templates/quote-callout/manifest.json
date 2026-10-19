@@ -1,0 +1,22 @@
+{
+  "id": "quote-callout",
+  "version": "1.0.0",
+  "name": "Cita Destacada",
+  "category": "quote",
+  "entry": "index.html",
+  "supports_alpha": true,
+  "aspect_ratios": ["16:9", "9:16"],
+  "default_duration_us": 4000000,
+  "min_duration_us": 2000000,
+  "props_schema": {
+    "type": "object",
+    "required": ["quote"],
+    "properties": {
+      "quote": { "type": "string", "default": "La simplicidad es la máxima sofisticación." },
+      "author": { "type": "string", "default": "Nota Editorial" }
+    }
+  },
+  "semantic_rules": [
+    { "rule": "text_must_be_substring_fuzzy", "field": "quote", "threshold": 0.5 }
+  ]
+}

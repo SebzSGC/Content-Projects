@@ -1,0 +1,161 @@
+{
+  "$defs": {
+    "TranscriptSegment": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "word_range": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Word Range",
+          "type": "array"
+        },
+        "start_us": {
+          "title": "Start Us",
+          "type": "integer"
+        },
+        "end_us": {
+          "title": "End Us",
+          "type": "integer"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "beat_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Beat Id"
+        }
+      },
+      "required": [
+        "id",
+        "word_range",
+        "start_us",
+        "end_us",
+        "text"
+      ],
+      "title": "TranscriptSegment",
+      "type": "object"
+    },
+    "WordTiming": {
+      "properties": {
+        "i": {
+          "title": "I",
+          "type": "integer"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "start_us": {
+          "title": "Start Us",
+          "type": "integer"
+        },
+        "end_us": {
+          "title": "End Us",
+          "type": "integer"
+        },
+        "confidence": {
+          "default": 0.95,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "source": {
+          "default": "asr",
+          "enum": [
+            "asr",
+            "aligned",
+            "interpolated"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "i",
+        "text",
+        "start_us",
+        "end_us"
+      ],
+      "title": "WordTiming",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "default": "transcript/1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "audio_asset_id": {
+      "title": "Audio Asset Id",
+      "type": "string"
+    },
+    "audio_sha256": {
+      "default": "",
+      "title": "Audio Sha256",
+      "type": "string"
+    },
+    "language": {
+      "default": "es",
+      "title": "Language",
+      "type": "string"
+    },
+    "engine": {
+      "additionalProperties": true,
+      "title": "Engine",
+      "type": "object"
+    },
+    "mode": {
+      "default": "align",
+      "enum": [
+        "transcribe",
+        "align"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "duration_us": {
+      "title": "Duration Us",
+      "type": "integer"
+    },
+    "words": {
+      "items": {
+        "$ref": "#/$defs/WordTiming"
+      },
+      "title": "Words",
+      "type": "array"
+    },
+    "segments": {
+      "items": {
+        "$ref": "#/$defs/TranscriptSegment"
+      },
+      "title": "Segments",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id",
+    "audio_asset_id",
+    "duration_us",
+    "words",
+    "segments"
+  ],
+  "title": "TranscriptModel",
+  "type": "object"
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vidforge.local/schemas/render-request.v1.json",
+  "title": "RenderRequest",
+  "type": "object",
+  "required": ["protocol", "job_id", "task", "output", "runtime"],
+  "properties": {
+    "protocol": { "const": "vidforge.render/1" },
+    "job_id": { "type": "string" },
+    "task": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["template", "gl_transition"] }
+      }
+    },
+    "output": {
+      "type": "object",
+      "required": ["path", "format", "width", "height", "fps"],
+      "properties": {
+        "path": { "type": "string" },
+        "format": { "enum": ["mp4_h264", "webm_vp9_alpha", "png_sequence"] },
+        "width": { "type": "integer", "minimum": 16 },
+        "height": { "type": "integer", "minimum": 16 },
+        "fps": {
+          "type": "object",
+          "required": ["num", "den"],
+          "properties": {
+            "num": { "type": "integer", "minimum": 1 },
+            "den": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "encoder": { "type": "string" }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "required": ["chrome_path", "ffmpeg_path", "work_dir"],
+      "properties": {
+        "chrome_path": { "type": "string" },
+        "ffmpeg_path": { "type": "string" },
+        "work_dir": { "type": "string" },
+        "gpu": { "type": "boolean" },
+        "timeout_s": { "type": "integer" }
+      }
+    }
+  }
+}

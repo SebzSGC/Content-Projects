@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100vw; height: 100vh; overflow: hidden;
+    background: transparent;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+  }
+  .lt-box {
+    position: absolute;
+    left: 96px;
+    bottom: 120px;
+    display: flex;
+    align-items: stretch;
+    background: rgba(15, 23, 42, 0.90);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 18px 40px rgba(0,0,0,0.55);
+  }
+  .bar {
+    width: 12px;
+    background: var(--accent, #f59e0b);
+  }
+  .content {
+    padding: 22px 38px;
+  }
+  .h { font-size: 38px; font-weight: 800; color: #ffffff; }
+  .s { font-size: 24px; color: #cbd5e1; margin-top: 4px; }
+</style>
+</head>
+<body>
+  <div class="lt-box" id="box">
+    <div class="bar"></div>
+    <div class="content">
+      <div class="h" id="h">Punto Clave</div>
+      <div class="s" id="s">Contexto adicional de la escena</div>
+    </div>
+  </div>
+<script>
+  let dur = 3500;
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function easeOut(x) { return 1 - Math.pow(1 - x, 3); }
+  window.__vf = {
+    async init(props = {}) {
+      dur = Math.round((props.duration_us ?? 3500000) / 1000);
+      document.getElementById("h").textContent = props.heading ?? "Punto Clave";
+      document.getElementById("s").textContent = props.subheading ?? "";
+      document.documentElement.style.setProperty("--accent", props.accent_color || "#f59e0b");
+      await this.seek(0);
+    },
+    durationMs() { return dur; },
+    async seek(tMs) {
+      const inp = easeOut(clamp(tMs / 450, 0, 1));
+      const outp = tMs > dur - 400 ? clamp((dur - tMs) / 400, 0, 1) : 1;
+      const p = inp * outp;
+      const box = document.getElementById("box");
+      box.style.opacity = p.toFixed(3);
+      box.style.transform = `translateX(${((1 - p) * -120).toFixed(1)}px)`;
+    }
+  };
+</script>
+</body>
+</html>

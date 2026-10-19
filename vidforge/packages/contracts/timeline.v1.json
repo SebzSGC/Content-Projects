@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vidforge.local/schemas/timeline.v1.json",
+  "title": "Timeline",
+  "type": "object",
+  "required": ["schema_version", "revision", "canvas", "duration_us", "tracks"],
+  "properties": {
+    "schema_version": { "const": "timeline/1" },
+    "revision": { "type": "integer", "minimum": 0 },
+    "canvas": {
+      "type": "object",
+      "required": ["width", "height", "fps"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 16, "maximum": 7680 },
+        "height": { "type": "integer", "minimum": 16, "maximum": 4320 },
+        "fps": {
+          "type": "object",
+          "required": ["num", "den"],
+          "properties": {
+            "num": { "type": "integer", "minimum": 1 },
+            "den": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "background": { "type": "string" }
+      }
+    },
+    "duration_us": { "type": "integer", "minimum": 0 },
+    "subtitle_styles": { "type": "array" },
+    "tracks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "clips"],
+        "properties": {
+          "id": { "type": "string" },
+          "kind": { "enum": ["video", "overlay", "motion", "audio", "subtitle"] },
+          "name": { "type": "string" },
+          "muted": { "type": "boolean" },
+          "locked": { "type": "boolean" },
+          "clips": { "type": "array" }
+        }
+      }
+    }
+  }
+}

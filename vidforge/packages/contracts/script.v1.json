@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vidforge.local/schemas/script.v1.json",
+  "title": "Script",
+  "type": "object",
+  "required": ["schema_version", "text", "beats", "characters"],
+  "properties": {
+    "schema_version": { "const": "script/1" },
+    "text": { "type": "string" },
+    "characters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tag", "name"],
+        "properties": {
+          "tag": { "type": "string", "pattern": "^@[A-Za-z0-9_\\u00C0-\\u017F]{1,40}$" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "reference_asset_ids": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "beats": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "index", "text", "char_range"],
+        "properties": {
+          "id": { "type": "string" },
+          "index": { "type": "integer", "minimum": 0 },
+          "text": { "type": "string" },
+          "char_range": {
+            "type": "array",
+            "items": { "type": "integer", "minimum": 0 },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "visual_prompt": { "type": "string" },
+          "media_kind": { "enum": ["image", "video", "stock", "motion", "any"] },
+          "time_range_us": {
+            "type": ["array", "null"],
+            "items": { "type": "integer", "minimum": 0 },
+            "minItems": 2,
+            "maxItems": 2
+          }
+        }
+      }
+    }
+  }
+}

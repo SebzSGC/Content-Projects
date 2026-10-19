@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100vw; height: 100vh; overflow: hidden;
+    background: transparent;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card {
+    width: 1100px; padding: 48px 56px;
+    background: rgba(15, 23, 42, 0.92);
+    border: 2px solid rgba(148, 163, 184, 0.25);
+    border-radius: 28px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.65);
+  }
+  .title {
+    font-size: 42px; font-weight: 800; color: #f8fafc; margin-bottom: 28px;
+  }
+  svg { width: 100%; height: 340px; overflow: visible; }
+</style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="title" id="title">Evolución de Rendimiento</div>
+    <svg viewBox="0 0 960 320">
+      <line x1="0" y1="280" x2="960" y2="280" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+      <line x1="0" y1="180" x2="960" y2="180" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+      <line x1="0" y1="80" x2="960" y2="80" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+      <polyline id="line" fill="none" stroke="#22c55e" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" points=""/>
+      <g id="dots"></g>
+    </svg>
+  </div>
+<script>
+  let dur = 4500;
+  let pts = [18, 32, 45, 68, 94];
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function easeOut(x) { return 1 - Math.pow(1 - x, 3); }
+  window.__vf = {
+    async init(props = {}) {
+      dur = Math.round((props.duration_us ?? 4500000) / 1000);
+      document.getElementById("title").textContent = props.title ?? "Evolución de Rendimiento";
+      pts = Array.isArray(props.points) && props.points.length >= 2 ? props.points.map(Number) : [18, 32, 45, 68, 94];
+      const color = props.accent_color || "#22c55e";
+      document.getElementById("line").setAttribute("stroke", color);
+      await this.seek(0);
+    },
+    durationMs() { return dur; },
+    async seek(tMs) {
+      const enter = easeOut(clamp(tMs / 450, 0, 1));
+      const exit = tMs > dur - 350 ? clamp((dur - tMs) / 350, 0, 1) : 1;
+      const card = document.getElementById("card");
+      card.style.opacity = (enter * exit).toFixed(3);
+      card.style.transform = `translateY(${((1 - enter) * 32).toFixed(1)}px)`;
+
+      const drawP = easeOut(clamp((tMs - 150) / 1300, 0, 1));
+      const min = Math.min(...pts);
+      const max = Math.max(...pts, min + 1);
+      const coords = pts.map((v, i) => {
+        const x = (i / (pts.length - 1)) * 900 + 30;
+        const norm = (v - min) / (max - min);
+        const y = 260 - norm * 200 * drawP;
+        return [x, y, v];
+      });
+      document.getElementById("line").setAttribute("points", coords.map(c => `${c[0].toFixed(1)},${c[1].toFixed(1)}`).join(" "));
+      const dots = document.getElementById("dots");
+      dots.innerHTML = coords.map(([x, y, v]) =>
+        `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="10" fill="#f8fafc" stroke="#0f172a" stroke-width="4"/>
+         <text x="${x.toFixed(1)}" y="${(y - 20).toFixed(1)}" fill="#f8fafc" font-size="24" font-weight="700" text-anchor="middle">${v}</text>`
+      ).join("");
+    }
+  };
+</script>
+</body>
+</html>

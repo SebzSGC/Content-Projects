@@ -1,0 +1,24 @@
+{
+  "id": "stat-highlight",
+  "version": "1.0.0",
+  "name": "Dato Protagonista",
+  "category": "stat",
+  "entry": "index.html",
+  "supports_alpha": true,
+  "aspect_ratios": ["16:9", "9:16"],
+  "default_duration_us": 4000000,
+  "min_duration_us": 2000000,
+  "props_schema": {
+    "type": "object",
+    "required": ["value", "label"],
+    "properties": {
+      "value": { "type": "string", "default": "87%" },
+      "label": { "type": "string", "default": "Crecimiento Anual" },
+      "sublabel": { "type": "string", "default": "Datos verificados del sector" },
+      "accent_color": { "type": "string", "default": "#38bdf8" }
+    }
+  },
+  "semantic_rules": [
+    { "rule": "numbers_must_appear_in_speech", "field": "value" }
+  ]
+}

@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vidforge.local/schemas/capcut-draft-subset.v1.json",
+  "title": "CapCutDraftSubset",
+  "type": "object",
+  "required": ["id", "duration", "fps", "canvas_config", "materials", "tracks"],
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "duration": { "type": "integer", "minimum": 0 },
+    "fps": { "type": "number", "minimum": 1 },
+    "canvas_config": {
+      "type": "object",
+      "required": ["width", "height", "ratio"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 16 },
+        "height": { "type": "integer", "minimum": 16 },
+        "ratio": { "type": "string" }
+      }
+    },
+    "materials": {
+      "type": "object",
+      "required": ["videos", "audios", "texts", "transitions", "animations"],
+      "properties": {
+        "videos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "path", "type", "duration", "width", "height"],
+            "properties": {
+              "id": { "type": "string" },
+              "path": { "type": "string" },
+              "type": { "enum": ["photo", "video"] },
+              "duration": { "type": "integer", "minimum": 1 },
+              "width": { "type": "integer" },
+              "height": { "type": "integer" }
+            }
+          }
+        },
+        "audios": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "path", "duration", "type"],
+            "properties": {
+              "id": { "type": "string" },
+              "path": { "type": "string" },
+              "duration": { "type": "integer", "minimum": 1 },
+              "type": { "type": "string" },
+              "name": { "type": "string" }
+            }
+          }
+        },
+        "texts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "content", "type"],
+            "properties": {
+              "id": { "type": "string" },
+              "content": { "type": "string" },
+              "type": { "type": "string" },
+              "font_size": { "type": "number" },
+              "text_color": { "type": "string" }
+            }
+          }
+        },
+        "transitions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "duration", "type"],
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "duration": { "type": "integer", "minimum": 0 },
+              "type": { "type": "string" }
+            }
+          }
+        },
+        "animations": { "type": "array" }
+      }
+    },
+    "tracks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "segments"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "enum": ["video", "audio", "text", "effect"] },
+          "segments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "material_id", "target_timerange"],
+              "properties": {
+                "id": { "type": "string" },
+                "material_id": { "type": "string" },
+                "target_timerange": {
+                  "type": "object",
+                  "required": ["start", "duration"],
+                  "properties": {
+                    "start": { "type": "integer", "minimum": 0 },
+                    "duration": { "type": "integer", "minimum": 1 }
+                  }
+                },
+                "source_timerange": {
+                  "type": ["object", "null"],
+                  "properties": {
+                    "start": { "type": "integer", "minimum": 0 },
+                    "duration": { "type": "integer", "minimum": 1 }
+                  }
+                },
+                "volume": { "type": "number" },
+                "extra_material_refs": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "keyframes": { "type": "object" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
