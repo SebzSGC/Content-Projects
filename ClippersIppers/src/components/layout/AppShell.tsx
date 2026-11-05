@@ -14,6 +14,7 @@ import {
 import { GlobalModals } from "./GlobalModals";
 import {
   Sparkles,
+  Gamepad2,
   LayoutGrid,
   Palette,
   Search,
@@ -67,10 +68,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     {
+      label: "Clips gaming",
+      href: "/sessions",
+      icon: Gamepad2,
+      active: pathname.startsWith("/sessions"),
+    },
+    {
       label: "Studio",
       href: "/dashboard",
       icon: Sparkles,
-      active: pathname === "/" || pathname === "/dashboard" || pathname.startsWith("/workflow"),
+      active: pathname === "/dashboard" || pathname.startsWith("/workflow"),
     },
     {
       label: "Proyectos",
