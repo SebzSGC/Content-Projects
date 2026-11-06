@@ -1,0 +1,88 @@
+{
+  "id": "hormozi-gaming",
+  "version": "1.0.0",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "max_fps": 60,
+    "video_codec": "h264",
+    "audio_codec": "aac",
+    "audio_bitrate": "192k",
+    "target_lufs": -14.0
+  },
+  "duration": {
+    "min_sec": 20.0,
+    "max_sec": 60.0
+  },
+  "layout": {
+    "camera_ratio": 0.4,
+    "gameplay_ratio": 0.6,
+    "camera_full_sec": 2.0,
+    "camera_full_max_reactions": 2
+  },
+  "title": {
+    "duration_sec": 3.0,
+    "position": "seam",
+    "max_lines": 2,
+    "font_family": "Montserrat ExtraBold",
+    "font_size_px": 74,
+    "color_hex": "#FFFFFF",
+    "outline_color_hex": "#000000",
+    "outline_px": 7,
+    "max_chars_per_line": 18
+  },
+  "captions": {
+    "preset": "hormozi",
+    "font_family": "Montserrat ExtraBold",
+    "uppercase": true,
+    "min_words": 1,
+    "max_words": 3,
+    "max_chars": 14,
+    "pause_split_sec": 0.3,
+    "font_size_px": 80,
+    "color_hex": "#FFFFFF",
+    "outline_color_hex": "#000000",
+    "outline_px": 8,
+    "shadow_px": 3,
+    "gameplay_top_third_ratio": 0.22,
+    "active_word": {
+      "color_hex": "#FFD400",
+      "pop_scale_pct": 115,
+      "pop_duration_ms": 120
+    },
+    "emphasis_word": {
+      "color_hex": "#39FF14",
+      "scale_pct": 110
+    }
+  },
+  "emojis": {
+    "max_interval_sec": 5.0,
+    "only_on_emphasis": true,
+    "asset_set": "twemoji",
+    "size_px": 112
+  },
+  "impact_zoom": {
+    "scale": 1.25,
+    "in_ms": 150,
+    "in_ease": "outBack",
+    "hold_sec": 0.8,
+    "out_ms": 300,
+    "out_ease": "inOutSine",
+    "min_interval_sec": 4.0
+  },
+  "slow_zoom": {
+    "start_scale": 1.0,
+    "end_scale": 1.1,
+    "min_setup_sec": 5.0,
+    "ease": "inOutSine"
+  },
+  "cuts": {
+    "min_silence_sec": 0.7,
+    "margin_sec": 0.15,
+    "never_cut_laughter_or_scream": true
+  },
+  "audio": {
+    "mic_gain_db": 2.0,
+    "duck_game_db": -9.0
+  }
+}

@@ -1,0 +1,11 @@
+services:
+  clipsserver:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    ports:
+      - "8790:8790"
+    env_file:
+      - ../.env
+    volumes:
+      - ../data:/app/data

@@ -1,0 +1,14 @@
+{
+  "name": "farmclips-monorepo",
+  "version": "2.0.0",
+  "private": true,
+  "description": "FarmClips — Arquitectura híbrida: IA por API, proceso local (Monorepo)",
+  "scripts": {
+    "dev:web": "npm --prefix apps/web run dev",
+    "dev:server": ".venv\\Scripts\\python.exe -m clipsserver.main serve",
+    "build": "npm --prefix apps/web run build",
+    "start:web": "npm --prefix apps/web run start",
+    "codegen": ".venv\\Scripts\\python.exe -m clipsserver.main codegen --web-dir apps/web",
+    "test": ".venv\\Scripts\\pytest.exe -v"
+  }
+}

@@ -1,0 +1,1879 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ClipsApp Hybrid Server",
+    "description": "API local + orquestador SQLite + 3 pools (APIs, CPU, Render)",
+    "version": "0.2.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/budget": {
+      "get": {
+        "summary": "Get Budget",
+        "operationId": "get_budget_budget_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Budget Budget Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/presets": {
+      "get": {
+        "summary": "Get Presets",
+        "operationId": "get_presets_presets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "title": "Response Get Presets Presets Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/presets/{preset_id}": {
+      "get": {
+        "summary": "Get Preset Detail",
+        "operationId": "get_preset_detail_presets__preset_id__get",
+        "parameters": [
+          {
+            "name": "preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Preset Detail Presets  Preset Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/fonts/Montserrat-ExtraBold.ttf": {
+      "get": {
+        "summary": "Serve Montserrat Font",
+        "operationId": "serve_montserrat_font_fonts_Montserrat_ExtraBold_ttf_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/emojis": {
+      "get": {
+        "summary": "Get Emojis Catalog",
+        "operationId": "get_emojis_catalog_emojis_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response Get Emojis Catalog Emojis Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/emojis/{emoji_id}.png": {
+      "get": {
+        "summary": "Serve Emoji",
+        "operationId": "serve_emoji_emojis__emoji_id__png_get",
+        "parameters": [
+          {
+            "name": "emoji_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Emoji Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sfx/{sfx_id}.wav": {
+      "get": {
+        "summary": "Serve Sfx",
+        "operationId": "serve_sfx_sfx__sfx_id__wav_get",
+        "parameters": [
+          {
+            "name": "sfx_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sfx Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/keyterms": {
+      "get": {
+        "summary": "Get Keyterms Profiles",
+        "operationId": "get_keyterms_profiles_keyterms_get",
+        "parameters": [
+          {
+            "name": "title",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Title"
+            }
+          },
+          {
+            "name": "recording_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Recording Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Keyterms Profiles Keyterms Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/maintenance/stats": {
+      "get": {
+        "summary": "Get Maintenance Stats",
+        "operationId": "get_maintenance_stats_maintenance_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Maintenance Stats Maintenance Stats Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/maintenance/cleanup": {
+      "post": {
+        "summary": "Run Maintenance Cleanup",
+        "operationId": "run_maintenance_cleanup_maintenance_cleanup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CleanupBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Run Maintenance Cleanup Maintenance Cleanup Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhooks/test": {
+      "post": {
+        "summary": "Test Webhook Endpoint",
+        "operationId": "test_webhook_endpoint_webhooks_test_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestWebhookBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Test Webhook Endpoint Webhooks Test Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/uploads": {
+      "post": {
+        "summary": "Upload File",
+        "operationId": "upload_file_uploads_post",
+        "parameters": [
+          {
+            "name": "filename",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Filename"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Upload File Uploads Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/drive/status": {
+      "get": {
+        "summary": "Drive Status",
+        "operationId": "drive_status_drive_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Drive Status Drive Status Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/drive/poll": {
+      "post": {
+        "summary": "Trigger Drive Poll",
+        "operationId": "trigger_drive_poll_drive_poll_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Trigger Drive Poll Drive Poll Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions": {
+      "get": {
+        "summary": "List Sessions",
+        "operationId": "list_sessions_sessions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response List Sessions Sessions Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create Session",
+        "operationId": "create_session_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSessionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Create Session Sessions Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}": {
+      "get": {
+        "summary": "Get Session",
+        "operationId": "get_session_sessions__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Session Sessions  Session Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/run": {
+      "post": {
+        "summary": "Run Session Endpoint",
+        "operationId": "run_session_endpoint_sessions__session_id__run_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Run Session Endpoint Sessions  Session Id  Run Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/cancel": {
+      "post": {
+        "summary": "Cancel Session Endpoint",
+        "operationId": "cancel_session_endpoint_sessions__session_id__cancel_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Cancel Session Endpoint Sessions  Session Id  Cancel Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/sync": {
+      "put": {
+        "summary": "Set Manual Sync",
+        "operationId": "set_manual_sync_sessions__session_id__sync_put",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualSyncBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Set Manual Sync Sessions  Session Id  Sync Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/frame": {
+      "get": {
+        "summary": "Get Session Frame",
+        "operationId": "get_session_frame_sessions__session_id__frame_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "gameplay",
+                "camera"
+              ],
+              "type": "string",
+              "default": "gameplay",
+              "title": "Source"
+            }
+          },
+          {
+            "name": "t",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "minimum": 0.0,
+              "default": 5.0,
+              "title": "T"
+            }
+          },
+          {
+            "name": "width",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1920,
+              "minimum": 160,
+              "default": 640,
+              "title": "Width"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/stream/{source}": {
+      "get": {
+        "summary": "Stream Source Video",
+        "operationId": "stream_source_video_sessions__session_id__stream__source__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "gameplay",
+                "camera"
+              ],
+              "type": "string",
+              "title": "Source"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/utterances": {
+      "get": {
+        "summary": "Get Utterances",
+        "operationId": "get_utterances_sessions__session_id__utterances_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response Get Utterances Sessions  Session Id  Utterances Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/signals": {
+      "get": {
+        "summary": "Get Signals",
+        "operationId": "get_signals_sessions__session_id__signals_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get Signals Sessions  Session Id  Signals Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/clips": {
+      "get": {
+        "summary": "List Session Clips",
+        "operationId": "list_session_clips_sessions__session_id__clips_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response List Session Clips Sessions  Session Id  Clips Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clips/{clip_id}": {
+      "get": {
+        "summary": "Get Clip Detail",
+        "operationId": "get_clip_detail_clips__clip_id__get",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Clip Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Clip Detail Clips  Clip Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clips/{clip_id}/editplan": {
+      "put": {
+        "summary": "Update Editplan",
+        "operationId": "update_editplan_clips__clip_id__editplan_put",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Clip Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditPlan"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Update Editplan Clips  Clip Id  Editplan Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clips/{clip_id}/render": {
+      "post": {
+        "summary": "Render Clip Endpoint",
+        "operationId": "render_clip_endpoint_clips__clip_id__render_post",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Clip Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenderClipBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Render Clip Endpoint Clips  Clip Id  Render Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clips/{clip_id}/file": {
+      "get": {
+        "summary": "Serve Rendered Clip",
+        "operationId": "serve_rendered_clip_clips__clip_id__file_get",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Clip Id"
+            }
+          },
+          {
+            "name": "quality",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "final",
+                "draft"
+              ],
+              "type": "string",
+              "default": "final",
+              "title": "Quality"
+            }
+          },
+          {
+            "name": "download",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Download"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events": {
+      "get": {
+        "summary": "Sse Events",
+        "operationId": "sse_events_events_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AudioPlan": {
+        "properties": {
+          "mic_gain_db": {
+            "type": "number",
+            "maximum": 24.0,
+            "minimum": -24.0,
+            "title": "Mic Gain Db",
+            "default": 2.0
+          },
+          "duck_game_db": {
+            "type": "number",
+            "maximum": 0.0,
+            "minimum": -36.0,
+            "title": "Duck Game Db",
+            "default": -9.0
+          },
+          "sfx": {
+            "items": {
+              "$ref": "#/components/schemas/SfxCue"
+            },
+            "type": "array",
+            "title": "Sfx"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AudioPlan"
+      },
+      "CaptionGroup": {
+        "properties": {
+          "words": {
+            "items": {
+              "$ref": "#/components/schemas/CaptionWord"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Words"
+          },
+          "emoji": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EmojiCue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "words"
+        ],
+        "title": "CaptionGroup"
+      },
+      "CaptionWord": {
+        "properties": {
+          "w": {
+            "type": "string",
+            "title": "W"
+          },
+          "s": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "S"
+          },
+          "e": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "E"
+          },
+          "emphasis": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emphasis"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "w",
+          "s",
+          "e"
+        ],
+        "title": "CaptionWord"
+      },
+      "CaptionsPlan": {
+        "properties": {
+          "preset": {
+            "type": "string",
+            "title": "Preset",
+            "default": "hormozi"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/CaptionGroup"
+            },
+            "type": "array",
+            "title": "Groups"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CaptionsPlan"
+      },
+      "CleanupBody": {
+        "properties": {
+          "ttl_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ttl Days"
+          },
+          "include_inputs": {
+            "type": "boolean",
+            "title": "Include Inputs",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "CleanupBody"
+      },
+      "CreateSessionBody": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": ""
+          },
+          "gameplay_path": {
+            "type": "string",
+            "title": "Gameplay Path"
+          },
+          "camera_path": {
+            "type": "string",
+            "title": "Camera Path"
+          },
+          "recording_name": {
+            "type": "string",
+            "title": "Recording Name",
+            "default": ""
+          },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "default": "es"
+          },
+          "style_preset": {
+            "type": "string",
+            "title": "Style Preset",
+            "default": "hormozi-gaming"
+          },
+          "auto_start": {
+            "type": "boolean",
+            "title": "Auto Start",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "gameplay_path",
+          "camera_path"
+        ],
+        "title": "CreateSessionBody"
+      },
+      "CropKeyframe": {
+        "properties": {
+          "t": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "T"
+          },
+          "cx": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Cx",
+            "default": 0.5
+          },
+          "cy": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Cy",
+            "default": 0.45
+          },
+          "zoom": {
+            "type": "number",
+            "maximum": 3.5,
+            "minimum": 1.0,
+            "title": "Zoom",
+            "default": 1.0
+          },
+          "ease": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "linear",
+                  "inOutSine",
+                  "outBack",
+                  "outCubic"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ease"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "t"
+        ],
+        "title": "CropKeyframe"
+      },
+      "EditPlan": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 2,
+            "title": "Version",
+            "default": 2
+          },
+          "clip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Id"
+          },
+          "candidate_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Id"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourcePlan"
+          },
+          "output": {
+            "$ref": "#/components/schemas/OutputPlan"
+          },
+          "layout": {
+            "items": {
+              "$ref": "#/components/schemas/LayoutEvent"
+            },
+            "type": "array",
+            "title": "Layout"
+          },
+          "camera_crop": {
+            "items": {
+              "$ref": "#/components/schemas/CropKeyframe"
+            },
+            "type": "array",
+            "title": "Camera Crop"
+          },
+          "gameplay_crop": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/GameplayCropKeyframe"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gameplay Crop"
+          },
+          "captions": {
+            "$ref": "#/components/schemas/CaptionsPlan"
+          },
+          "overlays": {
+            "items": {
+              "$ref": "#/components/schemas/OverlayItem"
+            },
+            "type": "array",
+            "title": "Overlays"
+          },
+          "audio": {
+            "$ref": "#/components/schemas/AudioPlan"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source"
+        ],
+        "title": "EditPlan",
+        "description": "Declarative EditPlan v2 compiled by clipsrender and previewed live in apps/web."
+      },
+      "EmojiCue": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "at": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "at"
+        ],
+        "title": "EmojiCue"
+      },
+      "GameplayCropKeyframe": {
+        "properties": {
+          "t": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "T"
+          },
+          "cx": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Cx",
+            "default": 0.5
+          },
+          "cy": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Cy",
+            "default": 0.5
+          },
+          "zoom": {
+            "type": "number",
+            "maximum": 2.5,
+            "minimum": 1.0,
+            "title": "Zoom",
+            "default": 1.0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "t"
+        ],
+        "title": "GameplayCropKeyframe"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "LayoutEvent": {
+        "properties": {
+          "t": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "T"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "split",
+              "camera_full",
+              "gameplay_full"
+            ],
+            "title": "Kind",
+            "default": "split"
+          },
+          "camera_ratio": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 0.8,
+                "minimum": 0.2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera Ratio"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "t"
+        ],
+        "title": "LayoutEvent"
+      },
+      "ManualSyncBody": {
+        "properties": {
+          "shift_sec": {
+            "type": "number",
+            "title": "Shift Sec"
+          },
+          "scale": {
+            "type": "number",
+            "exclusiveMaximum": 1.02,
+            "exclusiveMinimum": 0.98,
+            "title": "Scale",
+            "default": 1.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "shift_sec"
+        ],
+        "title": "ManualSyncBody"
+      },
+      "OutputPlan": {
+        "properties": {
+          "w": {
+            "type": "integer",
+            "maximum": 4320.0,
+            "minimum": 240.0,
+            "title": "W",
+            "default": 1080
+          },
+          "h": {
+            "type": "integer",
+            "maximum": 4320.0,
+            "minimum": 240.0,
+            "title": "H",
+            "default": 1920
+          },
+          "fps": {
+            "type": "integer",
+            "maximum": 120.0,
+            "minimum": 15.0,
+            "title": "Fps",
+            "default": 60
+          },
+          "style": {
+            "type": "string",
+            "title": "Style",
+            "default": "hormozi-gaming"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "OutputPlan"
+      },
+      "OverlayItem": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "title",
+              "badge"
+            ],
+            "title": "Kind",
+            "default": "title"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "start": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Start",
+            "default": 0.0
+          },
+          "end": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "End",
+            "default": 3.0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "OverlayItem"
+      },
+      "RenderClipBody": {
+        "properties": {
+          "quality": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "final"
+            ],
+            "title": "Quality",
+            "default": "final"
+          },
+          "upload_to_drive": {
+            "type": "boolean",
+            "title": "Upload To Drive",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "RenderClipBody"
+      },
+      "SfxCue": {
+        "properties": {
+          "t": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "T"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "default": "boom"
+          },
+          "gain_db": {
+            "type": "number",
+            "maximum": 12.0,
+            "minimum": -30.0,
+            "title": "Gain Db",
+            "default": -4.0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "t"
+        ],
+        "title": "SfxCue"
+      },
+      "SourcePlan": {
+        "properties": {
+          "session": {
+            "type": "string",
+            "title": "Session"
+          },
+          "ranges": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Ranges"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "session",
+          "ranges"
+        ],
+        "title": "SourcePlan"
+      },
+      "TestWebhookBody": {
+        "properties": {
+          "webhook_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook Url"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          }
+        },
+        "type": "object",
+        "title": "TestWebhookBody"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "Valorant",
+  "triggers": ["valorant", "valo", "radiante", "inmortal", "vandal", "jett", "reyna", "clove"],
+  "keyterms": [
+    "Valorant",
+    "Jett",
+    "Reyna",
+    "Raze",
+    "Omen",
+    "Sova",
+    "Chamber",
+    "Clove",
+    "Cypher",
+    "Killjoy",
+    "Iso",
+    "Vyse",
+    "Vandal",
+    "Phantom",
+    "Operator",
+    "Sheriff",
+    "Outlaw",
+    "Spike",
+    "Radiante",
+    "Inmortal",
+    "Ascendente",
+    "defuse",
+    "retake",
+    "eco",
+    "one tap",
+    "clutch",
+    "ace"
+  ]
+}

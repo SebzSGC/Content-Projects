@@ -1,0 +1,496 @@
+{
+  "$defs": {
+    "AudioPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "mic_gain_db": {
+          "default": 2.0,
+          "maximum": 24.0,
+          "minimum": -24.0,
+          "title": "Mic Gain Db",
+          "type": "number"
+        },
+        "duck_game_db": {
+          "default": -9.0,
+          "maximum": 0.0,
+          "minimum": -36.0,
+          "title": "Duck Game Db",
+          "type": "number"
+        },
+        "sfx": {
+          "items": {
+            "$ref": "#/$defs/SfxCue"
+          },
+          "title": "Sfx",
+          "type": "array"
+        }
+      },
+      "title": "AudioPlan",
+      "type": "object"
+    },
+    "CaptionGroup": {
+      "additionalProperties": false,
+      "properties": {
+        "words": {
+          "items": {
+            "$ref": "#/$defs/CaptionWord"
+          },
+          "minItems": 1,
+          "title": "Words",
+          "type": "array"
+        },
+        "emoji": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EmojiCue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "words"
+      ],
+      "title": "CaptionGroup",
+      "type": "object"
+    },
+    "CaptionWord": {
+      "additionalProperties": false,
+      "properties": {
+        "w": {
+          "title": "W",
+          "type": "string"
+        },
+        "s": {
+          "minimum": 0.0,
+          "title": "S",
+          "type": "number"
+        },
+        "e": {
+          "minimum": 0.0,
+          "title": "E",
+          "type": "number"
+        },
+        "emphasis": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Emphasis"
+        }
+      },
+      "required": [
+        "w",
+        "s",
+        "e"
+      ],
+      "title": "CaptionWord",
+      "type": "object"
+    },
+    "CaptionsPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "preset": {
+          "default": "hormozi",
+          "title": "Preset",
+          "type": "string"
+        },
+        "groups": {
+          "items": {
+            "$ref": "#/$defs/CaptionGroup"
+          },
+          "title": "Groups",
+          "type": "array"
+        }
+      },
+      "title": "CaptionsPlan",
+      "type": "object"
+    },
+    "CropKeyframe": {
+      "additionalProperties": false,
+      "properties": {
+        "t": {
+          "minimum": 0.0,
+          "title": "T",
+          "type": "number"
+        },
+        "cx": {
+          "default": 0.5,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Cx",
+          "type": "number"
+        },
+        "cy": {
+          "default": 0.45,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Cy",
+          "type": "number"
+        },
+        "zoom": {
+          "default": 1.0,
+          "maximum": 3.5,
+          "minimum": 1.0,
+          "title": "Zoom",
+          "type": "number"
+        },
+        "ease": {
+          "anyOf": [
+            {
+              "enum": [
+                "linear",
+                "inOutSine",
+                "outBack",
+                "outCubic"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ease"
+        }
+      },
+      "required": [
+        "t"
+      ],
+      "title": "CropKeyframe",
+      "type": "object"
+    },
+    "EmojiCue": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "at": {
+          "minimum": 0.0,
+          "title": "At",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "at"
+      ],
+      "title": "EmojiCue",
+      "type": "object"
+    },
+    "GameplayCropKeyframe": {
+      "additionalProperties": false,
+      "properties": {
+        "t": {
+          "minimum": 0.0,
+          "title": "T",
+          "type": "number"
+        },
+        "cx": {
+          "default": 0.5,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Cx",
+          "type": "number"
+        },
+        "cy": {
+          "default": 0.5,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Cy",
+          "type": "number"
+        },
+        "zoom": {
+          "default": 1.0,
+          "maximum": 2.5,
+          "minimum": 1.0,
+          "title": "Zoom",
+          "type": "number"
+        }
+      },
+      "required": [
+        "t"
+      ],
+      "title": "GameplayCropKeyframe",
+      "type": "object"
+    },
+    "LayoutEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "t": {
+          "minimum": 0.0,
+          "title": "T",
+          "type": "number"
+        },
+        "kind": {
+          "default": "split",
+          "enum": [
+            "split",
+            "camera_full",
+            "gameplay_full"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "camera_ratio": {
+          "anyOf": [
+            {
+              "maximum": 0.8,
+              "minimum": 0.2,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Camera Ratio"
+        },
+        "until": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Until"
+        }
+      },
+      "required": [
+        "t"
+      ],
+      "title": "LayoutEvent",
+      "type": "object"
+    },
+    "OutputPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "w": {
+          "default": 1080,
+          "maximum": 4320,
+          "minimum": 240,
+          "title": "W",
+          "type": "integer"
+        },
+        "h": {
+          "default": 1920,
+          "maximum": 4320,
+          "minimum": 240,
+          "title": "H",
+          "type": "integer"
+        },
+        "fps": {
+          "default": 60,
+          "maximum": 120,
+          "minimum": 15,
+          "title": "Fps",
+          "type": "integer"
+        },
+        "style": {
+          "default": "hormozi-gaming",
+          "title": "Style",
+          "type": "string"
+        }
+      },
+      "title": "OutputPlan",
+      "type": "object"
+    },
+    "OverlayItem": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "default": "title",
+          "enum": [
+            "title",
+            "badge"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "start": {
+          "default": 0.0,
+          "minimum": 0.0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "default": 3.0,
+          "minimum": 0.0,
+          "title": "End",
+          "type": "number"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "OverlayItem",
+      "type": "object"
+    },
+    "SfxCue": {
+      "additionalProperties": false,
+      "properties": {
+        "t": {
+          "minimum": 0.0,
+          "title": "T",
+          "type": "number"
+        },
+        "id": {
+          "default": "boom",
+          "title": "Id",
+          "type": "string"
+        },
+        "gain_db": {
+          "default": -4.0,
+          "maximum": 12.0,
+          "minimum": -30.0,
+          "title": "Gain Db",
+          "type": "number"
+        }
+      },
+      "required": [
+        "t"
+      ],
+      "title": "SfxCue",
+      "type": "object"
+    },
+    "SourcePlan": {
+      "additionalProperties": false,
+      "properties": {
+        "session": {
+          "title": "Session",
+          "type": "string"
+        },
+        "ranges": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "minItems": 1,
+          "title": "Ranges",
+          "type": "array"
+        }
+      },
+      "required": [
+        "session",
+        "ranges"
+      ],
+      "title": "SourcePlan",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Declarative EditPlan v2 compiled by clipsrender and previewed live in apps/web.",
+  "properties": {
+    "version": {
+      "const": 2,
+      "default": 2,
+      "title": "Version",
+      "type": "integer"
+    },
+    "clip_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Clip Id"
+    },
+    "candidate_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Candidate Id"
+    },
+    "source": {
+      "$ref": "#/$defs/SourcePlan"
+    },
+    "output": {
+      "$ref": "#/$defs/OutputPlan"
+    },
+    "layout": {
+      "items": {
+        "$ref": "#/$defs/LayoutEvent"
+      },
+      "title": "Layout",
+      "type": "array"
+    },
+    "camera_crop": {
+      "items": {
+        "$ref": "#/$defs/CropKeyframe"
+      },
+      "title": "Camera Crop",
+      "type": "array"
+    },
+    "gameplay_crop": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/GameplayCropKeyframe"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Gameplay Crop"
+    },
+    "captions": {
+      "$ref": "#/$defs/CaptionsPlan"
+    },
+    "overlays": {
+      "items": {
+        "$ref": "#/$defs/OverlayItem"
+      },
+      "title": "Overlays",
+      "type": "array"
+    },
+    "audio": {
+      "$ref": "#/$defs/AudioPlan"
+    }
+  },
+  "required": [
+    "source"
+  ],
+  "title": "ClipsApp EditPlan v2",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -35,6 +35,12 @@ ClippersIppers/tmp_*
 ClippersIppers/scratch-*
 ClippersIppers/test_diag_*
 ClippersIppers/.obsidian-docs.json
+FarmClips/data/
+FarmClips/.venv/
+FarmClips/*.db*
+FarmClips/*.db-wal
+FarmClips/*.db-shm
+FarmClips/.obsidian-docs.json
 
 # Environment & Logs
 **/.env

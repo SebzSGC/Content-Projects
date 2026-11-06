@@ -1,0 +1,24 @@
+[project]
+name = "clipstracking"
+version = "0.2.0"
+description = "MediaPipe Face Detector en CPU sobre tramos de clips (15 fps / 640px por pipe de FFmpeg) con salida en Parquet."
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.26",
+  "mediapipe>=0.10.14",
+  "opencv-python-headless>=4.10",
+  "pyarrow>=17.0",
+  "clipscore",
+  "clipsmedia",
+]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["clipstracking*"]
+
+[tool.setuptools.package-data]
+clipstracking = ["models/*.tflite"]

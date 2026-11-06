@@ -1,0 +1,20 @@
+[project]
+name = "clipsrender"
+version = "0.2.0"
+description = "Compilador de EditPlan v2 a filtergraph animado de FFmpeg + subtítulos ASS Hormozi + emojis PNG, con ejecutor asíncrono y fallback NVENC -> libx264."
+requires-python = ">=3.10"
+dependencies = [
+  "pydantic>=2.8",
+  "clipseditplan",
+  "clipsstyles",
+  "clipsmedia",
+  "clipscore",
+]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["clipsrender*"]

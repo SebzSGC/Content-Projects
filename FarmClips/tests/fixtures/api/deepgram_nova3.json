@@ -1,0 +1,661 @@
+{
+  "metadata": {
+    "request_id": "golden-dg-nova3-001",
+    "duration": 42.0,
+    "channels": 1,
+    "models": [
+      "nova-3"
+    ]
+  },
+  "results": {
+    "channels": [
+      {
+        "alternatives": [
+          {
+            "transcript": "Bueno gente entramos a la ronda final del torneo. Mira cómo asoman los tres por medio sin humo ni nada. Primero a la cabeza con el rifle qué locura de disparo hermano. Esperen callados que queda el último escondido detrás de la caja. Ahí viene corriendo apunta bien y fuego directo al centro. NO PUEDE SER CLUTCH HISTÓRICO EN EL ÚLTIMO SEGUNDO! VAMOS CARAJO así se cierra una partida imposible amigos! Suscríbanse ya mismo porque esta jugada queda para la historia. Pasemos al lobby a revisar las estadísticas de la partida.",
+            "confidence": 0.985,
+            "words": [
+              {
+                "word": "bueno",
+                "punctuated_word": "Bueno",
+                "start": 2.42,
+                "end": 2.614,
+                "confidence": 0.985
+              },
+              {
+                "word": "gente",
+                "punctuated_word": "gente",
+                "start": 2.664,
+                "end": 2.859,
+                "confidence": 0.985
+              },
+              {
+                "word": "entramos",
+                "punctuated_word": "entramos",
+                "start": 2.909,
+                "end": 3.103,
+                "confidence": 0.985
+              },
+              {
+                "word": "a",
+                "punctuated_word": "a",
+                "start": 3.153,
+                "end": 3.348,
+                "confidence": 0.985
+              },
+              {
+                "word": "la",
+                "punctuated_word": "la",
+                "start": 3.398,
+                "end": 3.592,
+                "confidence": 0.985
+              },
+              {
+                "word": "ronda",
+                "punctuated_word": "ronda",
+                "start": 3.642,
+                "end": 3.837,
+                "confidence": 0.985
+              },
+              {
+                "word": "final",
+                "punctuated_word": "final",
+                "start": 3.887,
+                "end": 4.081,
+                "confidence": 0.985
+              },
+              {
+                "word": "del",
+                "punctuated_word": "del",
+                "start": 4.131,
+                "end": 4.326,
+                "confidence": 0.985
+              },
+              {
+                "word": "torneo",
+                "punctuated_word": "torneo.",
+                "start": 4.376,
+                "end": 4.57,
+                "confidence": 0.985
+              },
+              {
+                "word": "mira",
+                "punctuated_word": "Mira",
+                "start": 5.42,
+                "end": 5.688,
+                "confidence": 0.985
+              },
+              {
+                "word": "cómo",
+                "punctuated_word": "cómo",
+                "start": 5.738,
+                "end": 6.006,
+                "confidence": 0.985
+              },
+              {
+                "word": "asoman",
+                "punctuated_word": "asoman",
+                "start": 6.056,
+                "end": 6.325,
+                "confidence": 0.985
+              },
+              {
+                "word": "los",
+                "punctuated_word": "los",
+                "start": 6.375,
+                "end": 6.643,
+                "confidence": 0.985
+              },
+              {
+                "word": "tres",
+                "punctuated_word": "tres",
+                "start": 6.693,
+                "end": 6.961,
+                "confidence": 0.985
+              },
+              {
+                "word": "por",
+                "punctuated_word": "por",
+                "start": 7.011,
+                "end": 7.279,
+                "confidence": 0.985
+              },
+              {
+                "word": "medio",
+                "punctuated_word": "medio",
+                "start": 7.329,
+                "end": 7.597,
+                "confidence": 0.985
+              },
+              {
+                "word": "sin",
+                "punctuated_word": "sin",
+                "start": 7.647,
+                "end": 7.915,
+                "confidence": 0.985
+              },
+              {
+                "word": "humo",
+                "punctuated_word": "humo",
+                "start": 7.965,
+                "end": 8.234,
+                "confidence": 0.985
+              },
+              {
+                "word": "ni",
+                "punctuated_word": "ni",
+                "start": 8.284,
+                "end": 8.552,
+                "confidence": 0.985
+              },
+              {
+                "word": "nada",
+                "punctuated_word": "nada.",
+                "start": 8.602,
+                "end": 8.87,
+                "confidence": 0.985
+              },
+              {
+                "word": "primero",
+                "punctuated_word": "Primero",
+                "start": 9.67,
+                "end": 9.924,
+                "confidence": 0.985
+              },
+              {
+                "word": "a",
+                "punctuated_word": "a",
+                "start": 9.974,
+                "end": 10.228,
+                "confidence": 0.985
+              },
+              {
+                "word": "la",
+                "punctuated_word": "la",
+                "start": 10.278,
+                "end": 10.533,
+                "confidence": 0.985
+              },
+              {
+                "word": "cabeza",
+                "punctuated_word": "cabeza",
+                "start": 10.582,
+                "end": 10.837,
+                "confidence": 0.985
+              },
+              {
+                "word": "con",
+                "punctuated_word": "con",
+                "start": 10.887,
+                "end": 11.141,
+                "confidence": 0.985
+              },
+              {
+                "word": "el",
+                "punctuated_word": "el",
+                "start": 11.191,
+                "end": 11.445,
+                "confidence": 0.985
+              },
+              {
+                "word": "rifle",
+                "punctuated_word": "rifle",
+                "start": 11.495,
+                "end": 11.749,
+                "confidence": 0.985
+              },
+              {
+                "word": "qué",
+                "punctuated_word": "qué",
+                "start": 11.799,
+                "end": 12.053,
+                "confidence": 0.985
+              },
+              {
+                "word": "locura",
+                "punctuated_word": "locura",
+                "start": 12.103,
+                "end": 12.358,
+                "confidence": 0.985
+              },
+              {
+                "word": "de",
+                "punctuated_word": "de",
+                "start": 12.408,
+                "end": 12.662,
+                "confidence": 0.985
+              },
+              {
+                "word": "disparo",
+                "punctuated_word": "disparo",
+                "start": 12.712,
+                "end": 12.966,
+                "confidence": 0.985
+              },
+              {
+                "word": "hermano",
+                "punctuated_word": "hermano.",
+                "start": 13.016,
+                "end": 13.27,
+                "confidence": 0.985
+              },
+              {
+                "word": "esperen",
+                "punctuated_word": "Esperen",
+                "start": 14.07,
+                "end": 14.32,
+                "confidence": 0.985
+              },
+              {
+                "word": "callados",
+                "punctuated_word": "callados",
+                "start": 14.37,
+                "end": 14.62,
+                "confidence": 0.985
+              },
+              {
+                "word": "que",
+                "punctuated_word": "que",
+                "start": 14.67,
+                "end": 14.92,
+                "confidence": 0.985
+              },
+              {
+                "word": "queda",
+                "punctuated_word": "queda",
+                "start": 14.97,
+                "end": 15.22,
+                "confidence": 0.985
+              },
+              {
+                "word": "el",
+                "punctuated_word": "el",
+                "start": 15.27,
+                "end": 15.52,
+                "confidence": 0.985
+              },
+              {
+                "word": "último",
+                "punctuated_word": "último",
+                "start": 15.57,
+                "end": 15.82,
+                "confidence": 0.985
+              },
+              {
+                "word": "escondido",
+                "punctuated_word": "escondido",
+                "start": 15.87,
+                "end": 16.12,
+                "confidence": 0.985
+              },
+              {
+                "word": "detrás",
+                "punctuated_word": "detrás",
+                "start": 16.17,
+                "end": 16.42,
+                "confidence": 0.985
+              },
+              {
+                "word": "de",
+                "punctuated_word": "de",
+                "start": 16.47,
+                "end": 16.72,
+                "confidence": 0.985
+              },
+              {
+                "word": "la",
+                "punctuated_word": "la",
+                "start": 16.77,
+                "end": 17.02,
+                "confidence": 0.985
+              },
+              {
+                "word": "caja",
+                "punctuated_word": "caja.",
+                "start": 17.07,
+                "end": 17.32,
+                "confidence": 0.985
+              },
+              {
+                "word": "ahí",
+                "punctuated_word": "Ahí",
+                "start": 18.72,
+                "end": 19.06,
+                "confidence": 0.985
+              },
+              {
+                "word": "viene",
+                "punctuated_word": "viene",
+                "start": 19.11,
+                "end": 19.45,
+                "confidence": 0.985
+              },
+              {
+                "word": "corriendo",
+                "punctuated_word": "corriendo",
+                "start": 19.5,
+                "end": 19.84,
+                "confidence": 0.985
+              },
+              {
+                "word": "apunta",
+                "punctuated_word": "apunta",
+                "start": 19.89,
+                "end": 20.23,
+                "confidence": 0.985
+              },
+              {
+                "word": "bien",
+                "punctuated_word": "bien",
+                "start": 20.28,
+                "end": 20.62,
+                "confidence": 0.985
+              },
+              {
+                "word": "y",
+                "punctuated_word": "y",
+                "start": 20.67,
+                "end": 21.01,
+                "confidence": 0.985
+              },
+              {
+                "word": "fuego",
+                "punctuated_word": "fuego",
+                "start": 21.06,
+                "end": 21.4,
+                "confidence": 0.985
+              },
+              {
+                "word": "directo",
+                "punctuated_word": "directo",
+                "start": 21.45,
+                "end": 21.79,
+                "confidence": 0.985
+              },
+              {
+                "word": "al",
+                "punctuated_word": "al",
+                "start": 21.84,
+                "end": 22.18,
+                "confidence": 0.985
+              },
+              {
+                "word": "centro",
+                "punctuated_word": "centro.",
+                "start": 22.23,
+                "end": 22.57,
+                "confidence": 0.985
+              },
+              {
+                "word": "no",
+                "punctuated_word": "NO",
+                "start": 23.42,
+                "end": 23.826,
+                "confidence": 0.985
+              },
+              {
+                "word": "puede",
+                "punctuated_word": "PUEDE",
+                "start": 23.876,
+                "end": 24.281,
+                "confidence": 0.985
+              },
+              {
+                "word": "ser",
+                "punctuated_word": "SER",
+                "start": 24.331,
+                "end": 24.737,
+                "confidence": 0.985
+              },
+              {
+                "word": "clutch",
+                "punctuated_word": "CLUTCH",
+                "start": 24.787,
+                "end": 25.192,
+                "confidence": 0.985
+              },
+              {
+                "word": "histórico",
+                "punctuated_word": "HISTÓRICO",
+                "start": 25.242,
+                "end": 25.648,
+                "confidence": 0.985
+              },
+              {
+                "word": "en",
+                "punctuated_word": "EN",
+                "start": 25.698,
+                "end": 26.103,
+                "confidence": 0.985
+              },
+              {
+                "word": "el",
+                "punctuated_word": "EL",
+                "start": 26.153,
+                "end": 26.559,
+                "confidence": 0.985
+              },
+              {
+                "word": "último",
+                "punctuated_word": "ÚLTIMO",
+                "start": 26.609,
+                "end": 27.014,
+                "confidence": 0.985
+              },
+              {
+                "word": "segundo",
+                "punctuated_word": "SEGUNDO!",
+                "start": 27.064,
+                "end": 27.47,
+                "confidence": 0.985
+              },
+              {
+                "word": "vamos",
+                "punctuated_word": "VAMOS",
+                "start": 28.27,
+                "end": 28.648,
+                "confidence": 0.985
+              },
+              {
+                "word": "carajo",
+                "punctuated_word": "CARAJO",
+                "start": 28.698,
+                "end": 29.076,
+                "confidence": 0.985
+              },
+              {
+                "word": "así",
+                "punctuated_word": "así",
+                "start": 29.126,
+                "end": 29.503,
+                "confidence": 0.985
+              },
+              {
+                "word": "se",
+                "punctuated_word": "se",
+                "start": 29.553,
+                "end": 29.931,
+                "confidence": 0.985
+              },
+              {
+                "word": "cierra",
+                "punctuated_word": "cierra",
+                "start": 29.981,
+                "end": 30.359,
+                "confidence": 0.985
+              },
+              {
+                "word": "una",
+                "punctuated_word": "una",
+                "start": 30.409,
+                "end": 30.787,
+                "confidence": 0.985
+              },
+              {
+                "word": "partida",
+                "punctuated_word": "partida",
+                "start": 30.837,
+                "end": 31.214,
+                "confidence": 0.985
+              },
+              {
+                "word": "imposible",
+                "punctuated_word": "imposible",
+                "start": 31.264,
+                "end": 31.642,
+                "confidence": 0.985
+              },
+              {
+                "word": "amigos",
+                "punctuated_word": "amigos!",
+                "start": 31.692,
+                "end": 32.07,
+                "confidence": 0.985
+              },
+              {
+                "word": "suscríbanse",
+                "punctuated_word": "Suscríbanse",
+                "start": 32.87,
+                "end": 33.185,
+                "confidence": 0.985
+              },
+              {
+                "word": "ya",
+                "punctuated_word": "ya",
+                "start": 33.235,
+                "end": 33.55,
+                "confidence": 0.985
+              },
+              {
+                "word": "mismo",
+                "punctuated_word": "mismo",
+                "start": 33.6,
+                "end": 33.915,
+                "confidence": 0.985
+              },
+              {
+                "word": "porque",
+                "punctuated_word": "porque",
+                "start": 33.965,
+                "end": 34.28,
+                "confidence": 0.985
+              },
+              {
+                "word": "esta",
+                "punctuated_word": "esta",
+                "start": 34.33,
+                "end": 34.645,
+                "confidence": 0.985
+              },
+              {
+                "word": "jugada",
+                "punctuated_word": "jugada",
+                "start": 34.695,
+                "end": 35.01,
+                "confidence": 0.985
+              },
+              {
+                "word": "queda",
+                "punctuated_word": "queda",
+                "start": 35.06,
+                "end": 35.375,
+                "confidence": 0.985
+              },
+              {
+                "word": "para",
+                "punctuated_word": "para",
+                "start": 35.425,
+                "end": 35.74,
+                "confidence": 0.985
+              },
+              {
+                "word": "la",
+                "punctuated_word": "la",
+                "start": 35.79,
+                "end": 36.105,
+                "confidence": 0.985
+              },
+              {
+                "word": "historia",
+                "punctuated_word": "historia.",
+                "start": 36.155,
+                "end": 36.47,
+                "confidence": 0.985
+              },
+              {
+                "word": "pasemos",
+                "punctuated_word": "Pasemos",
+                "start": 37.52,
+                "end": 37.77,
+                "confidence": 0.985
+              },
+              {
+                "word": "al",
+                "punctuated_word": "al",
+                "start": 37.82,
+                "end": 38.07,
+                "confidence": 0.985
+              },
+              {
+                "word": "lobby",
+                "punctuated_word": "lobby",
+                "start": 38.12,
+                "end": 38.37,
+                "confidence": 0.985
+              },
+              {
+                "word": "a",
+                "punctuated_word": "a",
+                "start": 38.42,
+                "end": 38.67,
+                "confidence": 0.985
+              },
+              {
+                "word": "revisar",
+                "punctuated_word": "revisar",
+                "start": 38.72,
+                "end": 38.97,
+                "confidence": 0.985
+              },
+              {
+                "word": "las",
+                "punctuated_word": "las",
+                "start": 39.02,
+                "end": 39.27,
+                "confidence": 0.985
+              },
+              {
+                "word": "estadísticas",
+                "punctuated_word": "estadísticas",
+                "start": 39.32,
+                "end": 39.57,
+                "confidence": 0.985
+              },
+              {
+                "word": "de",
+                "punctuated_word": "de",
+                "start": 39.62,
+                "end": 39.87,
+                "confidence": 0.985
+              },
+              {
+                "word": "la",
+                "punctuated_word": "la",
+                "start": 39.92,
+                "end": 40.17,
+                "confidence": 0.985
+              },
+              {
+                "word": "partida",
+                "punctuated_word": "partida.",
+                "start": 40.22,
+                "end": 40.47,
+                "confidence": 0.985
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

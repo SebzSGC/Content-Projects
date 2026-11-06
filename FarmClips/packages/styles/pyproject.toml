@@ -1,0 +1,22 @@
+[project]
+name = "clipsstyles"
+version = "0.1.0"
+description = "Presets declarativos de estilo (hormozi-gaming), fuentes, emojis y SFX para ClipsApp."
+requires-python = ">=3.10"
+dependencies = [
+  "pydantic>=2.8",
+  "Pillow>=10.4",
+  "numpy>=1.26",
+  "soundfile>=0.12",
+]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["clipsstyles*"]
+
+[tool.setuptools.package-data]
+clipsstyles = ["presets/*.json", "fonts/*", "emojis/*.png", "sfx/*.wav"]

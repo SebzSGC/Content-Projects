@@ -1,0 +1,28 @@
+# Entornos y dependencias
+.venv/
+node_modules/
+apps/web/node_modules/
+apps/web/.next/
+.next/
+out/
+
+# Estado local, SQLite, artefactos Parquet/Opus y MP4s generados
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Python build / test caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Secretos y credenciales
+.env
+.env.local
+*service-account*.json
+
+# OS
+.DS_Store
+Thumbs.db
