@@ -3,8 +3,8 @@
 import React, { useId, useState } from "react";
 import { ChevronDown, Info } from "lucide-react";
 
-// Shared look for the gaming studio: soft slate glass, rounded shapes, gold accent
-// reserved for primary actions and scores.
+// Shared look for the studio: soft slate glass, rounded shapes, gold accent
+// reserved for primary actions, scores and the budget.
 
 export const btnPrimary =
   "inline-flex items-center justify-center gap-2 rounded-full bg-amber-400 px-5 py-2.5 text-sm font-extrabold text-slate-950 shadow-lg shadow-amber-500/20 transition-all duration-300 ease-in-out hover:bg-amber-300 hover:shadow-amber-400/30 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-40 disabled:shadow-none disabled:hover:scale-100 disabled:cursor-not-allowed cursor-pointer motion-reduce:transition-none motion-reduce:hover:scale-100";
@@ -68,8 +68,25 @@ export function Badge({
 }
 
 /** Small "i" with a tooltip on hover/focus for purely technical information. */
-export function InfoTip({ children, label = "Más información" }: { children: React.ReactNode; label?: string }) {
+export function InfoTip({
+  children,
+  label = "Más información",
+  side = "top",
+  align = "center",
+}: {
+  children: React.ReactNode;
+  label?: string;
+  side?: "top" | "bottom";
+  /** "end" anchors the bubble to the icon's right edge (for icons near the right of the screen). */
+  align?: "center" | "end";
+}) {
   const id = useId();
+  const position = [
+    side === "top"
+      ? "bottom-full mb-2 translate-y-1 group-hover:translate-y-0 group-focus-within:translate-y-0"
+      : "top-full mt-2 -translate-y-1 group-hover:translate-y-0 group-focus-within:translate-y-0",
+    align === "center" ? "left-1/2 -translate-x-1/2" : "right-0",
+  ].join(" ");
   return (
     <span className="group relative inline-flex align-middle">
       <button
@@ -83,7 +100,7 @@ export function InfoTip({ children, label = "Más información" }: { children: R
       <span
         id={id}
         role="tooltip"
-        className="pointer-events-none invisible absolute bottom-full left-1/2 z-40 mb-2 w-max max-w-[16rem] -translate-x-1/2 translate-y-1 rounded-2xl border border-white/10 bg-slate-900/95 px-3 py-2 text-left text-xs font-medium leading-relaxed text-slate-300 opacity-0 shadow-xl backdrop-blur-md transition-all duration-200 ease-out group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100"
+        className={`pointer-events-none invisible absolute z-50 w-max max-w-[18rem] rounded-2xl border border-white/10 bg-slate-900/95 px-3 py-2 text-left text-xs font-medium leading-relaxed text-slate-300 opacity-0 shadow-xl backdrop-blur-md transition-all duration-200 ease-out group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 ${position}`}
       >
         {children}
       </span>

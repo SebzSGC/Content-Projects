@@ -2,13 +2,33 @@
 
 import React from "react";
 import { Check, X } from "lucide-react";
-import { STEPS, StepState } from "@/lib/gamingSteps";
+
+export type StepStatus = "done" | "active" | "pending" | "error";
+
+export interface PipelineStep {
+  key: string;
+  label: string;
+  hint: string;
+}
 
 // 7-step track: the gold fill glides as the pipeline advances, the active step
 // glows softly, finished steps get a check. Dots have a fixed width so the track
 // runs exactly from the first dot's center to the last one's.
-export function StepProgress({ state, compact = false }: { state: StepState; compact?: boolean }) {
-  const pct = Math.max(0, Math.min(1, state.fill)) * 100;
+export function StepProgress({
+  steps,
+  statuses,
+  fill,
+  current,
+  compact = false,
+}: {
+  steps: PipelineStep[];
+  statuses: StepStatus[];
+  /** 0..1 position of the filled track (0 = first dot, 1 = last dot). */
+  fill: number;
+  current: number;
+  compact?: boolean;
+}) {
+  const pct = Math.max(0, Math.min(1, fill)) * 100;
   const dotSize = compact ? "h-3 w-3" : "h-9 w-9";
 
   return (
@@ -24,8 +44,8 @@ export function StepProgress({ state, compact = false }: { state: StepState; com
           />
         </div>
         <ol className="relative flex justify-between">
-          {STEPS.map((step, i) => {
-            const status = state.statuses[i];
+          {steps.map((step, i) => {
+            const status = statuses[i];
             const dot = {
               done: "bg-amber-400 text-slate-950 border-amber-400",
               active: "bg-slate-900 text-amber-300 border-amber-300 ring-4 ring-amber-400/25 shadow-lg shadow-amber-500/40",
@@ -52,7 +72,13 @@ export function StepProgress({ state, compact = false }: { state: StepState; com
                 {!compact && (
                   <span
                     className={`absolute top-11 left-1/2 hidden -translate-x-1/2 whitespace-nowrap text-xs font-bold transition-colors duration-300 sm:block ${
-                      status === "active" ? "text-amber-300" : status === "done" ? "text-slate-300" : status === "error" ? "text-rose-300" : "text-slate-500"
+                      status === "active"
+                        ? "text-amber-300"
+                        : status === "done"
+                          ? "text-slate-300"
+                          : status === "error"
+                            ? "text-rose-300"
+                            : "text-slate-500"
                     }`}
                   >
                     {step.label}
@@ -65,7 +91,7 @@ export function StepProgress({ state, compact = false }: { state: StepState; com
       </div>
       {!compact && (
         <p className="text-center text-xs font-semibold text-slate-400 sm:hidden">
-          Paso {state.current + 1} de {STEPS.length}: <span className="text-slate-200">{STEPS[state.current].label}</span>
+          Paso {current + 1} de {steps.length}: <span className="text-slate-200">{steps[current]?.label}</span>
         </p>
       )}
     </div>

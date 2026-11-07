@@ -13,9 +13,9 @@
 }
 
 body {
-  background-color: #090a0f;
-  color: #f4f4f6;
-  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* Soft slate instead of pure black; the font family comes from next/font (Nunito). */
+  background-color: #020617;
+  color: #f1f5f9;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -25,14 +25,37 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0e1017;
+  background: #0f172a;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #272a36;
+  background: #334155;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3a3f52;
+  background: #475569;
+}
+
+/* Soft sheen that travels along progress bars */
+.gc-sheen {
+  position: relative;
+}
+.gc-sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  transform: translateX(-100%);
+  animation: gc-sheen 2.4s ease-in-out infinite;
+}
+@keyframes gc-sheen {
+  to {
+    transform: translateX(100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gc-sheen::after {
+    animation: none;
+  }
 }

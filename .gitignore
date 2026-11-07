@@ -29,12 +29,6 @@ README.rea.backup.md
 # Local Runtimes & Media storage
 vidforge/runtime/
 vidforge/storage/
-ClippersIppers/*.mp4
-ClippersIppers/*.ass
-ClippersIppers/tmp_*
-ClippersIppers/scratch-*
-ClippersIppers/test_diag_*
-ClippersIppers/.obsidian-docs.json
 FarmClips/data/
 FarmClips/.venv/
 FarmClips/*.db*
