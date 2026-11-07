@@ -10,7 +10,6 @@ Repositorio monorepo que reúne soluciones y proyectos independientes de **gener
 | :--- | :--- | :--- | :--- | :--- |
 | [**FarmClips**](./FarmClips) | Pipeline Híbrido & Editor Studio (Desktop & Web) | Python 3.12 (FastAPI), Next.js 15, React 19, FFmpeg NVENC, C++ warpAffine, MediaPipe, Web Audio API | Sistema de clipeo masivo y automatizado de streams de gaming en Shorts verticales (9:16, 1080×1920, −14 LUFS EBU R128) con arquitectura híbrida: IA en la nube por API (Deepgram Nova-3 / Gemini 3.5 Flash-Lite) y proceso multimedia 100 % local en GPU/CPU sin dependencias pesadas de ML local. Incluye editor interactivo a 60 fps con sidechain ducking y compositor C++ acelerado. | [Ver README](./FarmClips/README.md) |
 | [**VidForge Studio**](./vidforge) | Aplicación Completa (Desktop & Web) | Python 3.12 (FastAPI), React 18 (Vite), Node.js (Puppeteer WebGL), FFmpeg NVENC | Generador modular de videos asistido por IA (*Clean-Room*), con aceleración por GPU NVIDIA, alineación forzada de audio palabra por palabra, renderizado de plantillas HTML5/WebGL y exportación directa a CapCut Desktop, OpenTimelineIO y MP4 a 60 FPS. | [Ver README](./vidforge/README.md) |
-| [**ClippersIppers**](./ClippersIppers) | Aplicación Web (Frontend NLE) | Next.js 14, React 18, TypeScript, Tailwind CSS | Réplica frontend de alta fidelidad inspirada en la arquitectura de OpusClip (4.0 Revamp & Classic Studio), con cálculo de Virality Score (0–99), editor NLE multipista con transcripción editable, animaciones karaoke y exportación SRT/XML. | [Ver README](./ClippersIppers/README.md) |
 
 ---
 
@@ -27,12 +26,6 @@ Content-Projects/
 │   ├── infra/               # Scripts de desarrollo (dev.ps1) y Docker
 │   ├── package.json         # Scripts de orquestación y desarrollo del monorepo
 │   └── README.md            # Documentación técnica completa de FarmClips
-│
-├── ClippersIppers/          # Suite de clipeo viral de video y editor NLE (Next.js)
-│   ├── public/              # Activos y diccionarios de internacionalización
-│   ├── src/                 # Rutas App Router, componentes y lógica NLE
-│   ├── package.json         # Dependencias de ClippersIppers
-│   └── README.md            # Documentación específica de ClippersIppers
 │
 ├── vidforge/                # Generador modular de videos IA con aceleración NVENC
 │   ├── apps/
@@ -98,31 +91,13 @@ Consulta los detalles técnicos y arquitectura en [`vidforge/README.md`](./vidfo
 
 ---
 
-### 3. ClippersIppers
-
-Para ejecutar la interfaz de clipeo inteligente y editor NLE:
-
-```powershell
-cd ClippersIppers
-
-# 1. Instalar dependencias
-npm install
-
-# 2. Iniciar el servidor de desarrollo en http://localhost:3040
-npm run dev
-```
-
-Consulta las rutas, módulos y componentes en [`ClippersIppers/README.md`](./ClippersIppers/README.md).
-
----
-
 ## 🛠️ Tecnologías y Herramientas
 
 - **Backend & Orquestación Multimedia**: Python 3.12, FastAPI, Pydantic, SQLite WAL, FFmpeg (soporte NVENC y filtergraphs), MediaPipe Face Detection en CPU, OpenCV (composición `warpAffine` C++), Faster-Whisper, RapidFuzz.
 - **APIs de Inteligencia Artificial (Nube)**: Deepgram Nova-3 (STT con perfiles de `keyterms`), Groq (Whisper Large v3 Turbo), Google Gemini 3.5 Flash-Lite, OpenAI-compatible APIs (con reintentos `429 Retry-After`, failover por cortacircuitos y control de presupuesto USD).
-- **Frontend & UI/UX**: Next.js 15 / 14, React 19 / 18, Vite, Tailwind CSS, Lucide Icons, Moveable, Web Audio API (mezcla estéreo y sidechain ducking en vivo).
+- **Frontend & UI/UX**: Next.js 15, React 19 / 18, Vite, Tailwind CSS, Lucide Icons, Web Audio API (mezcla estéreo y sidechain ducking en vivo).
 - **Render Dinámico & Sidecar**: Node.js, Puppeteer Core, WebGL, GLSL Shaders, WebM VP9 Alpha, `libass` para subtítulos animados con resalte karaoke Hormozi.
-- **Interoperabilidad & Formatos**: `EditPlan` v2 declarativo, CapCut Desktop Drafts (`draft_content.json`), OpenTimelineIO (`.otio`), Adobe Premiere / DaVinci Resolve (`.xml`), `.srt`, `.ass`.
+- **Interoperabilidad & Formatos**: `EditPlan` v2 declarativo, CapCut Desktop Drafts (`draft_content.json`), OpenTimelineIO (`.otio`), `.srt`, `.ass`.
 
 ---
 

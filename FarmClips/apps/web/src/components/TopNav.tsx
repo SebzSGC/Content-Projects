@@ -3,8 +3,9 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Cpu, DollarSign, Film, FolderSync, Radio } from "lucide-react";
+import { Film, Radio, Wallet } from "lucide-react";
 import { fetchHealth, type ServerHealth, useServerEvents } from "@/lib/api/client";
+import { InfoTip } from "@/components/ui";
 
 export function TopNav() {
   const pathname = usePathname();
@@ -44,78 +45,70 @@ export function TopNav() {
   const pct = Math.min(100, (spent / Math.max(0.01, cap)) * 100);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-zinc-800/80 bg-[#0A0B0F]/90 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-[1440px] items-center justify-between px-5">
+    <header className="sticky top-0 z-40 border-b border-white/5 bg-slate-950/70 backdrop-blur-xl">
+      <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6">
         <div className="flex items-center gap-6">
-          <Link href="/sessions" className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FFD400] text-black shadow-[0_0_18px_rgba(255,212,0,0.35)]">
+          <Link href="/sessions" className="group flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/25 transition-transform duration-300 group-hover:scale-105">
               <Film className="h-4 w-4 stroke-[2.6]" />
             </span>
-            <div>
-              <span className="text-sm font-extrabold tracking-tight text-white">ClipsApp</span>
-              <span className="ml-2 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#39FF14]">
-                Híbrido v2
-              </span>
-            </div>
+            <span className="text-base font-black tracking-tight text-slate-50">ClipsApp</span>
           </Link>
 
-          <nav className="flex items-center gap-1 text-xs font-medium">
+          <nav className="hidden items-center gap-1 text-sm font-bold sm:flex">
             <Link
               href="/sessions"
-              className={`rounded-md px-3 py-1.5 transition ${
-                pathname?.startsWith("/sessions")
-                  ? "bg-zinc-800 text-white"
-                  : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+              className={`rounded-full px-4 py-1.5 transition-all duration-300 ${
+                pathname?.startsWith("/sessions") ? "bg-white/10 text-slate-50" : "text-slate-400 hover:bg-white/5 hover:text-slate-100"
               }`}
             >
-              Sesiones y Drive
+              Sesiones
             </Link>
           </nav>
         </div>
 
-        <div className="flex items-center gap-3 text-xs">
+        <div className="flex items-center gap-2 text-xs">
           {offline ? (
-            <span className="flex items-center gap-1.5 rounded-full border border-red-500/40 bg-red-500/10 px-3 py-1 text-red-300">
-              <Radio className="h-3.5 w-3.5" /> Servidor desconectado (8790)
+            <span className="flex items-center gap-1.5 rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1.5 font-bold text-rose-200">
+              <Radio className="h-3.5 w-3.5" /> Servidor desconectado
             </span>
           ) : health ? (
             <>
-              <div className="hidden items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/70 px-2.5 py-1 text-zinc-300 md:flex">
-                <Cpu className="h-3.5 w-3.5 text-[#39FF14]" />
-                <span>
-                  STT: <strong className="text-white">{health.stt_primary}</strong>
-                </span>
-                <span className="text-zinc-600">·</span>
-                <span>
-                  LLM: <strong className="text-white">{health.llm_model}</strong>
-                </span>
-                <span className="text-zinc-600">·</span>
-                <span>{health.use_nvenc ? "NVENC" : "libx264"}</span>
-              </div>
+              <span className="hidden items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-bold text-slate-300 md:inline-flex">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]" />
+                Servidor listo
+                <InfoTip label="Detalles del servidor" side="bottom" align="end">
+                  STT: <span className="font-mono text-slate-100">{health.stt_primary}</span> (respaldo {health.stt_backup})
+                  <br />
+                  LLM: <span className="font-mono text-slate-100">{health.llm_model}</span> (respaldo {health.llm_backup})
+                  <br />
+                  Render: {health.use_nvenc ? "NVENC" : "libx264"} · {health.render_slots} slots · {health.cpu_workers} núcleos
+                  <br />
+                  Drive: {health.drive_mode} · Preset: {health.style_preset}
+                </InfoTip>
+              </span>
 
-              <div className="hidden items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/70 px-2.5 py-1 text-zinc-300 lg:flex">
-                <FolderSync className="h-3.5 w-3.5 text-amber-400" />
-                <span>Drive: {health.drive_mode}</span>
-              </div>
-
-              <div
-                className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/90 px-3 py-1"
-                title={`Llamadas registradas en caché SQLite: ${health.budget.calls_count}`}
+              <span
+                className="flex items-center gap-2.5 rounded-full border border-amber-300/25 bg-amber-400/10 py-1.5 pl-3 pr-2"
+                aria-label={`Presupuesto: ${spent.toFixed(2)} de ${cap.toFixed(2)} USD`}
               >
-                <DollarSign className="h-3.5 w-3.5 text-[#FFD400]" />
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-1.5 font-mono text-[11px]">
-                    <span className="font-semibold text-white">${spent.toFixed(4)}</span>
-                    <span className="text-zinc-500">/ ${cap.toFixed(2)} USD</span>
-                  </div>
-                  <div className="mt-0.5 h-1 w-24 overflow-hidden rounded-full bg-zinc-800">
-                    <div
-                      className={`h-full transition-all ${pct > 85 ? "bg-red-500" : "bg-[#39FF14]"}`}
+                <Wallet className="h-3.5 w-3.5 text-amber-300" />
+                <span className="flex flex-col">
+                  <span className="font-mono text-[11px] font-bold leading-none text-amber-200">
+                    ${spent.toFixed(2)} <span className="font-normal text-slate-400">/ ${cap.toFixed(2)}</span>
+                  </span>
+                  <span className="mt-1 h-1 w-20 overflow-hidden rounded-full bg-white/10">
+                    <span
+                      className={`block h-full rounded-full transition-[width] duration-700 ease-out ${pct > 85 ? "bg-rose-400" : "bg-amber-400"}`}
                       style={{ width: `${Math.max(2, pct)}%` }}
                     />
-                  </div>
-                </div>
-              </div>
+                  </span>
+                </span>
+                <InfoTip label="Detalle del presupuesto" side="bottom" align="end">
+                  Gastado ${spent.toFixed(4)} de ${cap.toFixed(2)} USD. {health.budget.calls_count} llamadas guardadas en caché: repetir
+                  una sesión no vuelve a cobrar.
+                </InfoTip>
+              </span>
             </>
           ) : null}
         </div>
