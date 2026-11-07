@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState } from "react";
-import { Clapperboard, Copy, Check, ShieldCheck, Zap, Loader2 } from "lucide-react";
+import { Clapperboard, Copy, Check, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import type { Candidate, WorkerJob } from "@/types/gaming";
 import { formatClock } from "@/lib/workerClient";
 import { JobProgress } from "./JobProgress";
+import { Badge, Disclosure, GlassCard, InfoTip, btnGhost, btnPrimary, inputBase } from "./ui";
 
 export interface CandidateEdits {
   start: number;
@@ -12,6 +13,8 @@ export interface CandidateEdits {
   overlay_title: string;
 }
 
+// What matters first: the publish title, the score and the "Crear Short" action.
+// Score breakdown, reviewer notes and the trim/title editor are one click away.
 export function CandidateCard({
   candidate,
   rank,
@@ -27,7 +30,8 @@ export function CandidateCard({
   const [end, setEnd] = useState(candidate.end);
   const [overlay, setOverlay] = useState(candidate.overlay_title);
   const [copied, setCopied] = useState(false);
-  const busy = job && (job.status === "queued" || job.status === "running");
+  const busy = Boolean(job && (job.status === "queued" || job.status === "running"));
+  const score = Math.round(candidate.final_score);
 
   const copyPost = async () => {
     const text = `${candidate.post_title}\n${candidate.hashtags.map((h) => `#${h}`).join(" ")}`;
@@ -36,93 +40,100 @@ export function CandidateCard({
     setTimeout(() => setCopied(false), 1500);
   };
 
-  const scoreTone =
-    candidate.final_score >= 75 ? "text-[var(--status-success)]" : candidate.final_score >= 55 ? "text-[var(--status-warn)]" : "text-[var(--muted-foreground)]";
-
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-0.5">
-          <p className="text-[11px] font-mono text-[var(--muted-foreground)]">
-            #{rank} · {formatClock(candidate.start)} – {formatClock(candidate.end)} · {Math.round(candidate.end - candidate.start)} s
+    <GlassCard as="article" interactive={!busy} className={`flex flex-col gap-4 p-5 ${busy ? "ring-2 ring-amber-400/30" : ""}`}>
+      <div className="flex items-start gap-4">
+        <div className="flex shrink-0 flex-col items-center">
+          <span
+            className={`flex h-14 w-14 items-center justify-center rounded-full text-xl font-black tabular-nums ${
+              score >= 75
+                ? "bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/25"
+                : score >= 55
+                  ? "bg-amber-400/15 text-amber-300"
+                  : "bg-white/5 text-slate-300"
+            }`}
+          >
+            {score}
+          </span>
+          <span className="mt-1 flex items-center text-[10px] font-bold uppercase tracking-wide text-slate-500">
+            puntaje
+            <InfoTip label="Cómo se calcula el puntaje">
+              IA: {Math.round(candidate.llm_score)} · Señales: {Math.round(candidate.signal_score * 100)}
+              {candidate.verify_score != null ? ` · Revisión: ${Math.round(candidate.verify_score)}` : ""}
+              <br />
+              Combina la opinión de la IA con las risas, gritos y reacciones detectadas.
+            </InfoTip>
+          </span>
+        </div>
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge>#{rank}</Badge>
+            <Badge>
+              {formatClock(candidate.start)} – {formatClock(candidate.end)} · {Math.round(candidate.end - candidate.start)} s
+            </Badge>
+            {candidate.verified && (
+              <Badge tone="success">
+                <ShieldCheck className="h-3 w-3" /> Revisado
+              </Badge>
+            )}
+          </div>
+          <h3 className="text-base font-extrabold leading-snug text-slate-50">{candidate.post_title || candidate.overlay_title}</h3>
+          <p className="text-sm text-slate-400">
+            En pantalla: <span className="font-semibold text-slate-300">{overlay || "—"}</span>
           </p>
-          <p className="text-sm font-bold text-[var(--foreground)]">{candidate.post_title || candidate.overlay_title}</p>
-        </div>
-        <div className="text-right shrink-0">
-          <p className={`text-xl font-black leading-none ${scoreTone}`}>{Math.round(candidate.final_score)}</p>
-          <p className="text-[10px] text-[var(--muted-foreground)]">puntaje</p>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1.5 text-[10px] font-semibold">
-        <span className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-[var(--muted-foreground)]">IA {Math.round(candidate.llm_score)}</span>
-        <span className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-[var(--muted-foreground)] inline-flex items-center gap-1">
-          <Zap className="h-3 w-3" /> Señales {Math.round(candidate.signal_score * 100)}
-        </span>
-        {candidate.verified && (
-          <span className="rounded-full bg-[var(--status-success-bg)] px-2 py-0.5 text-[var(--status-success)] inline-flex items-center gap-1">
-            <ShieldCheck className="h-3 w-3" /> Revisado {Math.round(candidate.verify_score ?? 0)}
-          </span>
-        )}
-        {candidate.hashtags.map((h) => (
-          <span key={h} className="rounded-full bg-[var(--primary-subtle)] px-2 py-0.5 text-[var(--primary)]">
-            #{h}
-          </span>
-        ))}
-      </div>
+      {candidate.reason && <p className="line-clamp-2 text-sm leading-relaxed text-slate-400">{candidate.reason}</p>}
 
-      {candidate.reason && <p className="text-xs text-[var(--muted-foreground)]">{candidate.reason}</p>}
-      {candidate.verification_notes && <p className="text-xs text-[var(--muted-foreground)] italic">{candidate.verification_notes}</p>}
+      {candidate.hashtags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {candidate.hashtags.map((h) => (
+            <span key={h} className="rounded-full bg-white/5 px-2.5 py-0.5 text-xs font-semibold text-slate-400">
+              #{h}
+            </span>
+          ))}
+        </div>
+      )}
 
-      <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-        <label className="space-y-1">
-          <span className="text-[10px] font-semibold text-[var(--muted-foreground)]">Título en pantalla</span>
-          <input
-            value={overlay}
-            onChange={(e) => setOverlay(e.target.value)}
-            className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none"
-          />
-        </label>
-        <label className="space-y-1">
-          <span className="text-[10px] font-semibold text-[var(--muted-foreground)]">Inicio (s)</span>
-          <input
-            type="number"
-            step={0.1}
-            value={start}
-            onChange={(e) => setStart(Number(e.target.value))}
-            className="w-24 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs font-mono text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none"
-          />
-        </label>
-        <label className="space-y-1">
-          <span className="text-[10px] font-semibold text-[var(--muted-foreground)]">Fin (s)</span>
-          <input
-            type="number"
-            step={0.1}
-            value={end}
-            onChange={(e) => setEnd(Number(e.target.value))}
-            className="w-24 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs font-mono text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none"
-          />
-        </label>
-      </div>
+      {busy && job ? (
+        <JobProgress job={job} compact />
+      ) : (
+        job?.status === "error" && <JobProgress job={job} compact />
+      )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          onClick={() => onRender({ start, end, overlay_title: overlay })}
-          disabled={busy || end - start < 1}
-          className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--primary)] px-3.5 py-1.5 text-xs font-bold text-white hover:opacity-95 transition cursor-pointer disabled:opacity-60"
-        >
-          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Clapperboard className="h-3.5 w-3.5" />}
-          Renderizar Short
+      <div className="mt-auto flex flex-wrap items-center gap-2">
+        <button onClick={() => onRender({ start, end, overlay_title: overlay })} disabled={busy || end - start < 1} className={btnPrimary}>
+          <Clapperboard className="h-4 w-4" />
+          {busy ? "Creando…" : "Crear Short"}
         </button>
-        <button
-          onClick={copyPost}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--secondary)] px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] hover:border-[var(--primary)] transition cursor-pointer"
-        >
-          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-          Copiar título y hashtags
+        <button onClick={copyPost} className={btnGhost}>
+          {copied ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Copy className="h-3.5 w-3.5" />}
+          {copied ? "Copiado" : "Copiar título"}
         </button>
       </div>
-      {job && job.status !== "done" && <JobProgress job={job} />}
-    </div>
+
+      <Disclosure title="Ajustar clip" subtitle="Título en pantalla, inicio y fin" icon={<SlidersHorizontal className="h-4 w-4" />} className="border-t border-white/5 pt-3">
+        <div className="space-y-3">
+          <label className="block space-y-1.5">
+            <span className="text-xs font-bold text-slate-400">Título en pantalla</span>
+            <input value={overlay} onChange={(e) => setOverlay(e.target.value)} className={inputBase} />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="space-y-1.5">
+              <span className="text-xs font-bold text-slate-400">Inicio (s)</span>
+              <input type="number" step={0.1} value={start} onChange={(e) => setStart(Number(e.target.value))} className={`${inputBase} font-mono`} />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-xs font-bold text-slate-400">Fin (s)</span>
+              <input type="number" step={0.1} value={end} onChange={(e) => setEnd(Number(e.target.value))} className={`${inputBase} font-mono`} />
+            </label>
+          </div>
+          {candidate.verification_notes && (
+            <p className="rounded-2xl bg-white/5 px-3 py-2 text-xs italic text-slate-400">Nota del revisor: {candidate.verification_notes}</p>
+          )}
+        </div>
+      </Disclosure>
+    </GlassCard>
   );
 }

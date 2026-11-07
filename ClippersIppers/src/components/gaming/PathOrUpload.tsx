@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import { Upload, Loader2 } from "lucide-react";
+import { Upload } from "lucide-react";
 import { uploadFile } from "@/lib/workerClient";
+import { InfoTip, ProgressBar, btnSecondary, inputBase } from "./ui";
 
 // A local path input (fastest: the worker reads the file in place) with an
 // upload fallback that streams the file to the worker's disk.
@@ -38,38 +39,33 @@ export function PathOrUpload({
   };
 
   return (
-    <label className="block space-y-1.5">
-      <span className="text-xs font-semibold text-[var(--foreground)]">{label}</span>
+    <div className="space-y-2">
+      <span className="flex items-center gap-1 text-sm font-bold text-slate-200">
+        {label}
+        {hint && <InfoTip>{hint}</InfoTip>}
+      </span>
       <div className="flex gap-2">
         <input
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="C:\\Grabaciones\\2026-11-05 20-00-00.mkv"
-          className="flex-1 min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none"
+          placeholder="Ruta del archivo o súbelo →"
+          aria-label={label}
+          className={`${inputBase} min-w-0 flex-1 font-mono text-xs`}
         />
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={progress !== null}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--secondary)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] hover:border-[var(--primary)] transition cursor-pointer disabled:opacity-60 shrink-0"
-        >
-          {progress !== null ? (
-            <>
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              {Math.round(progress * 100)}%
-            </>
-          ) : (
-            <>
-              <Upload className="h-3.5 w-3.5" />
-              Subir
-            </>
-          )}
+        <button type="button" onClick={() => inputRef.current?.click()} disabled={progress !== null} className={`${btnSecondary} shrink-0`}>
+          <Upload className="h-4 w-4" />
+          <span className="hidden sm:inline">Subir</span>
         </button>
         <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
       </div>
-      {hint && <span className="block text-[11px] text-[var(--muted-foreground)]">{hint}</span>}
-      {error && <span className="block text-[11px] text-[var(--status-error)]">{error}</span>}
-    </label>
+      {progress !== null && (
+        <div className="space-y-1">
+          <ProgressBar value={progress} />
+          <p className="text-xs text-slate-400">Subiendo… {Math.round(progress * 100)}%</p>
+        </div>
+      )}
+      {error && <p className="text-xs font-semibold text-rose-300">{error}</p>}
+    </div>
   );
 }

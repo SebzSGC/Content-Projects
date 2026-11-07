@@ -40,12 +40,18 @@ export function RegionPicker({
     h: Math.abs(d.y1 - d.y0),
   });
 
-  const finish = () => {
-    if (drag) {
-      const rect = toRect(drag);
-      if (rect.w > 0.02 && rect.h > 0.02) onChange(activeKey, rect);
-    }
+  // The drag origin lives in a ref so pointer events never read a stale render;
+  // the end point always comes from the event itself.
+  const origin = useRef<{ x: number; y: number } | null>(null);
+
+  const finish = (e: React.PointerEvent) => {
+    const start = origin.current;
+    origin.current = null;
     setDrag(null);
+    if (!start) return;
+    const p = point(e);
+    const rect = toRect({ x0: start.x, y0: start.y, x1: p.x, y1: p.y });
+    if (rect.w > 0.02 && rect.h > 0.02) onChange(activeKey, rect);
   };
 
   const shown = regions.map((r) => (r.key === activeKey && drag ? { ...r, rect: toRect(drag) } : r));
@@ -53,19 +59,24 @@ export function RegionPicker({
   return (
     <div
       ref={boxRef}
-      className="relative w-full select-none touch-none overflow-hidden rounded-2xl border border-[var(--border)] bg-black cursor-crosshair"
+      className="relative w-full select-none touch-none overflow-hidden rounded-2xl border border-white/10 bg-slate-950 shadow-inner cursor-crosshair"
       onPointerDown={(e) => {
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        e.currentTarget.setPointerCapture(e.pointerId);
         const p = point(e);
+        origin.current = p;
         setDrag({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
       }}
       onPointerMove={(e) => {
-        if (!drag) return;
+        const start = origin.current;
+        if (!start) return;
         const p = point(e);
-        setDrag({ ...drag, x1: p.x, y1: p.y });
+        setDrag({ x0: start.x, y0: start.y, x1: p.x, y1: p.y });
       }}
       onPointerUp={finish}
-      onPointerCancel={() => setDrag(null)}
+      onPointerCancel={() => {
+        origin.current = null;
+        setDrag(null);
+      }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={imageUrl} alt="Fotograma del stream" className="block w-full h-auto pointer-events-none" draggable={false} />
@@ -74,7 +85,7 @@ export function RegionPicker({
           r.rect && (
             <div
               key={r.key}
-              className="absolute pointer-events-none border-2"
+              className="absolute pointer-events-none rounded-xl border-2 transition-opacity duration-150"
               style={{
                 left: `${r.rect.x * 100}%`,
                 top: `${r.rect.y * 100}%`,
@@ -85,7 +96,7 @@ export function RegionPicker({
                 opacity: r.key === activeKey ? 1 : 0.6,
               }}
             >
-              <span className="absolute left-0 top-0 px-1.5 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: r.color }}>
+              <span className="absolute left-1.5 top-1.5 rounded-full px-2 py-0.5 text-[10px] font-extrabold text-slate-950" style={{ backgroundColor: r.color }}>
                 {r.label}
               </span>
             </div>

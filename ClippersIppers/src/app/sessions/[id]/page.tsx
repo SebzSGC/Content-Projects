@@ -3,36 +3,37 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import {
-  ArrowLeft,
-  Wand2,
-  Save,
-  Loader2,
-  Timer,
-  Settings2,
-  Download,
-  Film,
-  ScanFace,
-  AlertTriangle,
-} from "lucide-react";
-import type {
-  Candidate,
-  CaptionMode,
-  NormRect,
-  RenderedClip,
-  SessionSummary,
-  WorkerJob,
-} from "@/types/gaming";
+import { ArrowLeft, Wand2, Save, Timer, Download, Film, ScanFace, Wrench, Settings2, RotateCcw, CheckCircle2 } from "lucide-react";
+import type { Candidate, CaptionMode, NormRect, RenderedClip, SessionSummary, WorkerJob } from "@/types/gaming";
 import { worker, formatClock, waitForJob } from "@/lib/workerClient";
+import { computeSteps, STEPS, stepIndexForStage } from "@/lib/gamingSteps";
 import { JobProgress } from "@/components/gaming/JobProgress";
 import { RegionPicker } from "@/components/gaming/RegionPicker";
+import { StepProgress } from "@/components/gaming/StepProgress";
 import { CandidateCard, CandidateEdits } from "@/components/gaming/CandidateCard";
+import {
+  Badge,
+  DetailList,
+  Disclosure,
+  GlassCard,
+  InfoTip,
+  Segmented,
+  SoftSpinner,
+  Toggle,
+  btnPrimary,
+  btnSecondary,
+  inputBase,
+} from "@/components/gaming/ui";
 
 type RegionKey = "camera" | "gameplay" | "subtitles";
 
-const COLORS: Record<RegionKey, string> = { camera: "#7652E8", gameplay: "#10B981", subtitles: "#F59E0B" };
+const REGIONS: Record<RegionKey, { label: string; color: string }> = {
+  camera: { label: "Cámara", color: "#A78BFA" },
+  gameplay: { label: "Juego", color: "#34D399" },
+  subtitles: { label: "Diálogos del juego", color: "#38BDF8" },
+};
 
-// Subtitle region is stored relative to the gameplay crop; the picker works on the full frame.
+// The subtitle region is stored relative to the gameplay crop; the picker works on the full frame.
 const toInner = (outer: NormRect, r: NormRect): NormRect => ({
   x: Math.max(0, (r.x - outer.x) / outer.w),
   y: Math.max(0, (r.y - outer.y) / outer.h),
@@ -47,6 +48,14 @@ const toOuter = (outer: NormRect, r: NormRect): NormRect => ({
 });
 const FULL: NormRect = { x: 0, y: 0, w: 1, h: 1 };
 
+const SYNC_LABEL: Record<string, string> = {
+  audio_xcorr: "por audio",
+  lipsync: "por labios",
+  manual: "manual",
+  composite: "no aplica (video único)",
+  none: "no encontrada",
+};
+
 export default function GamingSessionPage() {
   const { id } = useParams<{ id: string }>();
   const [summary, setSummary] = useState<SessionSummary | null>(null);
@@ -54,12 +63,15 @@ export default function GamingSessionPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [clips, setClips] = useState<RenderedClip[]>([]);
   const [renderJobs, setRenderJobs] = useState<Record<string, WorkerJob>>({});
+  const [health, setHealth] = useState<{ llm_provider: string; llm_model: string } | null>(null);
 
   // Source setup
+  const [setupOpen, setSetupOpen] = useState(false);
   const [frameT, setFrameT] = useState(60);
   const [active, setActive] = useState<RegionKey>("camera");
   const [regions, setRegions] = useState<Record<RegionKey, NormRect | null>>({ camera: null, gameplay: null, subtitles: null });
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [manualShift, setManualShift] = useState("");
 
   // Render options
@@ -88,6 +100,7 @@ export default function GamingSessionPage() {
 
   useEffect(() => {
     load();
+    worker.health().then(setHealth).catch(() => setHealth(null));
     const t = setInterval(load, 3000);
     return () => clearInterval(t);
   }, [load]);
@@ -104,24 +117,27 @@ export default function GamingSessionPage() {
       gameplay: layout?.gameplay ?? null,
       subtitles: game_subtitles_region && gameOuter ? toOuter(gameOuter, game_subtitles_region) : null,
     });
-    if (mode === "split") setActive("subtitles");
+    setActive(mode === "split" ? "subtitles" : "camera");
+    setSetupOpen(mode === "composite" && !layout);
     const duration = summary.source.gameplay?.duration;
-    if (duration) setFrameT(Math.min(60, duration / 2));
+    if (duration) setFrameT(Math.min(60, Math.floor(duration / 2)));
   }, [summary]);
 
   const session = summary?.session;
   const isComposite = session?.mode === "composite";
   const ingestReady = Boolean(summary?.source.gameplay);
-  const activeJob = summary?.jobs.find((j) => (j.kind === "ingest" || j.kind === "analyze") && (j.status === "running" || j.status === "queued"));
-  const lastAnalysis = summary?.jobs.find((j) => j.kind === "analyze" || j.kind === "ingest");
+  const pipelineJob = summary?.jobs.find((j) => (j.kind === "ingest" || j.kind === "analyze") && (j.status === "running" || j.status === "queued"));
+  const lastPipeline = summary?.jobs.find((j) => j.kind === "analyze" || j.kind === "ingest");
   const duration = summary?.source.gameplay?.duration ?? summary?.manifest?.gameplay.duration ?? 0;
+  const activeRenders = Object.values(renderJobs).filter((j) => j.status === "queued" || j.status === "running");
+  const steps = useMemo(() => (summary ? computeSteps(summary, Object.values(renderJobs)) : null), [summary, renderJobs]);
 
   const pickerRegions = useMemo(
     () =>
       (isComposite ? (["camera", "gameplay", "subtitles"] as RegionKey[]) : (["subtitles"] as RegionKey[])).map((key) => ({
         key,
-        label: key === "camera" ? "Cámara" : key === "gameplay" ? "Juego" : "Diálogos del juego",
-        color: COLORS[key],
+        label: REGIONS[key].label,
+        color: REGIONS[key].color,
         rect: regions[key],
       })),
     [isComposite, regions]
@@ -133,14 +149,14 @@ export default function GamingSessionPage() {
     try {
       const gameOuter = isComposite ? regions.gameplay : FULL;
       await worker.updateSession(id, {
-        ...(isComposite && regions.camera && regions.gameplay
-          ? { layout: { camera: regions.camera, gameplay: regions.gameplay } }
-          : {}),
+        ...(isComposite && regions.camera && regions.gameplay ? { layout: { camera: regions.camera, gameplay: regions.gameplay } } : {}),
         ...(regions.subtitles && gameOuter
           ? { game_subtitles_region: toInner(gameOuter, regions.subtitles) }
           : { clear_game_subtitles_region: true }),
       });
       await load();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar");
     } finally {
@@ -159,9 +175,13 @@ export default function GamingSessionPage() {
 
   const saveShift = async () => {
     const value = Number(manualShift);
-    if (!Number.isFinite(value)) return;
-    await worker.setSync(id, value).catch((e) => setError(e.message));
-    await load();
+    if (!manualShift.trim() || !Number.isFinite(value)) return;
+    try {
+      await worker.setSync(id, value);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo fijar la sincronía");
+    }
   };
 
   const render = async (candidate: Candidate, edits: CandidateEdits) => {
@@ -186,213 +206,223 @@ export default function GamingSessionPage() {
     }
   };
 
-  if (!summary || !session) {
+  if (!summary || !session || !steps) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-16 text-center text-xs text-[var(--muted-foreground)]">
-        {error ? error : <Loader2 className="h-5 w-5 animate-spin mx-auto" />}
+      <div className="mx-auto max-w-6xl space-y-6 px-4 py-10 sm:px-6 lg:px-8">
+        {error ? (
+          <GlassCard className="p-8 text-center text-sm text-rose-200">{error}</GlassCard>
+        ) : (
+          <>
+            <div className="h-56 animate-pulse rounded-3xl bg-slate-800/40 motion-reduce:animate-none" />
+            <div className="h-40 animate-pulse rounded-3xl bg-slate-800/30 motion-reduce:animate-none" />
+          </>
+        )}
       </div>
     );
   }
 
-  const canAnalyze = ingestReady && (!isComposite || Boolean(session.layout)) && !activeJob;
+  const needsLayout = isComposite && !session.layout;
+  const canAnalyze = ingestReady && !needsLayout && !pipelineJob;
   const sync = summary.sync;
 
+  // Hero status: one sentence about where the session is and what to do next.
+  let headline = "Listo para buscar clips";
+  let detail = "Analizaremos el stream y te propondremos los mejores momentos.";
+  if (pipelineJob) {
+    const step = pipelineJob.kind === "ingest" ? 0 : stepIndexForStage(pipelineJob.stage);
+    headline = pipelineJob.kind === "ingest" ? "Preparando la fuente" : `Analizando: ${STEPS[step].label.toLowerCase()}`;
+    detail = STEPS[step].hint;
+  } else if (!ingestReady) {
+    headline = lastPipeline?.status === "error" ? "No pudimos leer la fuente" : "Leyendo la fuente";
+    detail = session.kick_url ? "Descargando el VOD de Kick." : "Revisando los archivos.";
+  } else if (needsLayout) {
+    headline = "Marca la cámara y el juego";
+    detail = "Dibuja dos recuadros sobre un fotograma para saber qué va arriba y qué abajo.";
+  } else if (lastPipeline?.status === "error" && !summary.has_candidates) {
+    headline = "El análisis se detuvo";
+    detail = "Puedes reintentarlo; retomará desde el último paso completado.";
+  } else if (summary.has_candidates) {
+    headline = clips.length ? `${clips.length} ${clips.length === 1 ? "Short listo" : "Shorts listos"}` : `${candidates.length} momentos encontrados`;
+    detail = clips.length ? "Descárgalos abajo o crea más desde los candidatos." : "Elige los que te gusten y crea tus Shorts.";
+  }
+
   return (
-    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      <div className="border-b border-[var(--border)] pb-5 space-y-2">
-        <Link href="/sessions" className="inline-flex items-center gap-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
-          <ArrowLeft className="h-3.5 w-3.5" /> Sesiones
-        </Link>
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold tracking-tight text-[var(--foreground)] truncate">
+    <div className="mx-auto max-w-6xl space-y-8 px-4 py-10 sm:px-6 lg:px-8">
+      <Link href="/sessions" className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold text-slate-400 transition-all duration-300 hover:bg-white/5 hover:text-slate-100">
+        <ArrowLeft className="h-4 w-4" /> Sesiones
+      </Link>
+
+      {/* Hero: status, 7-step track and the main action --------------------- */}
+      <GlassCard as="section" className="space-y-8 p-6 sm:p-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge>{isComposite ? (session.kick_url ? "Kick" : "Stream completo") : "Cámara + juego"}</Badge>
+              {duration > 0 && <Badge>{formatClock(duration)}</Badge>}
+            </div>
+            <h1 className="truncate text-2xl font-black tracking-tight text-slate-50 sm:text-3xl">
               {session.title || session.kick_url || session.gameplay_path?.split(/[\\/]/).pop()}
             </h1>
-            <p className="text-xs text-[var(--muted-foreground)]">
-              {isComposite ? (session.kick_url ? "VOD de Kick" : "Stream compuesto") : "Cámara + juego"}
-              {duration ? ` · ${formatClock(duration)}` : ""}
-              {session.voiceprint ? ` · voz: ${session.voiceprint}` : ""}
-            </p>
+            <div className="flex items-start gap-3">
+              {pipelineJob && <SoftSpinner className="mt-1 h-5 w-5 shrink-0" />}
+              <div>
+                <p className="text-lg font-extrabold text-amber-300">{headline}</p>
+                <p className="text-sm text-slate-400">{detail}</p>
+              </div>
+            </div>
           </div>
-          <div className="flex gap-2">
-            {summary.has_candidates && (
-              <button
-                onClick={() => analyze(true)}
-                disabled={!canAnalyze}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--secondary)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] hover:border-[var(--primary)] transition cursor-pointer disabled:opacity-50"
-              >
-                Reanalizar todo
+          <div className="flex shrink-0 flex-wrap gap-2">
+            {needsLayout ? (
+              <button onClick={() => setSetupOpen(true)} disabled={!ingestReady} className={btnPrimary}>
+                <ScanFace className="h-4 w-4" /> Marcar cámara y juego
+              </button>
+            ) : (
+              <button onClick={() => analyze(false)} disabled={!canAnalyze} className={btnPrimary}>
+                <Wand2 className="h-4 w-4" />
+                {lastPipeline?.status === "error" ? "Reintentar" : summary.has_candidates ? "Buscar de nuevo" : "Buscar clips"}
               </button>
             )}
-            <button
-              onClick={() => analyze(false)}
-              disabled={!canAnalyze}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--primary)] px-4 py-2 text-xs font-bold text-white shadow-xs hover:opacity-95 transition cursor-pointer disabled:opacity-50"
-            >
-              <Wand2 className="h-4 w-4" />
-              {summary.has_candidates ? "Volver a buscar clips" : "Buscar clips"}
-            </button>
           </div>
         </div>
-        {activeJob ? (
-          <JobProgress job={activeJob} />
-        ) : (
-          lastAnalysis?.status === "error" && <JobProgress job={lastAnalysis} />
-        )}
-        {error && (
-          <p className="flex items-center gap-1.5 text-xs text-[var(--status-error)]">
-            <AlertTriangle className="h-3.5 w-3.5" /> {error}
-          </p>
-        )}
-      </div>
 
-      {/* Source setup -------------------------------------------------------- */}
-      <section className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-sm font-bold text-[var(--foreground)] flex items-center gap-2">
-            <ScanFace className="h-4 w-4 text-[var(--primary)]" />
-            {isComposite ? "Dónde está la cámara y el juego" : "Diálogos del juego en pantalla (opcional)"}
-          </h2>
-          {ingestReady && (
-            <div className="flex flex-wrap gap-1.5">
-              {pickerRegions.map((r) => (
-                <button
-                  key={r.key}
-                  onClick={() => setActive(r.key as RegionKey)}
-                  className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold border transition cursor-pointer ${
-                    active === r.key ? "text-white" : "text-[var(--muted-foreground)] bg-[var(--secondary)] border-[var(--border)]"
-                  }`}
-                  style={active === r.key ? { backgroundColor: r.color, borderColor: r.color } : undefined}
-                >
-                  {r.label}
-                  {r.rect ? " ✓" : ""}
-                </button>
-              ))}
+        <StepProgress state={steps} />
+
+        {pipelineJob && pipelineJob.kind === "analyze" && <JobProgress job={pipelineJob} />}
+        {!pipelineJob && lastPipeline?.status === "error" && !summary.has_candidates && <JobProgress job={lastPipeline} />}
+        {error && <p className="rounded-2xl bg-rose-500/10 px-4 py-2.5 text-sm font-semibold text-rose-200">{error}</p>}
+      </GlassCard>
+
+      {/* Source setup (collapsed once done) ---------------------------------- */}
+      <GlassCard as="section" className="p-6">
+        <Disclosure
+          open={setupOpen}
+          onToggle={setSetupOpen}
+          icon={<ScanFace className="h-5 w-5" />}
+          title={isComposite ? "Cámara y juego en el video" : "Diálogos del juego (opcional)"}
+          subtitle={
+            isComposite
+              ? session.layout
+                ? "Marcados ✓ · ábrelo para ajustarlos"
+                : "Pendiente: marca dónde está cada uno"
+              : session.game_subtitles_region
+                ? "Zona marcada ✓"
+                : "Si el juego muestra sus diálogos como texto, marcarlos ayuda a saber quién habla"
+          }
+        >
+          {!ingestReady ? (
+            <div className="flex items-center gap-3 text-sm text-slate-400">
+              <SoftSpinner className="h-4 w-4" />
+              {session.kick_url ? "Descargando el VOD para mostrar fotogramas…" : "Leyendo la fuente…"}
             </div>
-          )}
-        </div>
-
-        {!ingestReady ? (
-          <p className="text-xs text-[var(--muted-foreground)]">
-            {session.kick_url ? "Descargando el VOD de Kick para poder mostrar fotogramas…" : "Leyendo la fuente…"}
-          </p>
-        ) : (
-          <>
-            <p className="text-[11px] text-[var(--muted-foreground)]">
-              {isComposite
-                ? "Elige una región arriba y arrastra sobre el fotograma. Marca la cámara (solo la webcam) y el área del juego. Si el juego muestra sus diálogos como texto, marca también esa zona: ayuda a saber quién habla."
-                : "Si el juego muestra sus diálogos como texto, arrastra sobre esa zona del gameplay. Ayuda a distinguir tu voz de la del juego."}
-            </p>
-            <div className={`grid gap-4 ${isComposite ? "" : "lg:grid-cols-[2fr_1fr]"}`}>
-              <RegionPicker
-                imageUrl={worker.frameUrl(id, "gameplay", frameT)}
-                regions={pickerRegions}
-                activeKey={active}
-                onChange={(key, rect) => setRegions((prev) => ({ ...prev, [key as RegionKey]: rect }))}
-              />
-              {!isComposite && summary.source.camera && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={worker.frameUrl(id, "camera", frameT)}
-                  alt="Fotograma de la cámara"
-                  className="w-full rounded-2xl border border-[var(--border)]"
+          ) : (
+            <div className="space-y-5">
+              <div className="flex flex-wrap gap-2">
+                {pickerRegions.map((r) => (
+                  <button
+                    key={r.key}
+                    onClick={() => setActive(r.key)}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
+                      active === r.key ? "text-slate-950 shadow-lg" : "border-white/10 bg-white/5 text-slate-400 hover:text-slate-100"
+                    }`}
+                    style={active === r.key ? { backgroundColor: r.color, borderColor: r.color } : undefined}
+                  >
+                    {r.label}
+                    {r.rect && <CheckCircle2 className="h-3.5 w-3.5" />}
+                  </button>
+                ))}
+              </div>
+              <p className="text-sm text-slate-400">Elige un recuadro y arrástralo sobre el fotograma.</p>
+              <div className={`grid gap-4 ${isComposite ? "" : "lg:grid-cols-[2fr_1fr]"}`}>
+                <RegionPicker
+                  imageUrl={worker.frameUrl(id, "gameplay", frameT)}
+                  regions={pickerRegions}
+                  activeKey={active}
+                  onChange={(key, rect) => setRegions((prev) => ({ ...prev, [key as RegionKey]: rect }))}
                 />
+                {!isComposite && summary.source.camera && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={worker.frameUrl(id, "camera", frameT)} alt="Fotograma de la cámara" className="w-full rounded-2xl border border-white/10" />
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-4">
+                <label className="flex min-w-[220px] flex-1 items-center gap-3 text-sm text-slate-400">
+                  <Timer className="h-4 w-4 shrink-0" />
+                  <input
+                    type="range"
+                    min={0}
+                    max={Math.max(1, Math.floor(duration))}
+                    value={frameT}
+                    onChange={(e) => setFrameT(Number(e.target.value))}
+                    className="flex-1 accent-amber-400"
+                    aria-label="Momento del fotograma"
+                  />
+                  <span className="w-16 text-right font-mono text-xs">{formatClock(frameT)}</span>
+                </label>
+                <button onClick={saveSetup} disabled={saving || (isComposite && (!regions.camera || !regions.gameplay))} className={btnPrimary}>
+                  {saving ? <SoftSpinner onAccent className="h-4 w-4" /> : saved ? <CheckCircle2 className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+                  {saved ? "Guardado" : "Guardar"}
+                </button>
+              </div>
+              {!isComposite && (
+                <p className="flex items-center gap-1 text-sm text-slate-400">
+                  {sync && sync.method !== "none" ? "Cámara y juego sincronizados" : "La sincronía se calcula al analizar"}
+                  <InfoTip>
+                    Alineamos el video de tu cámara con el del juego para que los labios coincidan con el audio. Si notas desfase, ajústalo en Detalles técnicos.
+                  </InfoTip>
+                </p>
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <label className="flex-1 min-w-[200px] flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
-                <Timer className="h-3.5 w-3.5" />
-                <input
-                  type="range"
-                  min={0}
-                  max={Math.max(1, Math.floor(duration))}
-                  value={frameT}
-                  onChange={(e) => setFrameT(Number(e.target.value))}
-                  className="flex-1 accent-[var(--primary)]"
-                />
-                <span className="font-mono w-16 text-right">{formatClock(frameT)}</span>
-              </label>
-              <button
-                onClick={saveSetup}
-                disabled={saving || (isComposite && (!regions.camera || !regions.gameplay))}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--primary)] px-3.5 py-1.5 text-xs font-bold text-white hover:opacity-95 transition cursor-pointer disabled:opacity-50"
-              >
-                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                Guardar
-              </button>
-            </div>
-          </>
-        )}
+          )}
+        </Disclosure>
+      </GlassCard>
 
-        {!isComposite && (
-          <div className="flex flex-wrap items-center gap-3 border-t border-[var(--border)] pt-4 text-xs">
-            <span className="font-semibold text-[var(--foreground)]">Sincronización cámara ↔ juego:</span>
-            <span className="text-[var(--muted-foreground)]">
-              {sync
-                ? `${sync.method === "audio_xcorr" ? "por audio" : sync.method === "lipsync" ? "por labios" : sync.method === "manual" ? "manual" : "no encontrada"} · desfase ${sync.shift_sec.toFixed(2)} s · confianza ${Math.round(sync.confidence * 100)}%`
-                : "se calcula al analizar"}
-            </span>
-            <input
-              value={manualShift}
-              onChange={(e) => setManualShift(e.target.value)}
-              placeholder="desfase (s)"
-              className="w-28 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 font-mono text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none"
-            />
-            <button
-              onClick={saveShift}
-              className="rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-2.5 py-1.5 font-semibold text-[var(--foreground)] hover:border-[var(--primary)] cursor-pointer"
-            >
-              Fijar a mano
-            </button>
-            <span className="text-[11px] text-[var(--muted-foreground)]">
-              Positivo si la cámara empezó a grabar antes que el juego.
-            </span>
-          </div>
-        )}
-      </section>
-
-      {/* Candidates ---------------------------------------------------------- */}
+      {/* Candidates --------------------------------------------------------- */}
       {candidates.length > 0 && (
-        <section className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-sm font-bold text-[var(--foreground)]">Clips candidatos ({candidates.length})</h2>
-            <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--muted-foreground)]">
-              <Settings2 className="h-3.5 w-3.5" />
-              <label className="flex items-center gap-1.5">
-                Subtítulos
-                <select
-                  value={captions}
-                  onChange={(e) => setCaptions(e.target.value as CaptionMode)}
-                  className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-[var(--foreground)]"
-                >
-                  <option value="streamer">Solo streamer</option>
-                  <option value="all">Streamer + juego</option>
-                  <option value="none">Sin subtítulos</option>
-                </select>
-              </label>
-              <label className="flex items-center gap-1.5">
-                Título
-                <input
-                  type="number"
-                  min={0}
-                  max={120}
-                  value={titleSeconds}
-                  onChange={(e) => setTitleSeconds(Number(e.target.value))}
-                  className="w-14 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 font-mono text-[var(--foreground)]"
-                />
-                s
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input type="checkbox" checked={punchIn} onChange={(e) => setPunchIn(e.target.checked)} className="accent-[var(--primary)]" />
-                Zoom en la reacción
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input type="checkbox" checked={voiceBoost} onChange={(e) => setVoiceBoost(e.target.checked)} className="accent-[var(--primary)]" />
-                Realzar voz
-              </label>
+        <section className="space-y-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-xl font-black text-slate-50">Momentos encontrados</h2>
+              <p className="text-sm text-slate-400">Ordenados del más prometedor al menos.</p>
             </div>
           </div>
-          <div className="grid gap-3 lg:grid-cols-2">
+
+          <GlassCard className="p-5">
+            <Disclosure
+              icon={<Settings2 className="h-5 w-5" />}
+              title="Opciones del Short"
+              subtitle={`Subtítulos: ${captions === "streamer" ? "solo streamer" : captions === "all" ? "streamer + juego" : "sin subtítulos"} · título ${titleSeconds} s${punchIn ? " · zoom en la reacción" : ""}`}
+            >
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <span className="text-sm font-bold text-slate-200">Subtítulos</span>
+                  <Segmented
+                    className="w-full"
+                    value={captions}
+                    onChange={setCaptions}
+                    options={[
+                      { value: "streamer", label: "Solo streamer" },
+                      { value: "all", label: "+ juego" },
+                      { value: "none", label: "Sin" },
+                    ]}
+                  />
+                </div>
+                <label className="block space-y-2">
+                  <span className="flex items-center gap-1 text-sm font-bold text-slate-200">
+                    Título en pantalla durante
+                    <InfoTip>Segundos que el título queda en la unión entre cámara y juego. 0 lo oculta.</InfoTip>
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <input type="number" min={0} max={120} value={titleSeconds} onChange={(e) => setTitleSeconds(Number(e.target.value))} className={`${inputBase} w-24 font-mono`} />
+                    <span className="text-sm text-slate-400">segundos</span>
+                  </div>
+                </label>
+                <Toggle checked={punchIn} onChange={setPunchIn} label="Zoom a la cara en la reacción" />
+                <Toggle checked={voiceBoost} onChange={setVoiceBoost} label="Realzar la voz" />
+              </div>
+            </Disclosure>
+          </GlassCard>
+
+          <div className="grid gap-5 lg:grid-cols-2">
             {candidates.map((c, i) => (
               <CandidateCard key={c.id} candidate={c} rank={i + 1} job={renderJobs[c.id]} onRender={(edits) => render(c, edits)} />
             ))}
@@ -400,36 +430,105 @@ export default function GamingSessionPage() {
         </section>
       )}
 
-      {/* Rendered clips ------------------------------------------------------ */}
-      {clips.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="text-sm font-bold text-[var(--foreground)] flex items-center gap-2">
-            <Film className="h-4 w-4 text-[var(--primary)]" /> Shorts renderizados ({clips.length})
+      {/* Rendered Shorts ---------------------------------------------------- */}
+      {(clips.length > 0 || activeRenders.length > 0) && (
+        <section className="space-y-5">
+          <h2 className="flex items-center gap-2 text-xl font-black text-slate-50">
+            <Film className="h-5 w-5 text-amber-300" /> Tus Shorts
           </h2>
-          <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
+            {activeRenders.map((job) => (
+              <div key={job.id} className="space-y-3 rounded-3xl border border-white/[0.06] bg-slate-800/40 p-3">
+                <div className="relative flex aspect-[9/16] items-center justify-center overflow-hidden rounded-2xl bg-slate-700/30 animate-pulse motion-reduce:animate-none">
+                  <SoftSpinner className="h-8 w-8" />
+                </div>
+                <p className="px-1 text-xs font-bold text-slate-400">Creando… {Math.round(job.progress * 100)}%</p>
+              </div>
+            ))}
             {[...clips].reverse().map((clip) => (
-              <div key={clip.id} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-2 space-y-2">
-                <video
-                  src={worker.clipUrl(id, clip.id)}
-                  controls
-                  preload="metadata"
-                  className="w-full aspect-[9/16] rounded-xl bg-black object-cover"
-                />
+              <GlassCard key={clip.id} interactive className="space-y-3 p-3">
+                <video src={worker.clipUrl(id, clip.id)} controls preload="metadata" className="aspect-[9/16] w-full rounded-2xl bg-black object-cover" />
                 <div className="flex items-center justify-between gap-2 px-1">
-                  <p className="text-[11px] font-semibold text-[var(--foreground)] truncate">{clip.overlay_title}</p>
+                  <p className="truncate text-sm font-bold text-slate-200">{clip.overlay_title}</p>
                   <a
                     href={worker.clipUrl(id, clip.id, true)}
-                    className="shrink-0 rounded-lg p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)]"
+                    className="shrink-0 rounded-full bg-amber-400 p-2 text-slate-950 shadow-md shadow-amber-500/20 transition-all duration-300 hover:scale-110 hover:bg-amber-300"
                     title="Descargar"
+                    aria-label={`Descargar ${clip.overlay_title}`}
                   >
-                    <Download className="h-3.5 w-3.5" />
+                    <Download className="h-4 w-4" />
                   </a>
                 </div>
-              </div>
+              </GlassCard>
             ))}
           </div>
         </section>
       )}
+
+      {/* Technical details (progressive disclosure) -------------------------- */}
+      <GlassCard as="section" className="p-6">
+        <Disclosure icon={<Wrench className="h-5 w-5" />} title="Detalles técnicos" subtitle="Archivos, resolución, sincronía y modelo de IA">
+          <div className="space-y-6">
+            <DetailList
+              items={[
+                ["Sesión", session.id],
+                ["Idioma", session.language || "auto"],
+                ["Huella de voz", session.voiceprint || "—"],
+                ["IA", health ? `${health.llm_provider} · ${health.llm_model}` : "—"],
+                ["Video del juego", summary.source.gameplay?.path ?? session.gameplay_path ?? session.kick_url ?? "—"],
+                [
+                  "Juego",
+                  summary.source.gameplay
+                    ? `${summary.source.gameplay.width}×${summary.source.gameplay.height} · ${summary.source.gameplay.fps} fps · audio ${summary.source.gameplay.has_audio ? "sí" : "no"}`
+                    : "—",
+                ],
+                ...(!isComposite
+                  ? ([
+                      ["Video de la cámara", summary.source.camera?.path ?? session.camera_path ?? "—"],
+                      [
+                        "Cámara",
+                        summary.source.camera
+                          ? `${summary.source.camera.width}×${summary.source.camera.height} · ${summary.source.camera.fps} fps · audio ${summary.source.camera.has_audio ? "sí" : "no"}`
+                          : "—",
+                      ],
+                    ] as Array<[string, React.ReactNode]>)
+                  : []),
+                ["Proxies de análisis", summary.manifest ? `${summary.manifest.proxy_fps} fps · audio mono 16 kHz` : "—"],
+                [
+                  "Sincronía",
+                  sync
+                    ? `${SYNC_LABEL[sync.method] ?? sync.method} · desfase ${sync.shift_sec.toFixed(3)} s · escala ${sync.scale.toFixed(6)} · confianza ${Math.round(sync.confidence * 100)} %`
+                    : "—",
+                ],
+              ]}
+            />
+
+            {!isComposite && (
+              <div className="flex flex-wrap items-end gap-3 border-t border-white/5 pt-5">
+                <label className="space-y-1.5">
+                  <span className="flex items-center gap-1 text-xs font-bold text-slate-400">
+                    Desfase manual (s)
+                    <InfoTip>Positivo si la cámara empezó a grabar antes que el juego. Tiene prioridad sobre el cálculo automático.</InfoTip>
+                  </span>
+                  <input value={manualShift} onChange={(e) => setManualShift(e.target.value)} placeholder="0.000" className={`${inputBase} w-36 font-mono`} />
+                </label>
+                <button onClick={saveShift} className={btnSecondary}>
+                  Fijar desfase
+                </button>
+              </div>
+            )}
+
+            {summary.has_candidates && (
+              <div className="flex flex-wrap items-center gap-3 border-t border-white/5 pt-5">
+                <button onClick={() => analyze(true)} disabled={!canAnalyze} className={btnSecondary}>
+                  <RotateCcw className="h-4 w-4" /> Reanalizar desde cero
+                </button>
+                <span className="text-xs text-slate-500">Repite todas las etapas aunque ya tengan resultados.</span>
+              </div>
+            )}
+          </div>
+        </Disclosure>
+      </GlassCard>
     </div>
   );
 }
