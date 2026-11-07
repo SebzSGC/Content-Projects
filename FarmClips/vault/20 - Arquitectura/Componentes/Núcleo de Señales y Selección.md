@@ -47,27 +47,28 @@ Genera una serie temporal completa por cada segundo de la grabación VOD y la se
 
 ---
 
-## 📝 2. Constructor de Línea de Tiempo (`timeline/builder.py`)
+## 📝 2. Constructor de Línea de Tiempo y Poda por Señales (`timeline/builder.py`)
 
 Transforma miles de palabras individuales en una transcripción estructurada en frases (**[[Glosario#Utterance|Utterances]]**):
 - Asigna un identificador corto y único (`u0001`, `u0002`, ..., `u9999`).
 - Fusiona silencios naturales de respiración ($< 0.4\text{ s}$).
+- **Poda en 2 etapas por clusters de señales (`prune_utterances_by_signal_clusters`)**: En grabaciones largas ($\ge 10\text{ min}$), filtra automáticamente las zonas muertas sin picos acústicos ni actividad en el juego, conservando ventanas contextuales ($[-45\text{ s}, +60\text{ s}]$) alrededor de los núcleos de alta energía. Esto ahorra entre un **65 % y un 85 % adicional de tokens de entrada** en streams extensos.
 - Compacta el texto para enviar al LLM:
   ```text
-  [u0045] 00:04:12 (exc: 0.85) ¡No puede ser, viene por la espalda!
-  [u0046] 00:04:15 (exc: 0.94) ¡Doble baja, bro, ganamos la ronda!
+  u0045 [4:12] ¡No puede ser, viene por la espalda!
+  >>> PICO [4:14] (score=0.94 mic=0.88 juego=0.72)
+  u0046 [4:15] ¡Doble baja, bro, ganamos la ronda!
   ```
-- **Ahorro de tokens**: Reduce el consumo de contexto del LLM en más de un 80 % comparado con enviar estructuras JSON completas con tiempos flotantes.
 
 ---
 
-## ⏱️ 3. Resolvedor de Tiempos y Cortes (`selection/resolver.py`)
+## ⏱️ 3. Resolvedor de Tiempos e Inferencia en CPU (`selection/resolver.py`)
 
 El LLM devuelve una propuesta como `{"start_id": "u0045", "end_id": "u0046"}`. El resolvedor local realiza el trabajo de precisión:
 1. Extrae la primera palabra de `u0045` y la última de `u0046`.
-2. **Ajuste del ataque acústico**: Retrocede entre 50 y 150 ms en la envolvente sonora a 100 Hz para encontrar el punto de silencio exacto antes de la primera consonante explosiva (p. ej. la "N" o la "P").
-3. **Márgenes de seguridad**: Añade un pequeño *padding* configurable (0.2 s al inicio y 0.5 s al final) para que las frases no suenen truncadas ni artificiales.
-4. **Validación de duración**: Descarta propuestas de clips menores a 20 s o mayores a 60 s, garantizando compatibilidad con YouTube Shorts y TikTok.
+2. **Enriquecimiento local de énfasis y emojis (`infer_local_emphasis_and_emojis`)**: Si el LLM devuelve un JSON minificado sin `emphasis_words`, `emojis`, `hook` o `hashtags`, el resolvedor analiza las palabras del fragmento en CPU y asigna automáticamente las palabras clave de énfasis y sus códigos hex del catálogo de 42 emojis (`1f525`, `1f3c6`, `1f3af`, `1f480`, etc.) con costo \$0.00.
+3. **Ajuste del ataque acústico**: Retrocede entre 50 y 150 ms en la envolvente sonora a 100 Hz para encontrar el punto de silencio exacto antes de la primera consonante explosiva.
+4. **Márgenes de seguridad y validación de duración**: Añade *padding* configurable y ajusta los bordes de frase para mantener el clip dentro de $[20\text{ s}, 60\text{ s}]$.
 
 ---
 

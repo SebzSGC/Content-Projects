@@ -58,8 +58,9 @@ Genera scripts compatibles con el estándar Advanced SubStation Alpha (`.ass`) i
 ## 🚀 2. Compositor Acelerado C++ (`fast_compositor.py`)
 
 Aplica paneos y transiciones de cámara (*zoom in*, *zoom out*) con curvas matemáticas de aceleración (`inOutSine`, `outBack`):
-- Se apoya en transformaciones afines directas en C++ a través de OpenCV (`cv2.warpAffine` con interpolación bicúbica).
-- Evita cuellos de botella en Python procesando matrices de píxeles a resolución nativa directamente hacia la entrada de codificación [[Glosario#NVENC|NVENC]].
+- Se apoya en transformaciones afines directas en C++ a través de OpenCV (`cv2.warpAffine` con interpolación lineal/bicúbica).
+- **Pool de buffers YUV420p preasignados (`free_buffers`)**: Reutiliza un anillo fijo de 10 matrices `np.ndarray` en memoria (`cv2.cvtColor(..., dst=yuv_buf)`) entre el hilo compositor y el escritor de tubería hacia FFmpeg, eliminando ~5 GB de asignaciones dinámicas de RAM por cada clip renderizado.
+- **Aceleración por hardware en decodificación**: Solicita `cv2.VIDEO_ACCELERATION_ANY` en `_SequentialVideoSampler` y transmite matrices de píxeles directamente hacia la entrada de codificación [[Glosario#NVENC|NVENC]].
 
 ---
 

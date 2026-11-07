@@ -50,12 +50,13 @@ flowchart TD
 
 ---
 
-## 🛠️ Capacidades interactivas del editor
+## 🛠️ Capacidades interactivas y optimizaciones a 60 fps
 
-1. **Línea de tiempo de palabras recortables**: Cada palabra de la frase puede activarse o desactivarse; si se desactiva, el reproductor aplica un salto milimétrico instantáneo (**[[Glosario#Jump Cut|Jump Cut]]**).
-2. **Catálogo de 42 emojis RGBA**: Selector visual para sustituir o añadir iconos animados en cualquier segundo del video (emojis escalados a $128 \times 128\text{ px}$).
-3. **Editor de títulos y badges**: Cambio de tipografía, tamaño de letra y texto de la cabecera del clip.
-4. **Exportación bajo demanda**: Botón para solicitar renderizado borrador (540p en 10 segundos) o renderizado final (1080p con NVENC).
+1. **Desacoplamiento del loop a 60 fps respecto a React**: El ciclo `requestAnimationFrame` actualiza directamente mediante referencias DOM (`scrubberInputRef`, `timeLabelRef`, `playheadBarRef`) la barra de tiempo y el cursor visual a 60 Hz, sincronizando el estado de React a una tasa controlada (~8 Hz) para eliminar *micro-stutters* y reconciliaciones innecesarias del Virtual DOM.
+2. **Caché de métricas tipográficas en `<canvas>` (`wordWidthCacheRef`)**: Precalcula y memoriza el ancho en píxeles (`ctx.measureText`) de cada palabra y tamaño de fuente para evitar recalcular la geometría tipográfica en cada fotograma.
+3. **Línea de tiempo de palabras recortables**: Cada palabra de la frase puede activarse o desactivarse; si se desactiva, el reproductor aplica un salto milimétrico instantáneo (**[[Glosario#Jump Cut|Jump Cut]]**).
+4. **Catálogo de 42 emojis RGBA con caché inmutable**: Selector visual para sustituir o añadir iconos animados en cualquier segundo del video (servidos con `Cache-Control: immutable`).
+5. **Exportación bajo demanda (síncrona o en segundo plano)**: Botón para solicitar renderizado borrador (540p) o final (1080p con NVENC), soportando encolado no bloqueante (`async_mode`).
 
 ---
 

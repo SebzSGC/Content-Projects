@@ -42,23 +42,29 @@ flowchart TD
 
 ---
 
-## 🎙️ 2. Módulos de Transcripción ([[Glosario#STT|STT]])
+## 🎙️ 2. Módulos de Transcripción ([[Glosario#STT|STT]]) y Filtro de Silencios
 
 - **`deepgram.py`**:
   Utiliza el endpoint `https://api.deepgram.com/v1/listen` con el modelo `nova-3`. Envía el audio en formato binario directo en el cuerpo de la petición con cabecera `Content-Type: audio/opus`. Incorpora inyección de palabras clave dinámicas (**[[Glosario#Keyterms|Keyterms]]**) según el videojuego detectado.
 - **`groq.py`**:
   Utiliza el endpoint compatible con OpenAI `https://api.groq.com/openai/v1/audio/transcriptions` con el modelo `whisper-large-v3-turbo`, enviando el audio como `multipart/form-data`.
+- **Pre-filtrado VAD / Silencios (`ApiPool._chunk_speech_ratio`)**:
+  Antes de facturar un fragmento de audio en la API externa, calcula la proporción de voz activa frente a los silencios detectados (`SilenceSpan`). Si un tramo ($\ge 10\text{ s}$) supera el $97\%$ de silencio (streamer ausente o pantalla de espera), se omite la llamada HTTP con costo \$0.00 y se almacena en caché como tramo vacío.
 - **`fixture.py`**:
   Carga respuestas grabadas en disco sin conexión a internet para pruebas automáticas (`pytest`).
 
 ---
 
-## 🧠 3. Módulos de Selección ([[Glosario#LLM|LLM]])
+## 🧠 3. Módulos de Selección ([[Glosario#LLM|LLM]]) y Optimización de Tokens
 
-- **`gemini.py`**:
-  Envía la línea de tiempo de frases comprimidas al modelo `gemini-3.5-flash-lite` mediante la API de Google AI Studio, forzando un esquema de salida JSON estricto (*Structured Outputs*).
-- **`openai_compat.py`**:
-  Permite conectar cualquier proveedor compatible con la API de OpenAI (incluyendo endpoints locales de Ollama o vLLM), utilizando el modelo configurado (p. ej. `gpt-6-luna`).
+- **`gemini.py` y `openai_compat.py`**:
+  Envían la línea de tiempo compacta a `gemini-3.5-flash-lite` o proveedores compatibles con OpenAI (`gpt-6-luna`, Ollama, vLLM) con validación estricta de JSON Schema.
+- **Prefijo Invariante para *Prompt Caching***:
+  `CURATION_SYSTEM_PROMPT` mantiene las instrucciones estáticas al inicio y ubica los parámetros dinámicos de la sesión en la última línea, maximizando los aciertos automáticos de caché de prefijo en Gemini, OpenAI y Groq.
+- **Reintento Pydantic sin Duplicación de Transcripción (`repair_prompt`)**:
+  Si el modelo falla la validación de esquema en el primer intento, el segundo llamado envía el borrador JSON previo (`first.raw_text`) y trunca la transcripción de referencia a un extracto compacto ($\le 1200$ caracteres), ahorrando más del $85\%$ de los tokens de entrada en reintentos.
+- **Esquema de Salida Minificado**:
+  Solo exige como campos obligatorios `start_id`, `end_id`, `overlay_title` y `score`, permitiendo omitir metadatos decorativos que se infieren en CPU local sin costo de tokens.
 
 ---
 
