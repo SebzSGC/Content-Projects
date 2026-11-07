@@ -15,7 +15,33 @@ etiquetas: [tipo/cambios, area/general]
 
 ---
 
-## [2.2.0] — 2026-11-07 (Versión actual)
+## [2.3.0] — 2026-11-07 (Versión actual)
+
+### 🎞️ Edición externa en DaVinci Resolve mediante MCP local y arquitectura dual de edición
+
+Esta versión incorpora un motor de edición híbrido que permite trasladar el montaje no lineal de los clips curados (`EditPlan` v2) hacia **DaVinci Resolve** ejecutándose localmente mediante **Model Context Protocol (MCP)**, manteniendo disponible el motor nativo (`FastCompositor` + Web Studio) como opción local o combinada.
+
+#### Qué cambió
+- **Servidor MCP JSON-RPC 2.0 y puente con `DaVinciResolveScript` (`packages/render-engine/clipsrender/resolve_mcp.py`, `clipsserver resolve-mcp`)**:
+  - Servidor MCP integrable por `stdio` o HTTP con 6 herramientas declarativas (`resolve_get_status`, `resolve_open_project`, `resolve_import_media`, `resolve_build_vertical_timeline`, `resolve_add_timeline_markers`, `resolve_trigger_render`).
+  - Detección automática en Windows, macOS y Linux de la instalación local de DaVinci Resolve, librería `fusionscript.dll` / `.so`, módulos de scripting y estado del proceso `Resolve.exe`.
+- **Compilador de paquetes multipista para DaVinci Resolve (`compile_fcpxml_v19`, `compile_srt`, `compile_resolve_python_script`)**:
+  - Genera en `data/sessions/<session_id>/clips/<clip_id>/resolve/` un timeline `.fcpxml` v1.9 vertical (`1080×1920` a 60 fps) con pistas separadas (`V1` Gameplay, `V2` Facecam sincronizada con recorte y zoom de MediaPipe, `V3` Títulos, `A1` Micrófono, `A2` Juego con *ducking*, `A3` Efectos SFX), marcadores de IA por palabra de énfasis y emojis, subtítulos `.srt` y `.ass`, y el script autónomo `resolve_build_timeline.py`.
+- **Orquestador y nuevos endpoints REST (`engine.py`, `routes.py`, `config.py`)**:
+  - Soporte de `CLIPS_EDITOR_BACKEND=local|resolve_mcp|both` y `CLIPS_RESOLVE_MCP_MODE=auto|mcp_stdio|mcp_http|direct_script|bundle_only`.
+  - Nuevos endpoints `GET /resolve/status`, `POST /clips/{clip_id}/resolve`, `POST /sessions/{session_id}/resolve` y `GET /clips/{clip_id}/resolve/download/{artifact}`.
+- **Integración completa en Web Studio (`apps/web`)**:
+  - Botón **«Editar en DaVinci Resolve (MCP)»** y barra de descarga directa de artefactos (`FCPXML v1.9`, `SRT`, `ASS`, `Script .py`, `Plan MCP`) en `/editor/[clipId]`.
+  - Exportación en lote de toda la sesión a DaVinci Resolve en `/sessions/[id]`.
+  - Nueva sección **«4. Motor de Edición de Video y DaVinci Resolve (MCP Local)»** en `/settings` con diagnóstico en vivo del entorno Resolve local.
+
+> [!warning] ⚠️ Cambia para ti
+> - En `/settings` puedes elegir si deseas editar tus clips con el **Motor Local integrado** (`local`), enviarlos directamente a **DaVinci Resolve vía MCP** (`resolve_mcp`) o usar **ambos motores simultáneamente** (`both`).
+> - En `/editor/[clipId]` y `/sessions/[id]` dispones del botón **«Editar en DaVinci Resolve (MCP)»** para abrir el timeline vertical multipista en DaVinci Resolve o descargar los archivos `.fcpxml`, `.srt` y `.py` listos para importar incluso con DaVinci Resolve cerrado.
+
+---
+
+## [2.2.0] — 2026-11-07
 
 ### ⚡ Optimización integral de tokens de IA y rendimiento en 4 ámbitos (Carga, Memoria/CPU, Fluidez 60 fps y Latencia API)
 

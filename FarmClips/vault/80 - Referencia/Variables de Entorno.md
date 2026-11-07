@@ -92,7 +92,21 @@ etiquetas: [tipo/guia, area/configuracion]
 
 ---
 
+## 🎞️ 7. Motor de Edición y DaVinci Resolve (MCP Local)
+
+| Variable | Valor por defecto | Descripción |
+|---|:---:|---|
+| `CLIPS_EDITOR_BACKEND` | `local` | Motor de edición: `local` (FFmpeg + Web Studio), `resolve_mcp` (delega a DaVinci Resolve) o `both` (ambos). |
+| `CLIPS_RESOLVE_MCP_MODE` | `auto` | Transporte MCP: `auto`, `mcp_stdio`, `mcp_http`, `direct_script` o `bundle_only`. |
+| `CLIPS_RESOLVE_MCP_COMMAND` | `python -m clipsserver.main resolve-mcp` | Comando local JSON-RPC 2.0 usado en modo `mcp_stdio`. |
+| `CLIPS_RESOLVE_MCP_URL` | *(vacío)* | Endpoint HTTP JSON-RPC opcional para servidores MCP en puerto local (`mcp_http`). |
+| `CLIPS_RESOLVE_PROJECT_PREFIX` | `ClipsApp` | Prefijo para los proyectos creados automáticamente en DaVinci Resolve. |
+| `CLIPS_RESOLVE_AUTO_EXPORT` | `false` | Exporta automáticamente a DaVinci Resolve al finalizar cada sesión curada. |
+
+---
+
 ## 🔗 Relacionado
 - [[Referencia API REST y SSE]]
+- [[Motor de Renderizado y Subtítulos]]
 - [[Cómo configurar Proveedores de IA]]
 - [[Despliegue y Ejecución]]

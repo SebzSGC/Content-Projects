@@ -81,8 +81,18 @@ Aplica paneos y transiciones de cámara (*zoom in*, *zoom out*) con curvas matem
 
 ---
 
+## 🎬 4. Puente de Edición en DaVinci Resolve vía MCP (`resolve_mcp.py`)
+
+Permite trasladar la edición de video hacia **DaVinci Resolve** (Free o Studio) ejecutándose localmente en el PC del creador mediante el protocolo **MCP (Model Context Protocol, JSON-RPC 2.0)** y el selector `CLIPS_EDITOR_BACKEND` (`local` | `resolve_mcp` | `both`):
+- **Servidor MCP Integrado (`clipsserver resolve-mcp` / `ResolveMcpServer`)**: Expone las herramientas MCP `resolve_get_status`, `resolve_open_project`, `resolve_import_media`, `resolve_build_vertical_timeline`, `resolve_add_timeline_markers` y `resolve_trigger_render` por `stdio` o `http`.
+- **Conexión con Scripting Local (`DaVinciResolveScript`)**: Detecta automáticamente `fusionscript.dll` y los módulos de Blackmagic Design en Windows, macOS y Linux para construir el proyecto y la línea de tiempo `1080×1920` a `60 fps` en vivo dentro de DaVinci Resolve.
+- **Compilador de Paquete Local Auto-contenido (`compile_fcpxml_v19`, `compile_srt`, `compile_resolve_python_script`)**: Genera en `data/sessions/<sid>/clips/<clip_id>/resolve/` un archivo `.fcpxml` v1.9 multipista (`V1` Gameplay, `V2` Cámara sincronizada con reencuadre facial, `V3` Títulos, `A1` Micrófono, `A2` Audio de juego con ducking, `A3` Efectos SFX y marcadores de IA), subtítulos `.srt`/`.ass` y el script `resolve_build_timeline.py` compatible con la consola `Py3` de DaVinci Resolve Free.
+
+---
+
 ## 🔗 Relacionado
 - [[Contrato EditPlan v2]]
 - [[Sistema de Estilos y Presets]]
 - [[Pools de Trabajo]]
 - [[Flujo 6 Renderizado y Normalización]]
+- [[HU-001 Edición y exportación de clips en DaVinci Resolve mediante MCP local|HU-001]]

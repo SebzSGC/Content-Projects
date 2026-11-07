@@ -6,7 +6,7 @@ audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
 actualizado: 2026-11-07
 etiquetas: [tipo/inicio]
-commit_codigo: b2b2829
+commit_codigo: 3e2acc8
 ---
 
 # 🏠 FarmClips — Arquitectura Híbrida
@@ -54,6 +54,7 @@ flowchart LR
 ## 📚 Mapa de Contenidos del Vault
 
 - 🎯 **[[Visión general]]**: Propuesta de valor, objetivos del sistema, matriz de actores RACI y [[Glosario]] central.
+- 📋 **[[Requerimientos]]**: Historias de usuario, épicas y su seguimiento en el [[Tablero de avance]].
 - 🏗️ **[[Arquitectura]]**: Diagramas de contexto C4, separación de los 3 pools y catálogo de [[Componentes]].
 - 🔄 **[[Flujos y procesos]]**: Pipeline en 6 fases continuas, desde la ingesta hasta la entrega de video normalizado.
 - 📊 **[[Datos]]**: Modelo relacional SQLite WAL, esquemas de archivos Parquet y fórmulas de cálculo de puntuación y sonoridad.
@@ -66,4 +67,5 @@ flowchart LR
 ---
 
 ## 🔔 Novedades recientes
-- **2026-11-07**: Lanzamiento de la versión 2.0.0 con monorepo unificado, motor de edición declarativo EditPlan v2, renderizado acelerado en C++ (`FastCompositor`), normalización en 2 pasadas a -14 LUFS y panel de ajustes en caliente `/settings` → [[Historial de cambios]].
+- **2026-11-07 (v2.3.0)**: Integración con **DaVinci Resolve mediante MCP local** (`clipsrender.resolve_mcp`, `clipsserver resolve-mcp`, compilador `.fcpxml` v1.9 multipista + `.srt` + `DaVinciResolveScript`) y convivencia con el motor local FFmpeg → [[Historial de cambios]].
+- **2026-11-07 (v2.0.0)**: Lanzamiento del monorepo unificado, motor de edición declarativo EditPlan v2, renderizado acelerado en C++ (`FastCompositor`), normalización en 2 pasadas a -14 LUFS y panel de ajustes en caliente `/settings` → [[Historial de cambios]].
