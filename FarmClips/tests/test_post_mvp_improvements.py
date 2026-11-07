@@ -631,3 +631,248 @@ def test_analytics_summary_breakdown_and_logs_endpoints(tmp_path: Path) -> None:
         assert dg3["source"] == "estimated"
 
 
+def test_google_drive_oauth_connector_explorer_and_session_creation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("# Drive OAuth test\n", encoding="utf-8")
+    monkeypatch.setenv("CLIPS_ENV_FILE", str(env_file))
+
+    gp_bytes = GOLDEN_GAMEPLAY.read_bytes()
+    cam_bytes = GOLDEN_CAMERA.read_bytes()
+
+    token_calls: List[str] = []
+
+    def _mock_google_drive_handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        # 1. OAuth 2.0 token endpoint (authorization_code & refresh_token)
+        if "oauth2.googleapis.com/token" in url:
+            body_str = request.content.decode("utf-8")
+            token_calls.append(body_str)
+            if "grant_type=authorization_code" in body_str:
+                return httpx.Response(
+                    200,
+                    json={
+                        "access_token": "ya29.initial_token",
+                        "refresh_token": "1//refresh_token_secret_xyz",
+                        "expires_in": 3600,
+                        "token_type": "Bearer",
+                    },
+                )
+            if "grant_type=refresh_token" in body_str:
+                return httpx.Response(
+                    200,
+                    json={
+                        "access_token": "ya29.refreshed_token",
+                        "expires_in": 3600,
+                        "token_type": "Bearer",
+                    },
+                )
+            return httpx.Response(400, json={"error": "unsupported_grant_type"})
+
+        # 2. User info (/drive/v3/about)
+        if "/drive/v3/about" in url:
+            return httpx.Response(
+                200,
+                json={"user": {"emailAddress": "streamer@farmclips.gg", "displayName": "Streamer Pro"}},
+            )
+
+        # 3. File download (?alt=media)
+        if "alt=media" in url:
+            if "/files/file_gp_01" in url:
+                return httpx.Response(200, content=gp_bytes, headers={"Content-Type": "video/mp4"})
+            if "/files/file_cam_01" in url:
+                return httpx.Response(200, content=cam_bytes, headers={"Content-Type": "video/mp4"})
+            return httpx.Response(404, json={"error": "not found"})
+
+        # 4. Folder/File metadata (/drive/v3/files/<id>)
+        if "/drive/v3/files/fld_entradas" in url:
+            return httpx.Response(
+                200,
+                json={
+                    "id": "fld_entradas",
+                    "name": "Entradas",
+                    "parents": ["root"],
+                    "mimeType": "application/vnd.google-apps.folder",
+                },
+            )
+        if "/drive/v3/files/fld_val_01" in url:
+            return httpx.Response(
+                200,
+                json={
+                    "id": "fld_val_01",
+                    "name": "valorant_ranked_noche",
+                    "parents": ["fld_entradas"],
+                    "mimeType": "application/vnd.google-apps.folder",
+                },
+            )
+        if "/drive/v3/files/file_gp_01" in url:
+            return httpx.Response(
+                200,
+                json={
+                    "id": "file_gp_01",
+                    "name": "gameplay_valorant.mp4",
+                    "size": str(len(gp_bytes)),
+                    "mimeType": "video/mp4",
+                    "modifiedTime": "2026-11-07T14:00:00.000Z",
+                },
+            )
+        if "/drive/v3/files/file_cam_01" in url:
+            return httpx.Response(
+                200,
+                json={
+                    "id": "file_cam_01",
+                    "name": "camara_streamer.mp4",
+                    "size": str(len(cam_bytes)),
+                    "mimeType": "video/mp4",
+                    "modifiedTime": "2026-11-07T14:00:05.000Z",
+                },
+            )
+
+        # 5. Folder listing (/drive/v3/files?q=...)
+        if "/drive/v3/files" in url:
+            q_param = request.url.params.get("q", "")
+            if "'root' in parents" in q_param:
+                return httpx.Response(
+                    200,
+                    json={
+                        "files": [
+                            {
+                                "id": "fld_entradas",
+                                "name": "Entradas",
+                                "mimeType": "application/vnd.google-apps.folder",
+                                "modifiedTime": "2026-11-07T13:00:00.000Z",
+                            }
+                        ]
+                    },
+                )
+            if "'fld_val_01' in parents" in q_param or "name contains" in q_param:
+                return httpx.Response(
+                    200,
+                    json={
+                        "files": [
+                            {
+                                "id": "file_gp_01",
+                                "name": "gameplay_valorant.mp4",
+                                "size": str(len(gp_bytes)),
+                                "mimeType": "video/mp4",
+                                "modifiedTime": "2026-11-07T14:00:00.000Z",
+                            },
+                            {
+                                "id": "file_cam_01",
+                                "name": "camara_streamer.mp4",
+                                "size": str(len(cam_bytes)),
+                                "mimeType": "video/mp4",
+                                "modifiedTime": "2026-11-07T14:00:05.000Z",
+                            },
+                        ]
+                    },
+                )
+            return httpx.Response(200, json={"files": []})
+
+        return httpx.Response(200, json={"ok": True})
+
+    settings = ServerSettings(
+        data_dir=tmp_path / "oauth_data",
+        drive_mode="local",
+        drive_local_dir=tmp_path / "drive_mirror",
+        stt_primary="fixture",
+        stt_backup="none",
+        llm_primary="fixture",
+        llm_backup="none",
+        fixtures_dir=FIXTURES_DIR,
+    )
+    app = create_app(settings, use_process_pool=False, enable_drive_watcher=False)
+    app.state.test_http_client = httpx.AsyncClient(transport=httpx.MockTransport(_mock_google_drive_handler))
+
+    with TestClient(app) as client:
+        # 1. Configure OAuth Client ID & Secret via POST /settings
+        r_cfg = client.post(
+            "/settings",
+            json={
+                "drive_mode": "oauth",
+                "drive_client_id": "123456-test.apps.googleusercontent.com",
+                "drive_client_secret": "GOCSPX-super-secret-9988",
+            },
+        )
+        assert r_cfg.status_code == 200
+        cfg_json = r_cfg.json()
+        assert cfg_json["drive_mode"] == "oauth"
+        assert cfg_json["drive_client_id"] == "123456-test.apps.googleusercontent.com"
+        assert cfg_json["has_drive_client_secret"] is True
+        assert cfg_json["drive_client_secret"] == "GOCS...9988"
+
+        # 2. GET /drive/auth/url generates Google OAuth 2.0 authorization URL
+        r_url = client.get("/drive/auth/url", params={"state": "st_test_1"})
+        assert r_url.status_code == 200
+        url_data = r_url.json()
+        assert "accounts.google.com/o/oauth2/v2/auth" in url_data["auth_url"]
+        assert "access_type=offline" in url_data["auth_url"]
+        assert "123456-test.apps.googleusercontent.com" in url_data["auth_url"]
+
+        # 3. GET /drive/auth/callback exchanges authorization code and persists data/drive_oauth_token.json
+        r_cb = client.get("/drive/auth/callback", params={"code": "4/0AeanS_mock_auth_code", "state": "st_test_1"})
+        assert r_cb.status_code == 200
+        cb_data = r_cb.json()
+        assert cb_data["ok"] is True
+        assert cb_data["oauth_connected"] is True
+        assert cb_data["user_email"] == "streamer@farmclips.gg"
+
+        token_file = settings.data_dir / "drive_oauth_token.json"
+        assert token_file.is_file()
+        saved_tok = json.loads(token_file.read_text(encoding="utf-8"))
+        assert saved_tok["refresh_token"] == "1//refresh_token_secret_xyz"
+        assert saved_tok["user_email"] == "streamer@farmclips.gg"
+
+        # Force token expiration to verify automatic refresh_token flow on next Drive API call
+        app.state.orchestrator.drive._token_exp = 0.0
+
+        # 4. GET /drive/status reflects active OAuth connection
+        st_res = client.get("/drive/status").json()
+        assert st_res["mode"] == "oauth"
+        assert st_res["connected"] is True
+        assert st_res["oauth_connected"] is True
+        assert st_res["user_email"] == "streamer@farmclips.gg"
+
+        # 5. GET /drive/files browses subfolder with multi-level breadcrumbs & auto-detected gameplay+camera pair
+        r_files = client.get("/drive/files", params={"folder_id": "fld_val_01"})
+        assert r_files.status_code == 200
+        browsed = r_files.json()
+        assert browsed["folder_id"] == "fld_val_01"
+        assert browsed["folder_name"] == "valorant_ranked_noche"
+        assert [b["name"] for b in browsed["breadcrumbs"]] == ["Mi unidad", "Entradas", "valorant_ranked_noche"]
+        assert len(browsed["files"]) == 2
+        assert browsed["detected_pair"] is not None
+        assert browsed["detected_pair"]["gameplay"]["id"] == "file_gp_01"
+        assert browsed["detected_pair"]["camera"]["id"] == "file_cam_01"
+        assert any("grant_type=refresh_token" in c for c in token_calls)
+
+        # 6. POST /drive/sessions downloads gameplay + camera via ApiPool and creates session
+        r_ses = client.post(
+            "/drive/sessions",
+            json={
+                "title": "Valorant Ranked desde Drive OAuth",
+                "folder_id": "fld_val_01",
+                "gameplay_file_id": "file_gp_01",
+                "camera_file_id": "file_cam_01",
+                "auto_start": False,
+            },
+        )
+        assert r_ses.status_code == 200
+        ses_data = r_ses.json()
+        assert ses_data["title"] == "Valorant Ranked desde Drive OAuth"
+        assert ses_data["state"] == "DOWNLOADED"
+        assert ses_data["detected_game"] == "valorant"
+        assert Path(ses_data["gameplay_path"]).is_file()
+        assert Path(ses_data["camera_path"]).is_file()
+        assert Path(ses_data["gameplay_path"]).stat().st_size == len(gp_bytes)
+        assert Path(ses_data["camera_path"]).stat().st_size == len(cam_bytes)
+
+        # 7. POST /drive/auth/disconnect removes token file and marks OAuth disconnected
+        r_disc = client.post("/drive/auth/disconnect")
+        assert r_disc.status_code == 200
+        assert r_disc.json()["oauth_connected"] is False
+        assert not token_file.is_file()
+
+
+

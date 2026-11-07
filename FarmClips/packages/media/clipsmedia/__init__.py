@@ -1,5 +1,6 @@
 from .drive import (
     DriveConnector,
+    GoogleDriveOAuthConnector,
     GoogleDriveServiceAccountConnector,
     LocalFolderDriveConnector,
     ReadyRecording,
@@ -28,6 +29,7 @@ from .sync import classify_recording_pair, estimate_audio_sync, prepare_session_
 __all__ = [
     "DriveConnector",
     "FfmpegError",
+    "GoogleDriveOAuthConnector",
     "GoogleDriveServiceAccountConnector",
     "LocalFolderDriveConnector",
     "ReadyRecording",

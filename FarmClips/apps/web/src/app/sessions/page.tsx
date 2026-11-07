@@ -5,20 +5,29 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Bell,
+  Camera,
+  CheckCircle2,
   ChevronRight,
   Clock,
+  Film,
+  Folder,
   FolderSync,
   Gamepad2,
   HardDrive,
+  Link2,
   Play,
   RefreshCw,
+  Search,
   Sparkles,
   Trash2,
   Upload,
   Wrench,
 } from "lucide-react";
 import {
+  createDriveSession,
   createSession,
+  fetchDriveAuthUrl,
+  fetchDriveFiles,
   fetchDriveStatus,
   fetchKeytermsPreview,
   fetchMaintenanceStats,
@@ -28,7 +37,9 @@ import {
   triggerTestWebhook,
   uploadVideoFile,
   useServerEvents,
+  type DriveBrowseResponse,
   type DriveStatus,
+  type DriveVideoItem,
   type KeytermsPreviewPayload,
   type MaintenanceStats,
   type SessionSummary,
@@ -92,7 +103,7 @@ export default function SessionsPage() {
   const [liveMessages, setLiveMessages] = useState<Record<string, string>>({});
 
   // Form state
-  const [mode, setMode] = useState<"local" | "upload">("local");
+  const [mode, setMode] = useState<"local" | "upload" | "drive">("local");
   const [title, setTitle] = useState("");
   const [gameplayPath, setGameplayPath] = useState("");
   const [cameraPath, setCameraPath] = useState("");
@@ -100,6 +111,15 @@ export default function SessionsPage() {
   const [cameraFile, setCameraFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Interactive Google Drive Explorer state
+  const [driveBrowser, setDriveBrowser] = useState<DriveBrowseResponse | null>(null);
+  const [driveFolderId, setDriveFolderId] = useState<string | undefined>(undefined);
+  const [driveSearch, setDriveSearch] = useState("");
+  const [loadingDriveFiles, setLoadingDriveFiles] = useState(false);
+  const [driveBrowserError, setDriveBrowserError] = useState<string | null>(null);
+  const [driveGameplay, setDriveGameplay] = useState<DriveVideoItem | null>(null);
+  const [driveCamera, setDriveCamera] = useState<DriveVideoItem | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -118,9 +138,45 @@ export default function SessionsPage() {
     }
   }, []);
 
+  const loadDriveFolder = useCallback(
+    async (folderId?: string, query?: string) => {
+      setLoadingDriveFiles(true);
+      setDriveBrowserError(null);
+      try {
+        const res = await fetchDriveFiles(folderId, query);
+        setDriveBrowser(res);
+        setDriveFolderId(res.folder_id);
+        if (res.detected_pair) {
+          setDriveGameplay(res.detected_pair.gameplay);
+          setDriveCamera(res.detected_pair.camera);
+          setTitle((prev) =>
+            prev.trim()
+              ? prev
+              : res.detected_pair?.recording_name && res.detected_pair.recording_name !== "Raíz local" && res.detected_pair.recording_name !== "Mi unidad"
+              ? res.detected_pair.recording_name
+              : prev
+          );
+        }
+      } catch (err) {
+        setDriveBrowserError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoadingDriveFiles(false);
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     reload();
   }, [reload]);
+
+  useEffect(() => {
+    if (mode !== "drive") return;
+    const handle = setTimeout(() => {
+      loadDriveFolder(driveFolderId, driveSearch);
+    }, 180);
+    return () => clearTimeout(handle);
+  }, [mode, driveFolderId, driveSearch, loadDriveFolder]);
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -135,16 +191,59 @@ export default function SessionsPage() {
     if (ev.session_id && ev.message) {
       setLiveMessages((prev) => ({ ...prev, [ev.session_id!]: ev.message! }));
     }
-    if (ev.type === "session_state" || ev.type === "clip_updated") {
+    if (ev.type === "session_state" || ev.type === "clip_updated" || ev.type === "drive_auth_updated") {
       reload();
     }
   });
+
+  async function handleConnectDriveOAuth() {
+    setError(null);
+    try {
+      const res = await fetchDriveAuthUrl();
+      window.open(res.auth_url, "_blank", "noopener,noreferrer,width=560,height=680");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  function handleSelectDetectedPair() {
+    if (!driveBrowser?.detected_pair) return;
+    setDriveGameplay(driveBrowser.detected_pair.gameplay);
+    setDriveCamera(driveBrowser.detected_pair.camera);
+    if (!title.trim() && driveBrowser.detected_pair.recording_name) {
+      setTitle(driveBrowser.detected_pair.recording_name);
+    }
+  }
 
   async function handleCreateSession(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
+      if (mode === "drive") {
+        const gp = driveGameplay ?? driveBrowser?.detected_pair?.gameplay ?? null;
+        const cm = driveCamera ?? driveBrowser?.detected_pair?.camera ?? null;
+        if (!gp || !cm) {
+          throw new Error("Selecciona los videos de Juego (gameplay) y Cámara desde el explorador de Google Drive.");
+        }
+        if (gp.id === cm.id) {
+          throw new Error("El video de gameplay y el de cámara deben ser archivos distintos.");
+        }
+        const recName = title.trim() || driveBrowser?.folder_name || "Sesión Drive";
+        const created = await createDriveSession({
+          title: recName,
+          folder_id: driveBrowser?.folder_id,
+          gameplay_file_id: gp.id,
+          camera_file_id: cm.id,
+          recording_name: recName,
+          language: "es",
+          style_preset: "hormozi-gaming",
+          auto_start: true,
+        });
+        router.push(`/sessions/${created.id}`);
+        return;
+      }
+
       let gp = gameplayPath.trim();
       let cm = cameraPath.trim();
       if (mode === "upload") {
@@ -274,6 +373,7 @@ export default function SessionsPage() {
               options={[
                 { value: "local", label: <><HardDrive className="h-3.5 w-3.5" /> Rutas locales</> },
                 { value: "upload", label: <><Upload className="h-3.5 w-3.5" /> Subir archivos</> },
+                { value: "drive", label: <><FolderSync className="h-3.5 w-3.5" /> Desde Drive</> },
               ]}
             />
           </div>
@@ -338,10 +438,201 @@ export default function SessionsPage() {
                 />
               </label>
             </div>
-          ) : (
+          ) : mode === "upload" ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <FilePick label="Video del juego" file={gameplayFile} onPick={setGameplayFile} />
               <FilePick label="Video de la cámara" file={cameraFile} onPick={setCameraFile} />
+            </div>
+          ) : (
+            <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-900/50 p-4">
+              {/* Drive Explorer Header & Breadcrumbs */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-1 text-xs font-semibold text-slate-300">
+                  {(driveBrowser?.breadcrumbs ?? [{ id: "root", name: "Drive" }]).map((bc, idx, arr) => (
+                    <React.Fragment key={bc.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDriveSearch("");
+                          setDriveFolderId(bc.id);
+                        }}
+                        className={`rounded-lg px-2 py-1 transition cursor-pointer ${
+                          idx === arr.length - 1
+                            ? "bg-amber-400/15 font-extrabold text-amber-300"
+                            : "text-slate-400 hover:bg-white/5 hover:text-slate-100"
+                        }`}
+                      >
+                        {bc.name}
+                      </button>
+                      {idx < arr.length - 1 && <ChevronRight className="h-3.5 w-3.5 text-slate-600" />}
+                    </React.Fragment>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+                    <input
+                      type="text"
+                      value={driveSearch}
+                      onChange={(e) => setDriveSearch(e.target.value)}
+                      placeholder="Buscar carpeta o video…"
+                      className="w-44 rounded-full border border-white/10 bg-slate-950/70 py-1.5 pl-8 pr-3 text-xs text-slate-200 placeholder:text-slate-500 focus:border-amber-300/60 focus:outline-none"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => loadDriveFolder(driveFolderId, driveSearch)}
+                    disabled={loadingDriveFiles}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 cursor-pointer"
+                    title="Actualizar carpeta"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${loadingDriveFiles ? "animate-spin" : ""}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* OAuth Connection Prompt if disconnected */}
+              {drive?.mode === "oauth" && !drive.oauth_connected && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300/30 bg-amber-400/10 px-4 py-3 text-xs text-amber-200">
+                  <span>Tu cuenta de Google Drive OAuth 2.0 aún no está vinculada.</span>
+                  <div className="flex items-center gap-2">
+                    {drive.client_configured ? (
+                      <button type="button" onClick={handleConnectDriveOAuth} className={`${btnPrimary} !px-3.5 !py-1.5 !text-xs`}>
+                        <Link2 className="h-3.5 w-3.5" /> Conectar Google Drive
+                      </button>
+                    ) : (
+                      <Link href="/settings" className={`${btnSecondary} !px-3.5 !py-1.5 !text-xs`}>
+                        Configurar Client ID en Ajustes
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {driveBrowserError && (
+                <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-2.5 text-xs font-semibold text-rose-200">
+                  {driveBrowserError}
+                </div>
+              )}
+
+              {/* 1-Click Auto-detected Pair Banner */}
+              {driveBrowser?.detected_pair && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2.5">
+                  <div className="min-w-0 text-xs text-emerald-100">
+                    <span className="font-extrabold text-emerald-300">Par detectado automáticamente:</span>{" "}
+                    <span className="font-mono">{driveBrowser.detected_pair.gameplay.name}</span> +{" "}
+                    <span className="font-mono">{driveBrowser.detected_pair.camera.name}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSelectDetectedPair}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-emerald-400 px-3 py-1 text-xs font-extrabold text-slate-950 transition hover:bg-emerald-300 cursor-pointer"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Elegir par en 1 clic
+                  </button>
+                </div>
+              )}
+
+              {/* Folders & Videos list */}
+              <div className="max-h-56 space-y-1.5 overflow-y-auto pr-1">
+                {loadingDriveFiles ? (
+                  <div className="flex items-center justify-center gap-2 py-8 text-xs text-slate-400">
+                    <SoftSpinner className="h-4 w-4" /> Explorando Google Drive…
+                  </div>
+                ) : (
+                  <>
+                    {(driveBrowser?.folders ?? []).map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => {
+                          setDriveSearch("");
+                          setDriveFolderId(f.id);
+                        }}
+                        className="flex w-full items-center justify-between rounded-xl border border-white/5 bg-slate-950/50 px-3.5 py-2 text-left text-xs transition hover:border-amber-300/30 hover:bg-slate-900 cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2 font-bold text-slate-200">
+                          <Folder className="h-4 w-4 text-amber-300" />
+                          {f.name}
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400">
+                          Abrir carpeta <ChevronRight className="h-3.5 w-3.5" />
+                        </span>
+                      </button>
+                    ))}
+
+                    {(driveBrowser?.files ?? []).map((v) => {
+                      const isGp = driveGameplay?.id === v.id;
+                      const isCam = driveCamera?.id === v.id;
+                      return (
+                        <div
+                          key={v.id}
+                          className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3.5 py-2 text-xs transition ${
+                            isGp || isCam
+                              ? "border-amber-300/40 bg-amber-400/10"
+                              : "border-white/5 bg-slate-950/40 hover:border-white/15"
+                          }`}
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <Film className="h-4 w-4 shrink-0 text-sky-300" />
+                            <span className="truncate font-mono font-semibold text-slate-100">{v.name}</span>
+                            <span className="shrink-0 text-[11px] text-slate-400">({formatBytes(v.size)})</span>
+                            {v.role_hint === "gameplay" && <Badge tone="info">Juego sugerido</Badge>}
+                            {v.role_hint === "camera" && <Badge tone="gold">Cámara sugerida</Badge>}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setDriveGameplay(isGp ? null : v)}
+                              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold transition cursor-pointer ${
+                                isGp
+                                  ? "bg-amber-400 text-slate-950"
+                                  : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+                              }`}
+                            >
+                              <Gamepad2 className="h-3 w-3" /> {isGp ? "Juego ✓" : "Usar como Juego"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDriveCamera(isCam ? null : v)}
+                              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold transition cursor-pointer ${
+                                isCam
+                                  ? "bg-emerald-400 text-slate-950"
+                                  : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+                              }`}
+                            >
+                              <Camera className="h-3 w-3" /> {isCam ? "Cámara ✓" : "Usar como Cámara"}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {(driveBrowser?.folders.length ?? 0) === 0 && (driveBrowser?.files.length ?? 0) === 0 && (
+                      <p className="py-6 text-center text-xs text-slate-400">
+                        No hay subcarpetas ni archivos de video en esta ubicación.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Selected Gameplay + Camera Summary */}
+              <div className="grid grid-cols-1 gap-3 border-t border-white/10 pt-3 md:grid-cols-2">
+                <div className="rounded-xl border border-white/10 bg-slate-950/60 px-3.5 py-2.5 text-xs">
+                  <div className="font-bold text-slate-400">Video del juego (Gameplay)</div>
+                  <div className="mt-0.5 truncate font-mono text-slate-100">
+                    {driveGameplay ? `${driveGameplay.name} (${formatBytes(driveGameplay.size)})` : "Sin seleccionar"}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-slate-950/60 px-3.5 py-2.5 text-xs">
+                  <div className="font-bold text-slate-400">Video de la cámara (Facecam)</div>
+                  <div className="mt-0.5 truncate font-mono text-slate-100">
+                    {driveCamera ? `${driveCamera.name} (${formatBytes(driveCamera.size)})` : "Sin seleccionar"}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -352,7 +643,7 @@ export default function SessionsPage() {
             </span>
             <button type="submit" disabled={submitting} className={btnPrimary}>
               {submitting ? <SoftSpinner onAccent className="h-4 w-4" /> : <Play className="h-4 w-4 fill-current" />}
-              Crear clips
+              {mode === "drive" ? "Descargar de Drive y crear clips" : "Crear clips"}
             </button>
           </div>
         </GlassCard>
@@ -364,13 +655,28 @@ export default function SessionsPage() {
               <h2 className="flex items-center gap-2 text-lg font-extrabold text-slate-50">
                 <FolderSync className="h-5 w-5 text-amber-300" /> Google Drive
               </h2>
-              <InfoTip label="Cómo funciona Drive" align="end">
-                Vigila Entradas/&lt;grabación&gt;/ hasta que el tamaño se estabiliza en 2 revisiones, descarga por streaming y
-                publica los 5 mejores clips + JSON en Salidas/&lt;grabación&gt;/. Modo: {drive?.mode ?? "local"}
-                {drive ? ` · Raíz: ${drive.local_dir}` : ""}.
-              </InfoTip>
+              <div className="flex items-center gap-1.5">
+                {drive && (
+                  <Badge tone={drive.connected ? "success" : "neutral"}>
+                    {drive.mode === "oauth"
+                      ? drive.oauth_connected
+                        ? "OAuth conectado"
+                        : "OAuth sin vincular"
+                      : drive.mode}
+                  </Badge>
+                )}
+                <InfoTip label="Cómo funciona Drive" align="end">
+                  Conecta tu cuenta por OAuth 2.0, Cuenta de Servicio o espejo local. Explora cualquier carpeta en la
+                  pestaña &quot;Desde Drive&quot; o vigila Entradas/&lt;grabación&gt;/ automáticamente.
+                  {drive?.user_email ? ` · Cuenta: ${drive.user_email}` : ""}
+                </InfoTip>
+              </div>
             </div>
-            <p className="text-sm text-slate-400">Deja una carpeta con los dos videos en Entradas/ y los Shorts aparecen en Salidas/.</p>
+            <p className="text-sm text-slate-400">
+              {drive?.user_email
+                ? `Conectado como ${drive.user_email}. Elige cualquier carpeta en el explorador o usa Entradas/ → Salidas/.`
+                : "Elige videos directo desde el explorador interactivo de Drive o deja una carpeta en Entradas/."}
+            </p>
             {drive && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-2xl bg-white/5 p-3 text-center">
@@ -384,10 +690,20 @@ export default function SessionsPage() {
               </div>
             )}
           </div>
-          <button type="button" onClick={handlePollDrive} disabled={pollingDrive} className={`${btnSecondary} w-full`}>
-            <RefreshCw className={`h-4 w-4 ${pollingDrive ? "animate-spin" : ""}`} />
-            Revisar Entradas ahora
-          </button>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => setMode("drive")}
+              className={`${btnPrimary} w-full`}
+            >
+              <Folder className="h-4 w-4" />
+              Explorar carpetas de Drive
+            </button>
+            <button type="button" onClick={handlePollDrive} disabled={pollingDrive} className={`${btnSecondary} w-full`}>
+              <RefreshCw className={`h-4 w-4 ${pollingDrive ? "animate-spin" : ""}`} />
+              Revisar Entradas ahora
+            </button>
+          </div>
         </GlassCard>
       </div>
 

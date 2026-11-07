@@ -15,6 +15,11 @@ from typing import Any, Dict, List, Literal, Optional
 import httpx
 from clipscore.domain import SessionState, SignalSeries, SyncResult, new_id
 from clipseditplan import EditPlan
+from clipsmedia.drive import (
+    GoogleDriveOAuthConnector,
+    GoogleDriveServiceAccountConnector,
+    LocalFolderDriveConnector,
+)
 from clipsmedia.ffmpeg import extract_frame, resolve_binary
 from clipsproviders.notifications import send_delivery_webhook
 from clipsstyles import (
@@ -30,7 +35,7 @@ from clipsstyles import (
 from clipstracking import ensure_face_detector_model
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..config import (
@@ -49,6 +54,17 @@ class CreateSessionBody(BaseModel):
     title: str = ""
     gameplay_path: str
     camera_path: str
+    recording_name: str = ""
+    language: str = "es"
+    style_preset: str = "hormozi-gaming"
+    auto_start: bool = True
+
+
+class CreateDriveSessionBody(BaseModel):
+    title: str = ""
+    folder_id: Optional[str] = None
+    gameplay_file_id: Optional[str] = None
+    camera_file_id: Optional[str] = None
     recording_name: str = ""
     language: str = "es"
     style_preset: str = "hormozi-gaming"
@@ -92,6 +108,12 @@ class UpdateSettingsBody(BaseModel):
     openai_api_key: Optional[str] = None
     webhook_url: Optional[str] = None
     temp_ttl_days: Optional[float] = Field(default=None, ge=0.0, le=3650.0)
+    drive_mode: Optional[Literal["local", "oauth", "service_account", "disabled"]] = None
+    drive_client_id: Optional[str] = None
+    drive_client_secret: Optional[str] = None
+    drive_root_folder_id: Optional[str] = None
+    drive_local_dir: Optional[str] = None
+    drive_poll_sec: Optional[float] = Field(default=None, ge=0.0, le=86400.0)
 
 
 class TestConnectionBody(BaseModel):
@@ -455,6 +477,19 @@ def create_app(
         if body.temp_ttl_days is not None:
             env_updates["CLIPS_TEMP_TTL_DAYS"] = str(float(body.temp_ttl_days))
 
+        if body.drive_mode is not None:
+            env_updates["CLIPS_DRIVE_MODE"] = body.drive_mode.strip().lower()
+        if body.drive_client_id is not None:
+            env_updates["CLIPS_DRIVE_CLIENT_ID"] = body.drive_client_id.strip()
+        if not is_masked_or_blank(body.drive_client_secret, cfg.drive_client_secret):
+            env_updates["CLIPS_DRIVE_CLIENT_SECRET"] = (body.drive_client_secret or "").strip()
+        if body.drive_root_folder_id is not None:
+            env_updates["CLIPS_DRIVE_ROOT_FOLDER_ID"] = body.drive_root_folder_id.strip()
+        if body.drive_local_dir is not None and body.drive_local_dir.strip():
+            env_updates["CLIPS_DRIVE_LOCAL_DIR"] = body.drive_local_dir.strip()
+        if body.drive_poll_sec is not None:
+            env_updates["CLIPS_DRIVE_POLL_SEC"] = str(float(body.drive_poll_sec))
+
         # API Keys: if blank or masked, keep existing value in .env and memory
         if not is_masked_or_blank(body.deepgram_api_key, cfg.deepgram_api_key):
             env_updates["DEEPGRAM_API_KEY"] = (body.deepgram_api_key or "").strip()
@@ -478,12 +513,15 @@ def create_app(
             reloaded = dataclasses.replace(
                 reloaded,
                 data_dir=cfg.data_dir,
-                drive_local_dir=cfg.drive_local_dir,
+                drive_local_dir=cfg.drive_local_dir if body.drive_local_dir is None else reloaded.drive_local_dir,
                 fixtures_dir=reloaded.fixtures_dir or cfg.fixtures_dir,
             )
         cfg = reloaded
         app.state.settings = cfg
         orch.reload_settings(cfg)
+        custom_client = getattr(app.state, "test_http_client", None)
+        if custom_client is not None and isinstance(orch.drive, GoogleDriveServiceAccountConnector):
+            orch.drive._client = custom_client
 
         budget = orch.db.budget_summary(cfg.max_budget_usd)
         orch.events.publish("budget_update", **budget)
@@ -493,6 +531,7 @@ def create_app(
             llm_primary=cfg.llm_primary,
             llm_model=cfg.llm_model,
             max_budget_usd=cfg.max_budget_usd,
+            drive_mode=cfg.drive_mode,
         )
         return cfg.to_masked_dict()
 
@@ -656,13 +695,264 @@ def create_app(
                 entradas_folders = sorted(p.name for p in ent.iterdir() if p.is_dir())
             if sal.is_dir():
                 salidas_folders = sorted(p.name for p in sal.iterdir() if p.is_dir())
+
+        oauth_connected = cfg.is_drive_oauth_connected()
+        user_email: Optional[str] = None
+        user_name: Optional[str] = None
+        if isinstance(orch.drive, GoogleDriveOAuthConnector):
+            oauth_connected = orch.drive.is_connected()
+            user_email = orch.drive.user_email
+            user_name = orch.drive.user_name
+        elif cfg.drive_oauth_token_path.is_file():
+            try:
+                tok_raw = json.loads(cfg.drive_oauth_token_path.read_text(encoding="utf-8"))
+                user_email = tok_raw.get("user_email") or None
+                user_name = tok_raw.get("user_name") or None
+            except Exception:
+                pass
+        elif isinstance(orch.drive, GoogleDriveServiceAccountConnector):
+            user_email = orch.drive.client_email
+
+        if cfg.drive_mode == "disabled" or orch.drive is None:
+            connected = False
+        elif cfg.drive_mode == "oauth":
+            connected = oauth_connected
+        elif cfg.drive_mode == "service_account":
+            connected = isinstance(orch.drive, GoogleDriveServiceAccountConnector)
+        else:
+            connected = isinstance(orch.drive, LocalFolderDriveConnector)
+
         return {
             "mode": cfg.drive_mode,
+            "connected": connected,
+            "oauth_connected": oauth_connected,
+            "client_configured": bool(cfg.drive_client_id and cfg.drive_client_secret),
+            "client_id": cfg.drive_client_id,
+            "has_client_secret": bool(cfg.drive_client_secret),
+            "user_email": user_email,
+            "user_name": user_name,
+            "root_folder_id": cfg.drive_root_folder_id or ("root" if cfg.drive_mode == "oauth" else None),
             "local_dir": str(cfg.drive_local_dir),
             "poll_sec": cfg.drive_poll_sec,
             "entradas": entradas_folders,
             "salidas": salidas_folders,
         }
+
+    @app.get("/drive/auth/url")
+    def drive_auth_url(
+        redirect_uri: Optional[str] = Query(default=None),
+        state: Optional[str] = Query(default=None),
+    ) -> Dict[str, Any]:
+        if not cfg.drive_client_id or not cfg.drive_client_secret:
+            raise HTTPException(
+                400,
+                "Configura CLIPS_DRIVE_CLIENT_ID y CLIPS_DRIVE_CLIENT_SECRET antes de vincular Google Drive OAuth 2.0.",
+            )
+        effective_redirect = (redirect_uri or "").strip() or f"http://{cfg.host}:{cfg.port}/drive/auth/callback"
+        effective_state = (state or "").strip() or new_id("oauth")
+        app.state.last_drive_redirect_uri = effective_redirect
+
+        conn = (
+            orch.drive
+            if isinstance(orch.drive, GoogleDriveOAuthConnector)
+            else GoogleDriveOAuthConnector(
+                client_id=cfg.drive_client_id,
+                client_secret=cfg.drive_client_secret,
+                token_path=cfg.drive_oauth_token_path,
+                root_folder_id=cfg.drive_root_folder_id or "root",
+            )
+        )
+        auth_url = conn.build_auth_url(redirect_uri=effective_redirect, state=effective_state)
+        return {
+            "auth_url": auth_url,
+            "url": auth_url,
+            "redirect_uri": effective_redirect,
+            "state": effective_state,
+        }
+
+    @app.get("/drive/auth/callback", response_model=None)
+    async def drive_auth_callback(
+        request: Request,
+        code: Optional[str] = Query(default=None),
+        state: Optional[str] = Query(default=None),
+        error: Optional[str] = Query(default=None),
+        redirect_uri: Optional[str] = Query(default=None),
+        format: Optional[str] = Query(default=None),
+    ) -> Any:
+        nonlocal cfg
+        if error:
+            raise HTTPException(400, f"Autorización de Google Drive rechazada: {error}")
+        if not code or not code.strip():
+            raise HTTPException(400, "Falta el parámetro 'code' de autorización OAuth 2.0.")
+        if not cfg.drive_client_id or not cfg.drive_client_secret:
+            raise HTTPException(
+                400,
+                "Configura CLIPS_DRIVE_CLIENT_ID y CLIPS_DRIVE_CLIENT_SECRET antes de completar OAuth 2.0.",
+            )
+
+        effective_redirect = (
+            (redirect_uri or "").strip()
+            or getattr(app.state, "last_drive_redirect_uri", None)
+            or f"http://{cfg.host}:{cfg.port}/drive/auth/callback"
+        )
+
+        if isinstance(orch.drive, GoogleDriveOAuthConnector):
+            oauth_conn = orch.drive
+            oauth_conn.client_id = cfg.drive_client_id
+            oauth_conn.client_secret = cfg.drive_client_secret
+        else:
+            oauth_conn = GoogleDriveOAuthConnector(
+                client_id=cfg.drive_client_id,
+                client_secret=cfg.drive_client_secret,
+                token_path=cfg.drive_oauth_token_path,
+                root_folder_id=cfg.drive_root_folder_id or "root",
+            )
+
+        custom_client = getattr(app.state, "test_http_client", None)
+        if custom_client is not None:
+            oauth_conn._client = custom_client
+
+        try:
+            token_data = await oauth_conn.exchange_code(code=code.strip(), redirect_uri=effective_redirect)
+        except Exception as exc:
+            raise HTTPException(400, f"Error intercambiando código OAuth 2.0 con Google Drive: {exc}") from exc
+
+        if cfg.drive_mode != "oauth":
+            update_dotenv_values({"CLIPS_DRIVE_MODE": "oauth"})
+            cfg = dataclasses.replace(cfg, drive_mode="oauth")
+            app.state.settings = cfg
+            orch.settings = cfg
+        orch.drive = oauth_conn
+
+        orch.events.publish(
+            "drive_auth_updated",
+            connected=True,
+            mode=cfg.drive_mode,
+            user_email=token_data.get("user_email"),
+        )
+
+        accept_hdr = request.headers.get("accept", "")
+        if format == "html" or ("text/html" in accept_hdr and format != "json"):
+            target_settings_url = f"{cfg.public_web_url.rstrip('/')}/settings?drive_oauth=connected"
+            email_txt = token_data.get("user_email") or "Cuenta de Google vinculada"
+            html_doc = f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Google Drive Conectado — FarmClips</title>
+  <style>
+    body {{ background: #090d16; color: #f8fafc; font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }}
+    .card {{ background: #1e293b; border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 32px; max-width: 420px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.4); }}
+    .badge {{ display: inline-block; background: rgba(52,211,153,0.15); color: #6ee7b7; border-radius: 999px; padding: 6px 14px; font-size: 12px; font-weight: 700; margin-bottom: 12px; }}
+    a {{ display: inline-block; margin-top: 16px; background: #fbbf24; color: #090d16; text-decoration: none; font-weight: 800; padding: 10px 20px; border-radius: 999px; font-size: 14px; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">OAuth 2.0 Verificado</div>
+    <h2 style="margin: 0 0 8px 0;">Google Drive conectado</h2>
+    <p style="color: #94a3b8; font-size: 14px; margin: 0;">{email_txt}</p>
+    <a href="{target_settings_url}">Volver a FarmClips Studio</a>
+  </div>
+  <script>
+    try {{
+      if (window.opener) {{
+        window.opener.postMessage({{ type: "drive_oauth_connected", ok: true }}, "*");
+        setTimeout(() => window.close(), 600);
+      }}
+    }} catch (e) {{}}
+  </script>
+</body>
+</html>"""
+            return HTMLResponse(content=html_doc)
+
+        return {
+            "ok": True,
+            "mode": cfg.drive_mode,
+            "connected": True,
+            "oauth_connected": True,
+            "state": state,
+            "user_email": token_data.get("user_email"),
+            "user_name": token_data.get("user_name"),
+            "token_path": str(cfg.drive_oauth_token_path),
+        }
+
+    @app.post("/drive/auth/disconnect")
+    async def drive_auth_disconnect() -> Dict[str, Any]:
+        if isinstance(orch.drive, GoogleDriveOAuthConnector):
+            await orch.drive.disconnect()
+        else:
+            cfg.drive_oauth_token_path.unlink(missing_ok=True)
+        orch.events.publish("drive_auth_updated", connected=False, mode=cfg.drive_mode)
+        return {
+            "ok": True,
+            "mode": cfg.drive_mode,
+            "connected": False,
+            "oauth_connected": False,
+        }
+
+    @app.get("/drive/files")
+    async def list_drive_files(
+        folder_id: Optional[str] = Query(default=None),
+        query: Optional[str] = Query(default=None),
+        q: Optional[str] = Query(default=None),
+    ) -> Dict[str, Any]:
+        if orch.drive is None or cfg.drive_mode == "disabled":
+            raise HTTPException(
+                400,
+                "Google Drive está deshabilitado (CLIPS_DRIVE_MODE=disabled). Activa 'oauth' o 'local' en Configuración.",
+            )
+        if isinstance(orch.drive, GoogleDriveOAuthConnector) and not orch.drive.is_connected():
+            raise HTTPException(
+                401,
+                "Google Drive OAuth 2.0 no está vinculado. Conecta tu cuenta en Configuración (/settings).",
+            )
+        custom_client = getattr(app.state, "test_http_client", None)
+        if custom_client is not None and isinstance(orch.drive, GoogleDriveServiceAccountConnector):
+            orch.drive._client = custom_client
+
+        effective_query = query if query is not None else q
+        try:
+            browsed = await orch.drive.browse_folder(folder_id=folder_id, query=effective_query)
+        except FileNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(502, f"Error consultando archivos en Google Drive: {exc}") from exc
+
+        return {"mode": cfg.drive_mode, **browsed}
+
+    @app.post("/drive/sessions")
+    async def create_drive_session_endpoint(body: CreateDriveSessionBody) -> Dict[str, Any]:
+        if orch.drive is None or cfg.drive_mode == "disabled":
+            raise HTTPException(400, "El conector de Google Drive está deshabilitado.")
+        if isinstance(orch.drive, GoogleDriveOAuthConnector) and not orch.drive.is_connected():
+            raise HTTPException(401, "Google Drive OAuth 2.0 no está vinculado. Conecta tu cuenta en Configuración.")
+
+        custom_client = getattr(app.state, "test_http_client", None)
+        if custom_client is not None and isinstance(orch.drive, GoogleDriveServiceAccountConnector):
+            orch.drive._client = custom_client
+
+        try:
+            row = await orch.create_session_from_drive(
+                gameplay_file_id=body.gameplay_file_id,
+                camera_file_id=body.camera_file_id,
+                folder_id=body.folder_id,
+                title=body.title,
+                recording_name=body.recording_name,
+                language=body.language or "es",
+                style_preset=body.style_preset or cfg.style_preset,
+                auto_start=body.auto_start,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(502, f"Error descargando sesión desde Google Drive: {exc}") from exc
+
+        return _serialize_session(orch, row)
 
     @app.post("/drive/poll")
     async def trigger_drive_poll() -> Dict[str, Any]:

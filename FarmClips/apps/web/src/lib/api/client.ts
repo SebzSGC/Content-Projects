@@ -43,11 +43,63 @@ export interface ServerHealth {
 }
 
 export interface DriveStatus {
-  mode: string;
+  mode: "local" | "oauth" | "service_account" | "disabled" | string;
+  connected?: boolean;
+  oauth_connected?: boolean;
+  client_configured?: boolean;
+  client_id?: string;
+  has_client_secret?: boolean;
+  user_email?: string | null;
+  user_name?: string | null;
+  root_folder_id?: string | null;
   local_dir: string;
   poll_sec: number;
   entradas: string[];
   salidas: string[];
+}
+
+export interface DriveBreadcrumb {
+  id: string;
+  name: string;
+}
+
+export interface DriveFolderItem {
+  id: string;
+  name: string;
+  modified_ts?: number;
+}
+
+export interface DriveVideoItem {
+  id: string;
+  name: string;
+  size: number;
+  mime_type?: string;
+  modified_ts?: number;
+  role_hint?: "gameplay" | "camera" | null;
+}
+
+export interface DriveDetectedPair {
+  recording_name: string;
+  gameplay: DriveVideoItem;
+  camera: DriveVideoItem;
+}
+
+export interface DriveBrowseResponse {
+  mode: string;
+  folder_id: string;
+  folder_name: string;
+  parent_id: string | null;
+  breadcrumbs: DriveBreadcrumb[];
+  folders: DriveFolderItem[];
+  files: DriveVideoItem[];
+  detected_pair: DriveDetectedPair | null;
+}
+
+export interface DriveAuthUrlResponse {
+  auth_url: string;
+  url?: string;
+  redirect_uri: string;
+  state?: string | null;
 }
 
 export interface SyncInfo {
@@ -207,6 +259,14 @@ export interface AppSettings {
   auto_render_top_k: number;
   auto_render_min_score: number;
   default_keyterms: string[];
+  drive_mode?: "local" | "oauth" | "service_account" | "disabled";
+  drive_local_dir?: string;
+  drive_root_folder_id?: string;
+  drive_poll_sec?: number;
+  drive_client_id?: string;
+  drive_client_secret?: string;
+  has_drive_client_secret?: boolean;
+  drive_oauth_connected?: boolean;
   deepgram_api_key: string;
   groq_api_key: string;
   gemini_api_key: string;
@@ -240,6 +300,12 @@ export interface UpdateSettingsPayload {
   openai_api_key?: string;
   webhook_url?: string;
   temp_ttl_days?: number;
+  drive_mode?: "local" | "oauth" | "service_account" | "disabled";
+  drive_client_id?: string;
+  drive_client_secret?: string;
+  drive_root_folder_id?: string;
+  drive_local_dir?: string;
+  drive_poll_sec?: number;
 }
 
 export interface TestConnectionResult {
@@ -564,6 +630,47 @@ export const testSettingsConnection = (
   });
 export const fetchDriveStatus = () => apiJson<DriveStatus>("/drive/status");
 export const triggerDrivePoll = () => apiJson<{ launched_sessions: string[] }>("/drive/poll", { method: "POST" });
+export const fetchDriveAuthUrl = (redirectUri?: string, state?: string) => {
+  const params = new URLSearchParams();
+  if (redirectUri) params.set("redirect_uri", redirectUri);
+  if (state) params.set("state", state);
+  const qs = params.toString();
+  return apiJson<DriveAuthUrlResponse>(`/drive/auth/url${qs ? `?${qs}` : ""}`);
+};
+export const completeDriveAuthCallback = (code: string, redirectUri?: string, state?: string) => {
+  const params = new URLSearchParams({ code, format: "json" });
+  if (redirectUri) params.set("redirect_uri", redirectUri);
+  if (state) params.set("state", state);
+  return apiJson<{
+    ok: boolean;
+    mode: string;
+    connected: boolean;
+    oauth_connected: boolean;
+    user_email?: string | null;
+    user_name?: string | null;
+  }>(`/drive/auth/callback?${params.toString()}`);
+};
+export const disconnectDriveAuth = () =>
+  apiJson<{ ok: boolean; mode: string; connected: boolean; oauth_connected: boolean }>("/drive/auth/disconnect", {
+    method: "POST",
+  });
+export const fetchDriveFiles = (folderId?: string, query?: string) => {
+  const params = new URLSearchParams();
+  if (folderId) params.set("folder_id", folderId);
+  if (query && query.trim()) params.set("query", query.trim());
+  const qs = params.toString();
+  return apiJson<DriveBrowseResponse>(`/drive/files${qs ? `?${qs}` : ""}`);
+};
+export const createDriveSession = (body: {
+  title?: string;
+  folder_id?: string;
+  gameplay_file_id?: string;
+  camera_file_id?: string;
+  recording_name?: string;
+  language?: string;
+  style_preset?: string;
+  auto_start?: boolean;
+}) => apiJson<SessionSummary>("/drive/sessions", { method: "POST", body: JSON.stringify(body) });
 export const fetchEmojiCatalog = () => apiJson<EmojiCatalogItem[]>("/emojis");
 export const fetchKeytermsPreview = (title = "", recordingName = "") =>
   apiJson<KeytermsPreviewPayload>(

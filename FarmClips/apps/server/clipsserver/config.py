@@ -208,11 +208,13 @@ class ServerSettings:
     auto_render_top_k: int = 5
     auto_render_min_score: float = 60.0
     enable_gameplay_motion: bool = True
-    # Google Drive watcher
-    drive_mode: str = "local"            # local | service_account | disabled
+    # Google Drive watcher & direct OAuth 2.0
+    drive_mode: str = "local"            # local | oauth | service_account | disabled
     drive_local_dir: Path = field(default_factory=lambda: Path("data/drive_mirror").resolve())
     drive_service_account_json: Optional[Path] = None
     drive_root_folder_id: Optional[str] = None
+    drive_client_id: str = ""
+    drive_client_secret: str = ""
     drive_poll_sec: float = 120.0
     # Notifications & Storage Maintenance
     webhook_url: Optional[str] = None
@@ -221,6 +223,22 @@ class ServerSettings:
     # Testing / Offline fixtures
     fixtures_dir: Optional[Path] = None
 
+    @property
+    def drive_oauth_token_path(self) -> Path:
+        return (self.data_dir / "drive_oauth_token.json").resolve()
+
+    def is_drive_oauth_connected(self) -> bool:
+        tpath = self.drive_oauth_token_path
+        if not tpath.is_file():
+            return False
+        try:
+            import json
+
+            raw = json.loads(tpath.read_text(encoding="utf-8"))
+            return bool(raw.get("refresh_token") or raw.get("access_token"))
+        except Exception:
+            return False
+
     @classmethod
     def from_env(cls) -> "ServerSettings":
         root_dir = Path(os.environ.get("CLIPS_ROOT_DIR", ".")).resolve()
@@ -228,8 +246,16 @@ class ServerSettings:
         sa_raw = os.environ.get("CLIPS_DRIVE_SERVICE_ACCOUNT_JSON") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
         sa_path = Path(sa_raw).expanduser().resolve() if sa_raw and Path(sa_raw).expanduser().is_file() else None
         drive_folder_id = os.environ.get("CLIPS_DRIVE_ROOT_FOLDER_ID", "").strip() or None
+        drive_client_id = os.environ.get("CLIPS_DRIVE_CLIENT_ID", "").strip()
+        drive_client_secret = os.environ.get("CLIPS_DRIVE_CLIENT_SECRET", "").strip()
 
-        default_drive_mode = "service_account" if (sa_path and drive_folder_id) else "local"
+        oauth_token_exists = (data_dir / "drive_oauth_token.json").is_file()
+        if oauth_token_exists and drive_client_id and drive_client_secret:
+            default_drive_mode = "oauth"
+        elif sa_path and drive_folder_id:
+            default_drive_mode = "service_account"
+        else:
+            default_drive_mode = "local"
         drive_mode = os.environ.get("CLIPS_DRIVE_MODE", default_drive_mode).strip().lower()
         drive_local = Path(os.environ.get("CLIPS_DRIVE_LOCAL_DIR", str(data_dir / "drive_mirror"))).expanduser().resolve()
 
@@ -270,6 +296,8 @@ class ServerSettings:
             drive_local_dir=drive_local,
             drive_service_account_json=sa_path,
             drive_root_folder_id=drive_folder_id,
+            drive_client_id=drive_client_id,
+            drive_client_secret=drive_client_secret,
             drive_poll_sec=float(os.environ.get("CLIPS_DRIVE_POLL_SEC", "120")),
             webhook_url=os.environ.get("CLIPS_WEBHOOK_URL", "").strip() or None,
             public_web_url=os.environ.get("CLIPS_PUBLIC_WEB_URL", "http://127.0.0.1:3040").strip(),
@@ -283,11 +311,13 @@ class ServerSettings:
         gq_masked = mask_api_key(self.groq_api_key)
         gm_masked = mask_api_key(self.gemini_api_key)
         oa_masked = mask_api_key(self.openai_api_key)
+        drv_secret_masked = mask_api_key(self.drive_client_secret)
 
         has_dg = bool(self.deepgram_api_key)
         has_gq = bool(self.groq_api_key)
         has_gm = bool(self.gemini_api_key)
         has_oa = bool(self.openai_api_key)
+        has_drv_secret = bool(self.drive_client_secret)
 
         return {
             "env_path": str(resolve_dotenv_path(env_path)),
@@ -306,6 +336,14 @@ class ServerSettings:
             "auto_render_top_k": self.auto_render_top_k,
             "auto_render_min_score": self.auto_render_min_score,
             "default_keyterms": list(self.default_keyterms),
+            "drive_mode": self.drive_mode,
+            "drive_local_dir": str(self.drive_local_dir),
+            "drive_root_folder_id": self.drive_root_folder_id or "",
+            "drive_poll_sec": self.drive_poll_sec,
+            "drive_client_id": self.drive_client_id,
+            "drive_client_secret": drv_secret_masked,
+            "has_drive_client_secret": has_drv_secret,
+            "drive_oauth_connected": self.is_drive_oauth_connected(),
             "deepgram_api_key": dg_masked,
             "groq_api_key": gq_masked,
             "gemini_api_key": gm_masked,

@@ -22,8 +22,10 @@ from clipscore.timeline import build_timeline_windows_if_needed, group_words_int
 from clipseditplan import EditPlan
 from clipsmedia.drive import (
     DriveConnector,
+    GoogleDriveOAuthConnector,
     GoogleDriveServiceAccountConnector,
     LocalFolderDriveConnector,
+    RemoteFileEntry,
 )
 from clipsproviders.notifications import send_delivery_webhook
 from clipsrender import RenderQuality
@@ -75,20 +77,29 @@ class Orchestrator:
             nvenc_slots=settings.nvenc_slots,
             cache_dir=settings.data_dir / "render_cache",
         )
+        self._require_two_drive_polls = require_two_drive_polls
         self.drive: Optional[DriveConnector] = self._init_drive(require_two_drive_polls)
 
         self._running_sessions: Dict[str, asyncio.Task] = {}
         self._drive_watcher_task: Optional[asyncio.Task] = None
 
     def reload_settings(self, new_settings: ServerSettings) -> None:
-        """Hot-reload in-memory ServerSettings across Orchestrator and ApiPool."""
+        """Hot-reload in-memory ServerSettings across Orchestrator, ApiPool and DriveConnector."""
         self.settings = new_settings
         self.api_pool.reload_settings(new_settings)
+        self.drive = self._init_drive(self._require_two_drive_polls)
 
     def _init_drive(self, require_two_polls: bool) -> Optional[DriveConnector]:
         mode = self.settings.drive_mode
         if mode == "disabled":
             return None
+        if mode == "oauth":
+            return GoogleDriveOAuthConnector(
+                client_id=self.settings.drive_client_id,
+                client_secret=self.settings.drive_client_secret,
+                token_path=self.settings.drive_oauth_token_path,
+                root_folder_id=self.settings.drive_root_folder_id or "root",
+            )
         if (
             mode == "service_account"
             and self.settings.drive_service_account_json
@@ -155,6 +166,8 @@ class Orchestrator:
     async def poll_drive_once(self) -> List[str]:
         if self.drive is None:
             return []
+        if isinstance(self.drive, GoogleDriveOAuthConnector) and not self.drive.is_connected():
+            return []
         ready = await self.drive.list_ready_recordings()
         launched_ids: List[str] = []
         for rec in ready:
@@ -179,7 +192,7 @@ class Orchestrator:
             self.events.publish("session_state", session_id=sid, state="NEW", message="Descargando desde Drive…")
             gp_local, cam_local = await asyncio.gather(
                 self.api_pool.run_download(lambda r=rec, d=gp_dst: self.drive.download_resumable(r.gameplay_file, d)),  # type: ignore[union-attr]
-                self.api_pool.run_download(lambda r=rec, d=cam_dst: self.drive.download_resumable(r.camera_file, d)),  # type: ignore[union_attr]
+                self.api_pool.run_download(lambda r=rec, d=cam_dst: self.drive.download_resumable(r.camera_file, d)),  # type: ignore[union-attr]
             )
             self.db.update_session(
                 sid,
@@ -191,6 +204,90 @@ class Orchestrator:
             self.launch_session(sid)
             launched_ids.append(sid)
         return launched_ids
+
+    async def create_session_from_drive(
+        self,
+        gameplay_file_id: Optional[str] = None,
+        camera_file_id: Optional[str] = None,
+        folder_id: Optional[str] = None,
+        title: str = "",
+        recording_name: str = "",
+        language: str = "es",
+        style_preset: Optional[str] = None,
+        auto_start: bool = True,
+    ) -> Dict[str, Any]:
+        if self.drive is None:
+            raise RuntimeError("El conector de Google Drive está deshabilitado.")
+        if isinstance(self.drive, GoogleDriveOAuthConnector) and not self.drive.is_connected():
+            raise RuntimeError("Google Drive OAuth 2.0 no está vinculado. Conecta tu cuenta en Configuración.")
+
+        gp_id = (gameplay_file_id or "").strip()
+        cam_id = (camera_file_id or "").strip()
+        inferred_rec_name = ""
+
+        if not gp_id or not cam_id:
+            browsed = await self.drive.browse_folder(folder_id=folder_id)
+            pair = browsed.get("detected_pair")
+            if not pair:
+                raise ValueError(
+                    "Selecciona los archivos de gameplay y cámara o una carpeta que contenga ambos videos."
+                )
+            gp_id = str(pair["gameplay"]["id"])
+            cam_id = str(pair["camera"]["id"])
+            inferred_rec_name = str(pair.get("recording_name") or browsed.get("folder_name") or "")
+
+        gp_entry, cam_entry = await asyncio.gather(
+            self.drive.get_file_entry(gp_id),
+            self.drive.get_file_entry(cam_id),
+        )
+
+        rec_name = (
+            recording_name.strip()
+            or title.strip()
+            or inferred_rec_name
+            or Path(gp_entry.name).stem
+        )
+        ses_title = title.strip() or rec_name
+
+        ses = self.db.create_session(
+            title=ses_title,
+            recording_name=rec_name,
+            drive_folder_id=(folder_id or "").strip() or gp_entry.id,
+            language=language or "es",
+            style_preset=style_preset or self.settings.style_preset,
+            initial_state=SessionState.NEW,
+        )
+        sid = ses["id"]
+        sdir = self.session_dir(sid) / "inputs"
+
+        gp_ext = Path(gp_entry.name).suffix or ".mp4"
+        cam_ext = Path(cam_entry.name).suffix or ".mp4"
+        gp_dst = sdir / f"gameplay{gp_ext}"
+        cam_dst = sdir / f"camara{cam_ext}"
+
+        dl_msg = f"Descargando {gp_entry.name} y {cam_entry.name} desde Drive…"
+        self.events.publish("session_state", session_id=sid, state="NEW", message=dl_msg)
+        self.events.publish("stage_progress", session_id=sid, stage="download", progress=0.02, message=dl_msg)
+
+        try:
+            gp_local, cam_local = await asyncio.gather(
+                self.api_pool.run_download(lambda e=gp_entry, d=gp_dst: self.drive.download_resumable(e, d)),  # type: ignore[union-attr]
+                self.api_pool.run_download(lambda e=cam_entry, d=cam_dst: self.drive.download_resumable(e, d)),  # type: ignore[union-attr]
+            )
+        except Exception as exc:
+            self._set_state(sid, SessionState.FAILED, message="Error descargando desde Drive", error=str(exc))
+            raise
+
+        self.db.update_session(
+            sid,
+            gameplay_path=str(gp_local.resolve()),
+            camera_path=str(cam_local.resolve()),
+            state=SessionState.DOWNLOADED.value,
+        )
+        self.events.publish("session_state", session_id=sid, state="DOWNLOADED", message="Grabación descargada")
+        if auto_start:
+            self.launch_session(sid)
+        return self.db.get_session(sid) or ses
 
     # --- Session Execution -------------------------------------------------
 
@@ -646,7 +743,13 @@ class Orchestrator:
         self.db.update_clip(clip_id, **{field_key: str(mp4_path.resolve()), "state": new_state})
 
         # Upload or replace in Salidas/<grabación>/ when rendering 1080p final
-        if quality == "final" and upload_to_drive and self.drive is not None:
+        can_upload_drive = (
+            quality == "final"
+            and upload_to_drive
+            and self.drive is not None
+            and not (isinstance(self.drive, GoogleDriveOAuthConnector) and not self.drive.is_connected())
+        )
+        if can_upload_drive and self.drive is not None:
             rec_name = ses_row.get("recording_name") or ses_row.get("title") or sid
             slug = _clip_slug(int(clip_row.get("rank_order") or 1), clip_id)
             overlay_title = plan.overlays[0].text if plan.overlays else clip_row["overlay_title"]

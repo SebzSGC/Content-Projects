@@ -10,19 +10,27 @@ import {
   DollarSign,
   Eye,
   EyeOff,
+  FolderSync,
   KeyRound,
+  Link2,
   Mic,
   RefreshCw,
   Save,
   ShieldCheck,
   Sparkles,
+  Unlink,
   Wifi,
 } from "lucide-react";
 import {
   type AppSettings,
   type BudgetSummary,
+  type DriveStatus,
   type TestConnectionResult,
+  completeDriveAuthCallback,
+  disconnectDriveAuth,
   fetchBudget,
+  fetchDriveAuthUrl,
+  fetchDriveStatus,
   getSettings,
   saveSettings,
   testSettingsConnection,
@@ -54,6 +62,7 @@ const OPENAI_COMPAT_MODELS = [
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [budget, setBudget] = useState<BudgetSummary | null>(null);
+  const [driveStatus, setDriveStatus] = useState<DriveStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +84,16 @@ export default function SettingsPage() {
   const [webhookUrl, setWebhookUrl] = useState<string>("");
   const [tempTtlDays, setTempTtlDays] = useState<number>(7.0);
 
+  // Google Drive OAuth 2.0 & Watcher state
+  const [driveMode, setDriveMode] = useState<"local" | "oauth" | "service_account" | "disabled">("local");
+  const [driveClientId, setDriveClientId] = useState("");
+  const [driveClientSecret, setDriveClientSecret] = useState("");
+  const [driveRootFolderId, setDriveRootFolderId] = useState("");
+  const [driveLocalDir, setDriveLocalDir] = useState("");
+  const [drivePollSec, setDrivePollSec] = useState<number>(120);
+  const [driveAuthCode, setDriveAuthCode] = useState("");
+  const [connectingDrive, setConnectingDrive] = useState(false);
+
   // API key inputs (kept blank unless the user types a new key; placeholder shows masked value)
   const [deepgramKey, setDeepgramKey] = useState("");
   const [groqKey, setGroqKey] = useState("");
@@ -87,6 +106,7 @@ export default function SettingsPage() {
     groq: false,
     gemini: false,
     openai: false,
+    driveSecret: false,
   });
 
   // Per-provider test connection state
@@ -114,15 +134,25 @@ export default function SettingsPage() {
     setMaxBudgetUsd(s.max_budget_usd);
     setWebhookUrl(s.webhook_url || "");
     setTempTtlDays(s.temp_ttl_days ?? 7.0);
+    setDriveMode(s.drive_mode || "local");
+    setDriveClientId(s.drive_client_id || "");
+    setDriveRootFolderId(s.drive_root_folder_id || "");
+    setDriveLocalDir(s.drive_local_dir || "");
+    setDrivePollSec(s.drive_poll_sec ?? 120);
   }, []);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [s, b] = await Promise.all([getSettings(), fetchBudget()]);
+      const [s, b, d] = await Promise.all([
+        getSettings(),
+        fetchBudget(),
+        fetchDriveStatus().catch(() => null),
+      ]);
       applyLoadedSettings(s);
       setBudget(b);
+      setDriveStatus(d);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo cargar la configuración del servidor.");
     } finally {
@@ -133,6 +163,17 @@ export default function SettingsPage() {
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  useEffect(() => {
+    const onMsg = (ev: MessageEvent) => {
+      if (ev.data && typeof ev.data === "object" && ev.data.type === "drive_oauth_connected") {
+        showToast("ok", "Cuenta de Google Drive vinculada por OAuth 2.0.");
+        loadAll();
+      }
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [loadAll, showToast]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,6 +193,12 @@ export default function SettingsPage() {
         max_budget_usd: Number(maxBudgetUsd) || 9.0,
         webhook_url: webhookUrl.trim(),
         temp_ttl_days: Number(tempTtlDays) >= 0 ? Number(tempTtlDays) : 7.0,
+        drive_mode: driveMode,
+        drive_client_id: driveClientId.trim(),
+        drive_client_secret: driveClientSecret.trim() || undefined,
+        drive_root_folder_id: driveRootFolderId.trim(),
+        drive_local_dir: driveLocalDir.trim() || undefined,
+        drive_poll_sec: Number(drivePollSec) >= 0 ? Number(drivePollSec) : 120,
         deepgram_api_key: deepgramKey.trim() || undefined,
         groq_api_key: groqKey.trim() || undefined,
         gemini_api_key: geminiKey.trim() || undefined,
@@ -162,8 +209,13 @@ export default function SettingsPage() {
       setGroqKey("");
       setGeminiKey("");
       setOpenaiKey("");
-      const freshBudget = await fetchBudget();
+      setDriveClientSecret("");
+      const [freshBudget, freshDrive] = await Promise.all([
+        fetchBudget(),
+        fetchDriveStatus().catch(() => null),
+      ]);
       setBudget(freshBudget);
+      setDriveStatus(freshDrive);
       showToast("ok", "Configuración guardada en .env y aplicada en memoria.");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error al guardar la configuración";
@@ -171,6 +223,65 @@ export default function SettingsPage() {
       showToast("err", msg);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleStartDriveOAuth = async () => {
+    setConnectingDrive(true);
+    setError(null);
+    try {
+      // Save current Drive OAuth credentials first so the backend has Client ID & Secret
+      const updated = await saveSettings({
+        drive_mode: "oauth",
+        drive_client_id: driveClientId.trim(),
+        drive_client_secret: driveClientSecret.trim() || undefined,
+        drive_root_folder_id: driveRootFolderId.trim(),
+      });
+      applyLoadedSettings(updated);
+      setDriveClientSecret("");
+      const res = await fetchDriveAuthUrl();
+      window.open(res.auth_url, "_blank", "noopener,noreferrer,width=560,height=680");
+      showToast("ok", "Ventana de autorización de Google Drive abierta.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "No se pudo iniciar OAuth 2.0 con Google Drive.";
+      setError(msg);
+      showToast("err", msg);
+    } finally {
+      setConnectingDrive(false);
+    }
+  };
+
+  const handleExchangeDriveCode = async () => {
+    if (!driveAuthCode.trim()) return;
+    setConnectingDrive(true);
+    setError(null);
+    try {
+      await completeDriveAuthCallback(driveAuthCode.trim());
+      setDriveAuthCode("");
+      await loadAll();
+      showToast("ok", "Google Drive conectado y token guardado en data/drive_oauth_token.json.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error al canjear código OAuth de Google Drive.";
+      setError(msg);
+      showToast("err", msg);
+    } finally {
+      setConnectingDrive(false);
+    }
+  };
+
+  const handleDisconnectDrive = async () => {
+    setConnectingDrive(true);
+    setError(null);
+    try {
+      await disconnectDriveAuth();
+      await loadAll();
+      showToast("ok", "Cuenta de Google Drive desconectada.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error al desconectar Google Drive.";
+      setError(msg);
+      showToast("err", msg);
+    } finally {
+      setConnectingDrive(false);
     }
   };
 
@@ -819,6 +930,203 @@ export default function SettingsPage() {
                 <p className="mt-1.5 text-xs text-slate-400">
                   Opcional (Discord, Slack o HTTP JSON) al finalizar la subida a <code>Salidas/</code>.
                 </p>
+              </div>
+            </div>
+          </GlassCard>
+
+          {/* 4. SECCIÓN CONEXIÓN DIRECTA A GOOGLE DRIVE (OAUTH 2.0 / SERVICIO / LOCAL) */}
+          <GlassCard as="section" className="p-6 sm:p-7">
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+              <div className="flex items-center gap-3.5">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-400/15 text-sky-300">
+                  <FolderSync className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="text-lg font-extrabold text-slate-50">
+                    4. Conexión Directa a Google Drive (OAuth 2.0 y Explorador)
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Vincula tu cuenta personal o Workspace por OAuth 2.0 (`data/drive_oauth_token.json`) para explorar
+                    carpetas y elegir `gameplay` + `camara` en 1 clic, o usa Cuenta de Servicio / espejo local.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {driveStatus?.oauth_connected || settings?.drive_oauth_connected ? (
+                  <Badge tone="success">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> OAuth Conectado
+                    {driveStatus?.user_email ? ` (${driveStatus.user_email})` : ""}
+                  </Badge>
+                ) : (
+                  <Badge tone="neutral">Modo actual: {driveMode}</Badge>
+                )}
+              </div>
+            </div>
+
+            <div className="grid gap-5 md:grid-cols-3">
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-slate-300">
+                  Modo de Conexión Drive (<code className="text-amber-300">CLIPS_DRIVE_MODE</code>)
+                </label>
+                <select
+                  value={driveMode}
+                  onChange={(e) =>
+                    setDriveMode(e.target.value as "local" | "oauth" | "service_account" | "disabled")
+                  }
+                  className={inputBase}
+                >
+                  <option value="oauth">oauth — Conexión directa OAuth 2.0 (Cuenta de Google)</option>
+                  <option value="local">local — Espejo local / Google Drive for Desktop</option>
+                  <option value="service_account">service_account — Cuenta de Servicio JSON</option>
+                  <option value="disabled">disabled — Deshabilitado</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-slate-300">
+                  Carpeta Raíz en Drive (<code className="text-slate-400">CLIPS_DRIVE_ROOT_FOLDER_ID</code>)
+                </label>
+                <input
+                  type="text"
+                  value={driveRootFolderId}
+                  onChange={(e) => setDriveRootFolderId(e.target.value)}
+                  placeholder="root (Mi unidad) o ID de carpeta"
+                  className={`${inputBase} font-mono text-xs`}
+                />
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Deja vacío o <code>root</code> en OAuth para explorar desde &quot;Mi unidad&quot;.
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-slate-300">
+                  Intervalo de Vigilancia (<code className="text-slate-400">CLIPS_DRIVE_POLL_SEC</code>)
+                </label>
+                <input
+                  type="number"
+                  step="10"
+                  min="5"
+                  max="86400"
+                  value={drivePollSec}
+                  onChange={(e) => setDrivePollSec(parseFloat(e.target.value) || 120)}
+                  className={`${inputBase} font-mono`}
+                />
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Segundos entre revisiones automáticas de <code>Entradas/</code>.
+                </p>
+              </div>
+            </div>
+
+            {/* Credenciales OAuth 2.0 */}
+            <div className="mt-6 grid gap-5 md:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-5">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <KeyRound className="h-4 w-4 text-sky-300" />
+                    <span className="text-xs font-extrabold text-slate-100">CLIPS_DRIVE_CLIENT_ID</span>
+                  </div>
+                  <Badge tone={driveClientId.trim() ? "info" : "neutral"}>
+                    {driveClientId.trim() ? "Configurado" : "Requerido para OAuth"}
+                  </Badge>
+                </div>
+                <input
+                  type="text"
+                  value={driveClientId}
+                  onChange={(e) => setDriveClientId(e.target.value)}
+                  placeholder="1234567890-abc.apps.googleusercontent.com"
+                  autoComplete="off"
+                  className={`${inputBase} font-mono text-xs`}
+                />
+                <p className="mt-2 text-[11px] text-slate-400">
+                  Redirect URI autorizado en Google Cloud Console:{" "}
+                  <code className="text-slate-200">http://127.0.0.1:8790/drive/auth/callback</code>
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-5">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <KeyRound className="h-4 w-4 text-amber-300" />
+                    <span className="text-xs font-extrabold text-slate-100">CLIPS_DRIVE_CLIENT_SECRET</span>
+                  </div>
+                  {renderKeyStatusBadge(
+                    Boolean(settings?.has_drive_client_secret),
+                    settings?.drive_client_secret || "",
+                    driveClientSecret
+                  )}
+                </div>
+                <div className="relative flex items-center">
+                  <input
+                    type={showKey.driveSecret ? "text" : "password"}
+                    value={driveClientSecret}
+                    onChange={(e) => setDriveClientSecret(e.target.value)}
+                    placeholder={
+                      settings?.has_drive_client_secret
+                        ? `Secreto guardado (${settings.drive_client_secret}) — escribe para reemplazar`
+                        : "Pega tu Client Secret de Google OAuth (ej. GOCSPX-...)"
+                    }
+                    autoComplete="off"
+                    className={`${inputBase} pr-10 font-mono text-xs`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKey((p) => ({ ...p, driveSecret: !p.driveSecret }))}
+                    title={showKey.driveSecret ? "Ocultar secreto" : "Mostrar secreto"}
+                    className="absolute right-3 text-slate-400 transition hover:text-slate-100 cursor-pointer"
+                  >
+                    {showKey.driveSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                <p className="mt-2 text-[11px] text-slate-400">
+                  El <code>refresh_token</code> se guarda localmente en <code>data/drive_oauth_token.json</code>.
+                </p>
+              </div>
+            </div>
+
+            {/* Acciones de vinculación OAuth 2.0 */}
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleStartDriveOAuth}
+                  disabled={connectingDrive}
+                  className={btnPrimary}
+                >
+                  {connectingDrive ? <SoftSpinner className="h-4 w-4" onAccent /> : <Link2 className="h-4 w-4" />}
+                  {driveStatus?.oauth_connected || settings?.drive_oauth_connected
+                    ? "Reconectar Google Drive (OAuth 2.0)"
+                    : "Conectar con Google Drive (OAuth 2.0)"}
+                </button>
+
+                {(driveStatus?.oauth_connected || settings?.drive_oauth_connected) && (
+                  <button
+                    type="button"
+                    onClick={handleDisconnectDrive}
+                    disabled={connectingDrive}
+                    className={btnSecondary}
+                  >
+                    <Unlink className="h-4 w-4 text-rose-300" />
+                    Desconectar cuenta
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={driveAuthCode}
+                  onChange={(e) => setDriveAuthCode(e.target.value)}
+                  placeholder="O pega código OAuth manual..."
+                  className="w-52 rounded-xl border border-white/10 bg-slate-900 px-3 py-1.5 font-mono text-xs text-slate-200 placeholder:text-slate-500 focus:border-amber-300/60 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleExchangeDriveCode}
+                  disabled={connectingDrive || !driveAuthCode.trim()}
+                  className={`${btnSecondary} !px-3.5 !py-1.5 !text-xs`}
+                >
+                  Canjear código
+                </button>
               </div>
             </div>
           </GlassCard>
