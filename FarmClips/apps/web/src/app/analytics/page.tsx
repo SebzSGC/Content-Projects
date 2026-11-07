@@ -32,10 +32,186 @@ import {
   fetchAnalyticsSummary,
   type AnalyticsAlertStatus,
   type AnalyticsBreakdown,
+  type AnalyticsFreeTierModel,
   type AnalyticsLogsResponse,
   type AnalyticsSummary,
   useServerEvents,
 } from "@/lib/api/client";
+
+function formatCompactMetric(val: number): string {
+  if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(2).replace(/\.00$/, "")}M`;
+  if (val >= 1_000) return `${(val / 1_000).toFixed(2).replace(/\.00$/, "")}K`;
+  return Number.isInteger(val) ? String(val) : val.toFixed(1);
+}
+
+function AiStudioProgressCell({
+  used,
+  limit,
+  formatValue,
+}: {
+  used: number;
+  limit: number;
+  formatValue?: (v: number) => string;
+}) {
+  const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
+  const fmt = formatValue ?? ((v: number) => String(v));
+  const isHigh = pct >= 85;
+  const isMid = pct >= 50 && pct < 85;
+  const dotColor = isHigh ? "bg-rose-400 ring-rose-400/40" : isMid ? "bg-amber-400 ring-amber-400/40" : "bg-slate-100 ring-white/30";
+  const fillColor = isHigh ? "bg-rose-400/80" : isMid ? "bg-amber-400/80" : "bg-emerald-400/80";
+
+  return (
+    <div className="flex items-center gap-3">
+      <div className="relative h-1.5 w-24 rounded-full bg-white/10">
+        <div className={`h-full rounded-full transition-all duration-500 ${fillColor}`} style={{ width: `${pct}%` }} />
+        <span
+          className={`absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 transition-all duration-500 ${dotColor}`}
+          style={{ left: `${Math.max(3, Math.min(97, pct))}%` }}
+        />
+      </div>
+      <span className="whitespace-nowrap font-mono text-xs font-bold text-slate-200">
+        {fmt(used)} <span className="font-normal text-slate-400">/ {fmt(limit)}</span>
+      </span>
+    </div>
+  );
+}
+
+function AiStudioPeakChartCard({
+  title,
+  limit,
+  peakValue,
+  series,
+  formatAxis,
+}: {
+  title: string;
+  limit: number;
+  peakValue: number;
+  series: { label: string; value: number }[];
+  formatAxis: (v: number) => string;
+}) {
+  const width = 320;
+  const height = 140;
+  const padLeft = 12;
+  const padRight = 38;
+  const padTop = 22;
+  const padBottom = 26;
+  const plotW = width - padLeft - padRight;
+  const plotH = height - padTop - padBottom;
+
+  const yMax = Math.max(limit * 1.15, peakValue * 1.15, 1);
+  const yFor = (val: number) => padTop + plotH - Math.min(1, Math.max(0, val / yMax)) * plotH;
+  const limitY = yFor(limit);
+  const baselineY = yFor(0);
+
+  const pts = series.length > 0 ? series : [{ label: "00:00", value: 0 }, { label: "Ahora", value: peakValue }];
+  const coords = pts.map((p, idx) => {
+    const x = padLeft + (idx / Math.max(1, pts.length - 1)) * plotW;
+    const y = yFor(p.value);
+    return { x, y, label: p.label, value: p.value };
+  });
+
+  const linePath = coords.map((c, i) => `${i === 0 ? "M" : "L"}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(" ");
+  const areaPath = `${linePath} L${coords[coords.length - 1].x.toFixed(1)},${baselineY.toFixed(1)} L${coords[0].x.toFixed(1)},${baselineY.toFixed(1)} Z`;
+  const lastPt = coords[coords.length - 1];
+  const pctOfLimit = limit > 0 ? ((peakValue / limit) * 100).toFixed(1) : "0.0";
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-slate-950/75 p-4 shadow-inner">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-xs font-bold text-slate-200">{title}</span>
+        <span className="rounded-md bg-white/5 px-2 py-0.5 font-mono text-[11px] font-bold text-emerald-300">
+          Pico: {formatAxis(peakValue)} ({pctOfLimit}%)
+        </span>
+      </div>
+
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-36 w-full overflow-visible">
+        {/* Horizontal grid lines */}
+        {[0, 0.5, 1].map((step) => {
+          const val = limit * step;
+          const y = yFor(val);
+          return (
+            <g key={step}>
+              <line
+                x1={padLeft}
+                y1={y}
+                x2={padLeft + plotW}
+                y2={y}
+                stroke="rgba(255,255,255,0.06)"
+                strokeWidth="1"
+              />
+              <text
+                x={padLeft + plotW + 6}
+                y={y + 3}
+                fill="rgba(148,163,184,0.85)"
+                fontSize="9"
+                fontFamily="monospace"
+              >
+                {formatAxis(val)}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Red dashed Free-Tier Limit line + "Limit" pill (AI Studio style) */}
+        <line
+          x1={padLeft}
+          y1={limitY}
+          x2={padLeft + plotW}
+          y2={limitY}
+          stroke="#f43f5e"
+          strokeWidth="1.5"
+          strokeDasharray="3 3"
+        />
+        <rect x={padLeft} y={limitY - 8} width="28" height="13" rx="3" fill="#e11d48" />
+        <text x={padLeft + 14} y={limitY + 1} textAnchor="middle" fill="#ffffff" fontSize="8" fontWeight="bold">
+          Limit
+        </text>
+
+        {/* Area under usage curve */}
+        <path d={areaPath} fill="rgba(56, 189, 248, 0.18)" />
+        {/* Usage curve */}
+        <path d={linePath} fill="none" stroke="#e2e8f0" strokeWidth="1.6" strokeLinejoin="round" />
+
+        {/* End dot */}
+        {lastPt && (
+          <circle
+            cx={lastPt.x}
+            cy={lastPt.y}
+            r="3"
+            fill="#38bdf8"
+            stroke="#0f172a"
+            strokeWidth="1.5"
+          />
+        )}
+
+        {/* X axis labels */}
+        <text x={padLeft} y={height - 6} fill="rgba(148,163,184,0.8)" fontSize="9" fontFamily="monospace">
+          -24h ({coords[0]?.label})
+        </text>
+        <text
+          x={padLeft + plotW / 2}
+          y={height - 6}
+          textAnchor="middle"
+          fill="rgba(148,163,184,0.7)"
+          fontSize="9"
+          fontFamily="monospace"
+        >
+          {coords[Math.floor(coords.length / 2)]?.label}
+        </text>
+        <text
+          x={padLeft + plotW}
+          y={height - 6}
+          textAnchor="end"
+          fill="rgba(226,232,240,0.9)"
+          fontSize="9"
+          fontFamily="monospace"
+        >
+          Hoy ({lastPt?.label})
+        </text>
+      </svg>
+    </div>
+  );
+}
 
 const PROVIDER_META: Record<
   string,
@@ -176,6 +352,7 @@ export default function AnalyticsDashboardPage() {
   // Interactive Cost Simulator state
   const [simHours, setSimHours] = useState<number>(2.0);
   const [simProfile, setSimProfile] = useState<"empirical" | "deepgram_gemini" | "groq_gemini">("empirical");
+  const [selectedFreeTierModelId, setSelectedFreeTierModelId] = useState<string>("gemini-3.5-flash-lite");
 
   const loadAnalytics = useCallback(
     async (isManualRefresh = false) => {
@@ -615,6 +792,193 @@ export default function AnalyticsDashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* 2b. Comparativa de Consumo Actual vs Capa Gratuita (Estilo Google AI Studio Rate Limit & Free Tier) */}
+      {summary?.free_tier && summary.free_tier.models.length > 0 && (() => {
+        const ftModels = summary.free_tier.models;
+        const activeFt: AnalyticsFreeTierModel =
+          ftModels.find((m) => m.id === selectedFreeTierModelId) ?? ftModels[0];
+
+        return (
+          <div className="mb-8 rounded-3xl border border-white/10 bg-slate-900/80 p-6 shadow-xl">
+            {/* Top Bar — AI Studio Style */}
+            <div className="flex flex-col justify-between gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-center">
+              <div>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h2 className="text-lg font-black tracking-tight text-slate-50">
+                    Límites y Progreso frente a Capa Gratuita (API Rate Limits)
+                  </h2>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/35 bg-emerald-500/15 px-3 py-0.5 text-xs font-extrabold text-emerald-300">
+                    <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
+                    Free tier activo
+                  </span>
+                  <span className="rounded-lg border border-white/10 bg-slate-950/80 px-2.5 py-0.5 font-mono text-[11px] text-slate-300">
+                    Rango: Último 1 Día (24h)
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-slate-400">
+                  Uso pico por modelo comparado contra el límite de tu capa gratuita (RPM, TPM y RPD), idéntico al monitor de Google AI Studio.
+                </p>
+              </div>
+
+              {/* Selector de modelo para las gráficas de tendencia */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-400">Modelo en gráficas:</span>
+                <select
+                  value={activeFt.id}
+                  onChange={(e) => setSelectedFreeTierModelId(e.target.value)}
+                  aria-label="Seleccionar modelo para gráficas de capa gratuita"
+                  className="rounded-xl border border-white/15 bg-slate-950 px-3 py-1.5 text-xs font-bold text-slate-100 focus:border-amber-400 focus:outline-none"
+                >
+                  {ftModels.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.display_name} ({m.tier_name})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Rate limits by model table */}
+            <div className="mt-5 overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-white/10 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    <th className=" pb-3 pr-4">Modelo</th>
+                    <th className="px-4 pb-3">Categoría / Plan</th>
+                    <th className="px-4 pb-3" title="Peticiones pico por minuto vs límite gratuito">
+                      RPM ↓ (Peticiones/min)
+                    </th>
+                    <th className="px-4 pb-3" title="Tokens de entrada o segundos de audio pico por minuto">
+                      TPM / Audio por min
+                    </th>
+                    <th className="px-4 pb-3" title="Peticiones acumuladas en el día vs cuota diaria gratuita">
+                      RPD (Peticiones/día)
+                    </th>
+                    <th className="pl-4 pb-3 text-right">Estado en Capa Gratuita</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {ftModels.map((m) => {
+                    const isSelected = m.id === activeFt.id;
+                    return (
+                      <tr
+                        key={m.id}
+                        onClick={() => setSelectedFreeTierModelId(m.id)}
+                        className={`cursor-pointer transition-colors ${
+                          isSelected ? "bg-white/[0.06]" : "hover:bg-white/[0.03]"
+                        }`}
+                      >
+                        <td className="whitespace-nowrap py-3.5 pr-4">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`h-2 w-2 rounded-full ${
+                                isSelected ? "bg-amber-400" : "bg-slate-600"
+                              }`}
+                            />
+                            <span className="font-bold text-slate-100">{m.display_name}</span>
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3.5 text-slate-400">
+                          <div>{m.category}</div>
+                          <div className="text-[10px] font-semibold text-slate-500">{m.tier_name}</div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <AiStudioProgressCell used={m.rpm.peak} limit={m.rpm.limit} />
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <AiStudioProgressCell
+                            used={m.tpm.peak}
+                            limit={m.tpm.limit}
+                            formatValue={formatCompactMetric}
+                          />
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <AiStudioProgressCell
+                            used={m.rpd.used}
+                            limit={m.rpd.limit}
+                            formatValue={formatCompactMetric}
+                          />
+                        </td>
+                        <td className="whitespace-nowrap py-3.5 pl-4 text-right">
+                          {m.zero_cost_in_free_tier && m.within_free_tier ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2.5 py-1 font-mono text-[11px] font-bold text-emerald-300">
+                              100% Cubierto · $0.00
+                            </span>
+                          ) : m.credit.limit_usd > 0 ? (
+                            <div className="inline-flex flex-col items-end">
+                              <span className="font-mono text-xs font-bold text-emerald-300">
+                                ${m.credit.remaining_usd.toFixed(2)} / ${m.credit.limit_usd.toFixed(0)} libres
+                              </span>
+                              <span className="text-[10px] text-slate-400">
+                                Usado {m.credit.pct.toFixed(2)}% del crédito gratis
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="rounded-full bg-amber-500/15 px-2.5 py-1 font-mono text-[11px] font-bold text-amber-300">
+                              Pay-as-you-go
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 3 Peak usage trends charts with red dashed Limit line (AI Studio style) */}
+            <div className="mt-6 border-t border-white/10 pt-5">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-slate-300">
+                    Tendencias de Uso Pico vs Límite de Capa Gratuita
+                  </span>
+                  <span className="rounded-md bg-amber-400/15 px-2 py-0.5 font-mono text-xs font-bold text-amber-300">
+                    {activeFt.display_name}
+                  </span>
+                </div>
+                <span className="text-[11px] text-slate-400">
+                  La línea punteada roja (<span className="font-bold text-rose-400">Limit</span>) marca el tope de la capa gratuita.
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                {/* Chart 1: Peak RPM */}
+                <AiStudioPeakChartCard
+                  title="Peak requests per minute (RPM)"
+                  limit={activeFt.rpm.limit}
+                  peakValue={activeFt.rpm.peak}
+                  series={activeFt.timeline_24h.map((p) => ({ label: p.label, value: p.peak_rpm }))}
+                  formatAxis={(v) => String(Math.round(v))}
+                />
+
+                {/* Chart 2: Peak TPM / Audio per min */}
+                <AiStudioPeakChartCard
+                  title={
+                    activeFt.tpm.unit === "tok"
+                      ? "Peak input tokens per minute (TPM)"
+                      : "Pico de audio procesado por minuto (seg)"
+                  }
+                  limit={activeFt.tpm.limit}
+                  peakValue={activeFt.tpm.peak}
+                  series={activeFt.timeline_24h.map((p) => ({ label: p.label, value: p.peak_tpm }))}
+                  formatAxis={formatCompactMetric}
+                />
+
+                {/* Chart 3: Peak RPD */}
+                <AiStudioPeakChartCard
+                  title="Peak requests per day (RPD)"
+                  limit={activeFt.rpd.limit}
+                  peakValue={activeFt.rpd.used}
+                  series={activeFt.timeline_24h.map((p) => ({ label: p.label, value: p.cumulative_rpd }))}
+                  formatAxis={formatCompactMetric}
+                />
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 3. Visual Breakdown (Providers + Tokens/Calls) & Interactive Cost Simulator */}
       <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-12">

@@ -478,6 +478,7 @@ class OrchestratorDB:
 
             est_remaining_hours = round(remaining_usd / max(0.0001, avg_cost_per_hour), 2)
             est_remaining_clips = int(remaining_usd / max(0.0001, avg_cost_per_clip))
+            free_tier = self._compute_free_tier_comparison()
 
             return {
                 "spent_usd": spent_usd,
@@ -510,7 +511,176 @@ class OrchestratorDB:
                     "estimated_remaining_stream_hours": est_remaining_hours,
                     "estimated_remaining_clips": est_remaining_clips,
                 },
+                "free_tier": free_tier,
             }
+
+    def _compute_free_tier_comparison(self) -> Dict[str, Any]:
+        """Compute Google AI Studio style rate-limit & free-tier quota comparison (RPM, TPM, RPD, and 24h trend)."""
+        rows = self._conn.execute(
+            """SELECT provider, model, kind, units_billed, input_tokens, output_tokens, cost_usd, created_at
+               FROM api_calls
+               ORDER BY created_at ASC"""
+        ).fetchall()
+
+        now_ts = time.time()
+        max_call_ts = max((float(r["created_at"] or 0.0) for r in rows), default=now_ts)
+        ref_ts = max(now_ts, max_call_ts)
+        window_start = ref_ts - 86400.0  # Last 24h window
+
+        # Pre-build 24 hourly buckets ending at ref_ts hour
+        ref_hour_epoch = int(ref_ts // 3600) * 3600
+        hour_epochs = [ref_hour_epoch - (23 - i) * 3600 for i in range(24)]
+
+        specs = [
+            {
+                "id": "gemini-3.5-flash-lite",
+                "provider": "gemini",
+                "model": "gemini-3.5-flash-lite",
+                "display_name": "Gemini 3.5 Flash Lite",
+                "category": "Text-out models (Curación LLM)",
+                "tier_name": "Google AI Studio · Free Tier",
+                "rpm_limit": 15,
+                "tpm_limit": 250000,
+                "tpm_label": "TPM (Tokens entrada/min)",
+                "tpm_unit": "tok",
+                "rpd_limit": 500,
+                "free_credit_usd": 0.0,
+                "zero_cost_in_free_tier": True,
+            },
+            {
+                "id": "nova-3",
+                "provider": "deepgram",
+                "model": "nova-3",
+                "display_name": "Deepgram Nova-3",
+                "category": "Speech-to-Text (Audio Opus)",
+                "tier_name": "Deepgram · $200 Free Credit",
+                "rpm_limit": 100,
+                "tpm_limit": 36000,  # segundos audio / min capacidad ráfaga
+                "tpm_label": "Audio/min (Segundos/min)",
+                "tpm_unit": "seg",
+                "rpd_limit": 5000,
+                "free_credit_usd": 200.0,
+                "zero_cost_in_free_tier": False,
+            },
+            {
+                "id": "whisper-large-v3-turbo",
+                "provider": "groq",
+                "model": "whisper-large-v3-turbo",
+                "display_name": "Groq Whisper v3 Turbo",
+                "category": "Speech-to-Text (Respaldo)",
+                "tier_name": "Groq Cloud · Free Tier",
+                "rpm_limit": 20,
+                "tpm_limit": 7200,
+                "tpm_label": "Audio/hora (Segundos)",
+                "tpm_unit": "seg",
+                "rpd_limit": 2000,
+                "free_credit_usd": 0.0,
+                "zero_cost_in_free_tier": True,
+            },
+        ]
+
+        models_out: List[Dict[str, Any]] = []
+        for sp in specs:
+            prov = sp["provider"]
+            matching = [r for r in rows if str(r["provider"]).lower() == prov]
+            recent_24h = [r for r in matching if float(r["created_at"] or 0.0) >= window_start]
+
+            # Group by minute bucket for peak RPM and peak TPM
+            min_rpm: Dict[int, int] = {}
+            min_tpm: Dict[int, float] = {}
+            for r in recent_24h:
+                m_bucket = int(float(r["created_at"] or 0.0) // 60)
+                min_rpm[m_bucket] = min_rpm.get(m_bucket, 0) + 1
+                val = float(r["input_tokens"] or 0) if sp["tpm_unit"] == "tok" else float(r["units_billed"] or 0.0)
+                min_tpm[m_bucket] = min_tpm.get(m_bucket, 0.0) + val
+
+            peak_rpm = max(min_rpm.values(), default=0)
+            peak_tpm = round(max(min_tpm.values(), default=0.0), 1)
+            rpd_used = len(recent_24h)
+            total_cost = round(sum(float(r["cost_usd"] or 0.0) for r in matching), 6)
+
+            # Build 24h hourly trend series
+            hourly_series: List[Dict[str, Any]] = []
+            running_rpd = 0
+            for h_ep in hour_epochs:
+                h_end = h_ep + 3600
+                h_rows = [r for r in recent_24h if h_ep <= float(r["created_at"] or 0.0) < h_end]
+                h_min_rpm: Dict[int, int] = {}
+                h_min_tpm: Dict[int, float] = {}
+                for r in h_rows:
+                    mb = int(float(r["created_at"] or 0.0) // 60)
+                    h_min_rpm[mb] = h_min_rpm.get(mb, 0) + 1
+                    v = float(r["input_tokens"] or 0) if sp["tpm_unit"] == "tok" else float(r["units_billed"] or 0.0)
+                    h_min_tpm[mb] = h_min_tpm.get(mb, 0.0) + v
+                running_rpd += len(h_rows)
+                try:
+                    lbl = datetime.fromtimestamp(h_ep).strftime("%H:%M")
+                except Exception:
+                    lbl = "00:00"
+                hourly_series.append(
+                    {
+                        "hour_epoch": h_ep,
+                        "label": lbl,
+                        "peak_rpm": max(h_min_rpm.values(), default=0),
+                        "peak_tpm": round(max(h_min_tpm.values(), default=0.0), 1),
+                        "requests": len(h_rows),
+                        "cumulative_rpd": running_rpd,
+                    }
+                )
+
+            rpm_limit = int(sp["rpm_limit"])
+            tpm_limit = float(sp["tpm_limit"])
+            rpd_limit = int(sp["rpd_limit"])
+            free_credit = float(sp["free_credit_usd"])
+
+            within_free = (
+                peak_rpm <= rpm_limit
+                and peak_tpm <= tpm_limit
+                and rpd_used <= rpd_limit
+                and (free_credit == 0.0 or total_cost <= free_credit)
+            )
+
+            models_out.append(
+                {
+                    "id": sp["id"],
+                    "provider": prov,
+                    "model": sp["model"],
+                    "display_name": sp["display_name"],
+                    "category": sp["category"],
+                    "tier_name": sp["tier_name"],
+                    "within_free_tier": within_free,
+                    "zero_cost_in_free_tier": bool(sp["zero_cost_in_free_tier"]),
+                    "rpm": {
+                        "peak": peak_rpm,
+                        "limit": rpm_limit,
+                        "pct": round(min(100.0, (peak_rpm / max(1, rpm_limit)) * 100.0), 2),
+                    },
+                    "tpm": {
+                        "peak": peak_tpm,
+                        "limit": tpm_limit,
+                        "pct": round(min(100.0, (peak_tpm / max(1.0, tpm_limit)) * 100.0), 2),
+                        "label": sp["tpm_label"],
+                        "unit": sp["tpm_unit"],
+                    },
+                    "rpd": {
+                        "used": rpd_used,
+                        "limit": rpd_limit,
+                        "pct": round(min(100.0, (rpd_used / max(1, rpd_limit)) * 100.0), 2),
+                    },
+                    "credit": {
+                        "limit_usd": free_credit,
+                        "used_usd": total_cost,
+                        "remaining_usd": round(max(0.0, free_credit - total_cost), 4) if free_credit > 0 else 0.0,
+                        "pct": round(min(100.0, (total_cost / free_credit) * 100.0), 3) if free_credit > 0 else 0.0,
+                    },
+                    "timeline_24h": hourly_series,
+                }
+            )
+
+        return {
+            "window_hours": 24,
+            "models": models_out,
+        }
 
     def analytics_breakdown(self) -> Dict[str, Any]:
         """Group API usage by provider, model, calendar day, and session."""

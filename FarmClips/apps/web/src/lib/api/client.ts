@@ -263,6 +263,55 @@ export interface AnalyticsProjections {
   estimated_remaining_clips: number;
 }
 
+export interface AnalyticsFreeTierPoint {
+  hour_epoch: number;
+  label: string;
+  peak_rpm: number;
+  peak_tpm: number;
+  requests: number;
+  cumulative_rpd: number;
+}
+
+export interface AnalyticsFreeTierModel {
+  id: string;
+  provider: string;
+  model: string;
+  display_name: string;
+  category: string;
+  tier_name: string;
+  within_free_tier: boolean;
+  zero_cost_in_free_tier: boolean;
+  rpm: {
+    peak: number;
+    limit: number;
+    pct: number;
+  };
+  tpm: {
+    peak: number;
+    limit: number;
+    pct: number;
+    label: string;
+    unit: string;
+  };
+  rpd: {
+    used: number;
+    limit: number;
+    pct: number;
+  };
+  credit: {
+    limit_usd: number;
+    used_usd: number;
+    remaining_usd: number;
+    pct: number;
+  };
+  timeline_24h: AnalyticsFreeTierPoint[];
+}
+
+export interface AnalyticsFreeTierComparison {
+  window_hours: number;
+  models: AnalyticsFreeTierModel[];
+}
+
 export interface AnalyticsSummary {
   spent_usd: number;
   stt_cost_usd: number;
@@ -285,6 +334,7 @@ export interface AnalyticsSummary {
   total_clips_curated: number;
   total_clips_rendered: number;
   projections: AnalyticsProjections;
+  free_tier?: AnalyticsFreeTierComparison;
 }
 
 export interface AnalyticsProviderItem {
