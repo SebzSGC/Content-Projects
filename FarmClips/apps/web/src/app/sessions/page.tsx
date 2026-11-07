@@ -343,18 +343,19 @@ export default function SessionsPage() {
             <Gamepad2 className="h-3.5 w-3.5" /> Estudio de clips
           </p>
           <h1 className="flex items-center gap-2 text-3xl font-black tracking-tight text-slate-50 sm:text-4xl">
-            Tus grabaciones, en Shorts
-            <InfoTip label="Cómo funciona">
-              Solo viaja a la nube audio Opus mono 16 kHz (~7 MB/h) y texto compacto. El video se queda en tu equipo:
-              sincronización FFT, tracking facial MediaPipe por clip, EditPlan v2 y render 1080×1920 a −14 LUFS.
+            Tus partidas, listas para Shorts
+            <InfoTip label="¿Por qué es rápido y económico?">
+              Tus videos pesados nunca suben a internet: se editan en tu propio equipo. A la nube solo enviamos una pista
+              de voz muy ligera para entender qué dijiste y elegir los mejores momentos.
             </InfoTip>
           </h1>
           <p className="mt-2 max-w-xl text-base text-slate-400">
-            Juego y cámara por separado entran; salen los mejores momentos listos para publicar.
+            Sube el video del juego y el de tu cámara: nosotros encontramos las mejores jugadas, centramos tu rostro y
+            agregamos subtítulos dinámicos automáticamente.
           </p>
         </div>
         <button type="button" onClick={fillGoldenPaths} className={btnSecondary}>
-          <Sparkles className="h-4 w-4 text-amber-300" /> Cargar grabación de prueba
+          <Sparkles className="h-4 w-4 text-amber-300" /> Probar con video de ejemplo
         </button>
       </header>
 
@@ -366,44 +367,49 @@ export default function SessionsPage() {
         {/* New session ----------------------------------------------------- */}
         <GlassCard as="form" onSubmit={handleCreateSession} className="space-y-5 p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-extrabold text-slate-50">Nueva sesión</h2>
+            <div>
+              <h2 className="text-lg font-extrabold text-slate-50">Crear nueva sesión</h2>
+              <p className="text-xs text-slate-400">Elige de dónde quieres tomar el video del juego y el de tu cámara.</p>
+            </div>
             <Segmented
               value={mode}
               onChange={setMode}
               options={[
-                { value: "local", label: <><HardDrive className="h-3.5 w-3.5" /> Rutas locales</> },
+                { value: "local", label: <><HardDrive className="h-3.5 w-3.5" /> En tu PC</> },
                 { value: "upload", label: <><Upload className="h-3.5 w-3.5" /> Subir archivos</> },
-                { value: "drive", label: <><FolderSync className="h-3.5 w-3.5" /> Desde Drive</> },
+                { value: "drive", label: <><FolderSync className="h-3.5 w-3.5" /> Google Drive</> },
               ]}
             />
           </div>
 
           <label className="block space-y-2">
             <span className="flex items-center gap-1 text-sm font-bold text-slate-200">
-              Nombre o juego de la grabación
-              <InfoTip>Ayuda a la transcripción (keyterms de Deepgram Nova-3) y a la IA que elige los momentos.</InfoTip>
+              ¿Qué jugaste en esta grabación?
+              <InfoTip>
+                Escribir el nombre del juego nos permite reconocer palabras propias de la partida (como armas, mapas o
+                jugadas) para que los subtítulos salgan bien escritos.
+              </InfoTip>
             </span>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Ej. Valorant Ranked — sesión de noche"
+              placeholder="Ej. Valorant Ranked — partida con amigos"
               className={inputBase}
             />
             {keytermsInfo && (
               <span className="flex flex-wrap items-center gap-1.5">
                 {keytermsInfo.detected_game ? (
                   <Badge tone="success">
-                    <Gamepad2 className="h-3 w-3" /> Juego detectado: {keytermsInfo.detected_game.toUpperCase()}
+                    <Gamepad2 className="h-3 w-3" /> Vocabulario de {keytermsInfo.detected_game.toUpperCase()} activado
                   </Badge>
                 ) : (
                   <Badge>Vocabulario general de gaming</Badge>
                 )}
-                <InfoTip label="Palabras clave">
-                  {keytermsInfo.resolved_keyterms.length} palabras clave para la transcripción:{" "}
-                  {keytermsInfo.resolved_keyterms.slice(0, 12).join(", ")}
-                  {keytermsInfo.resolved_keyterms.length > 12 ? "…" : ""}
-                  {!keytermsInfo.detected_game && " · Escribe el juego (Valorant, LoL, CS2, Fortnite…) para afinarla."}
+                <InfoTip label="¿Por qué sirve esto?">
+                  Reconoceremos automáticamente términos como{" "}
+                  {keytermsInfo.resolved_keyterms.slice(0, 8).join(", ")}
+                  {keytermsInfo.resolved_keyterms.length > 8 ? "…" : ""} para evitar errores en tus subtítulos.
                 </InfoTip>
               </span>
             )}
@@ -414,7 +420,7 @@ export default function SessionsPage() {
               <label className="block space-y-2">
                 <span className="flex items-center gap-1 text-sm font-bold text-slate-200">
                   Video del juego
-                  <InfoTip>gameplay.mp4 en 16:9, con el audio del juego o la mezcla.</InfoTip>
+                  <InfoTip>La grabación de tu pantalla (horizontal) donde se ven las jugadas y se oye el juego.</InfoTip>
                 </span>
                 <input
                   type="text"
@@ -426,8 +432,8 @@ export default function SessionsPage() {
               </label>
               <label className="block space-y-2">
                 <span className="flex items-center gap-1 text-sm font-bold text-slate-200">
-                  Video de la cámara
-                  <InfoTip>camara.mp4 con tu rostro y el micrófono limpio.</InfoTip>
+                  Video de tu cámara
+                  <InfoTip>La grabación de tu webcam con tu voz para destacar tus reacciones arriba del juego.</InfoTip>
                 </span>
                 <input
                   type="text"
@@ -441,7 +447,7 @@ export default function SessionsPage() {
           ) : mode === "upload" ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <FilePick label="Video del juego" file={gameplayFile} onPick={setGameplayFile} />
-              <FilePick label="Video de la cámara" file={cameraFile} onPick={setCameraFile} />
+              <FilePick label="Video de tu cámara" file={cameraFile} onPick={setCameraFile} />
             </div>
           ) : (
             <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-900/50 p-4">
@@ -638,12 +644,14 @@ export default function SessionsPage() {
 
           <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
             <span className="flex items-center gap-1 text-sm text-slate-400">
-              Estilo Hormozi Gaming
-              <InfoTip>Preset hormozi-gaming. Los 5 mejores clips con más de 60/100 se renderizan solos en 1080p.</InfoTip>
+              Formato vertical dinámico (9:16)
+              <InfoTip>
+                Los 5 mejores momentos se preparan solos con tu cámara arriba, el juego abajo y subtítulos animados.
+              </InfoTip>
             </span>
             <button type="submit" disabled={submitting} className={btnPrimary}>
               {submitting ? <SoftSpinner onAccent className="h-4 w-4" /> : <Play className="h-4 w-4 fill-current" />}
-              {mode === "drive" ? "Descargar de Drive y crear clips" : "Crear clips"}
+              {mode === "drive" ? "Descargar de Drive y buscar clips" : "Buscar mejores clips"}
             </button>
           </div>
         </GlassCard>
@@ -660,32 +668,34 @@ export default function SessionsPage() {
                   <Badge tone={drive.connected ? "success" : "neutral"}>
                     {drive.mode === "oauth"
                       ? drive.oauth_connected
-                        ? "OAuth conectado"
-                        : "OAuth sin vincular"
-                      : drive.mode}
+                        ? "Cuenta conectada"
+                        : "Sin vincular"
+                      : drive.mode === "local"
+                        ? "Carpeta local"
+                        : drive.mode}
                   </Badge>
                 )}
-                <InfoTip label="Cómo funciona Drive" align="end">
-                  Conecta tu cuenta por OAuth 2.0, Cuenta de Servicio o espejo local. Explora cualquier carpeta en la
-                  pestaña &quot;Desde Drive&quot; o vigila Entradas/&lt;grabación&gt;/ automáticamente.
+                <InfoTip label="¿Para qué sirve conectar Drive?" align="end">
+                  Te permite elegir tus grabaciones guardadas en la nube sin descargarlas a mano y recibir los clips
+                  terminados automáticamente en tu carpeta de Salidas.
                   {drive?.user_email ? ` · Cuenta: ${drive.user_email}` : ""}
                 </InfoTip>
               </div>
             </div>
             <p className="text-sm text-slate-400">
               {drive?.user_email
-                ? `Conectado como ${drive.user_email}. Elige cualquier carpeta en el explorador o usa Entradas/ → Salidas/.`
-                : "Elige videos directo desde el explorador interactivo de Drive o deja una carpeta en Entradas/."}
+                ? `Conectado con ${drive.user_email}. Explora tus carpetas o deja tus grabaciones en Entradas para procesarlas solas.`
+                : "Selecciona tus videos directo desde la nube o deja tus grabaciones en la carpeta Entradas."}
             </p>
             {drive && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-2xl bg-white/5 p-3 text-center">
                   <div className="text-2xl font-black text-slate-50">{drive.entradas.length}</div>
-                  <div className="text-xs font-semibold text-slate-400">En Entradas</div>
+                  <div className="text-xs font-semibold text-slate-400">Por procesar</div>
                 </div>
                 <div className="rounded-2xl bg-white/5 p-3 text-center">
                   <div className="text-2xl font-black text-slate-50">{drive.salidas.length}</div>
-                  <div className="text-xs font-semibold text-slate-400">Entregadas</div>
+                  <div className="text-xs font-semibold text-slate-400">Clips entregados</div>
                 </div>
               </div>
             )}
@@ -701,7 +711,7 @@ export default function SessionsPage() {
             </button>
             <button type="button" onClick={handlePollDrive} disabled={pollingDrive} className={`${btnSecondary} w-full`}>
               <RefreshCw className={`h-4 w-4 ${pollingDrive ? "animate-spin" : ""}`} />
-              Revisar Entradas ahora
+              Buscar grabaciones nuevas
             </button>
           </div>
         </GlassCard>
@@ -711,9 +721,10 @@ export default function SessionsPage() {
       <section className="space-y-4" aria-label="Sesiones">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <h2 className="text-xl font-black text-slate-50">Sesiones</h2>
+            <h2 className="text-xl font-black text-slate-50">Tus sesiones</h2>
             <p className="text-sm text-slate-400">
-              {sessions.length} en total{activeCount > 0 ? ` · ${activeCount} en proceso` : ""}
+              {sessions.length} {sessions.length === 1 ? "grabación" : "grabaciones"}
+              {activeCount > 0 ? ` · ${activeCount} en proceso ahora mismo` : ""}
             </p>
           </div>
           <button type="button" onClick={reload} className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold text-slate-400 transition-all duration-300 hover:bg-white/5 hover:text-slate-100">
@@ -732,11 +743,11 @@ export default function SessionsPage() {
             <span className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-400/10">
               <Gamepad2 className="h-7 w-7 text-amber-300" />
             </span>
-            <p className="text-lg font-extrabold text-slate-100">Todavía no hay sesiones</p>
+            <p className="text-lg font-extrabold text-slate-100">Aún no tienes sesiones</p>
             <p className="max-w-md text-sm text-slate-400">
-              Crea una arriba, deja una carpeta con los dos videos en Entradas/ o{" "}
+              Elige tus videos arriba para empezar o{" "}
               <button type="button" onClick={fillGoldenPaths} className="font-bold text-amber-300 hover:text-amber-200">
-                carga la grabación de prueba
+                prueba con nuestra grabación de ejemplo
               </button>
               .
             </p>
@@ -777,19 +788,17 @@ export default function SessionsPage() {
                         ) : liveMessages[s.id] && steps.running ? (
                           liveMessages[s.id]
                         ) : (
-                          `${s.clips_count} clips · ${s.rendered_count} listos en 1080p`
+                          `${s.clips_count} momentos encontrados · ${s.rendered_count} videos listos`
                         )}
                       </span>
                       <span className="flex items-center gap-1 text-xs text-slate-500">
-                        Detalles
-                        <InfoTip label="Detalles técnicos de la sesión" align="end">
-                          ID: <span className="font-mono">{s.id}</span>
-                          <br />
-                          Estado interno: {s.state}
+                        Info
+                        <InfoTip label="Resumen de la sesión" align="end">
+                          Código: <span className="font-mono">{s.id}</span>
                           {s.sync && (
                             <>
                               <br />
-                              Sync: {s.sync.method} ({s.sync.shift_sec >= 0 ? "+" : ""}
+                              Audio alineado automáticamente ({s.sync.shift_sec >= 0 ? "+" : ""}
                               {s.sync.shift_sec.toFixed(2)} s)
                             </>
                           )}
@@ -808,40 +817,40 @@ export default function SessionsPage() {
       <GlassCard as="section" className="p-6">
         <Disclosure
           icon={<Wrench className="h-5 w-5" />}
-          title="Mantenimiento y notificaciones"
-          subtitle={maint ? `Temporales: ${formatBytes(maint.temp_media_bytes)} · limpieza automática cada ${maint.temp_ttl_days} días` : "Limpieza de temporales y webhooks"}
+          title="Espacio en disco y avisos automáticos"
+          subtitle={maint ? `Archivos temporales: ${formatBytes(maint.temp_media_bytes)} · se limpian solos cada ${maint.temp_ttl_days} días` : "Liberar espacio y recibir avisos en Discord o Slack"}
         >
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div className="space-y-4">
               <h3 className="flex items-center gap-2 text-sm font-extrabold text-slate-200">
-                <Trash2 className="h-4 w-4 text-slate-400" /> Limpieza de temporales
+                <Trash2 className="h-4 w-4 text-slate-400" /> Liberar espacio en tu PC
                 <InfoTip>
-                  Borra los WAV/Opus intermedios de sesiones entregadas. Conserva Parquet, EditPlan, respuestas de la API y SQLite
-                  (la caché que evita volver a pagar).
+                  Borra pistas de audio intermedias que ya no se necesitan en sesiones terminadas, pero conserva tus
+                  videos finales y los análisis guardados para que nunca pagues dos veces por la misma grabación.
                 </InfoTip>
               </h3>
               {maint && (
                 <DetailList
                   items={[
-                    ["WAV/Opus temporales", formatBytes(maint.temp_media_bytes)],
-                    ["Renders MP4", formatBytes(maint.renders_bytes)],
-                    ["Caché protegida", formatBytes(maint.preserved_cache_bytes)],
-                    ["TTL automático", `${maint.temp_ttl_days ?? 7} días`],
+                    ["Pistas temporales borrables", formatBytes(maint.temp_media_bytes)],
+                    ["Videos terminados (MP4)", formatBytes(maint.renders_bytes)],
+                    ["Análisis guardados (ahorro)", formatBytes(maint.preserved_cache_bytes)],
+                    ["Limpieza automática", `Cada ${maint.temp_ttl_days ?? 7} días`],
                   ]}
                 />
               )}
               <button type="button" onClick={handleCleanupNow} disabled={cleaningUp} className={btnSecondary}>
                 {cleaningUp ? <SoftSpinner className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
-                Limpiar ahora
+                Liberar espacio ahora
               </button>
             </div>
 
             <div className="space-y-4">
               <h3 className="flex items-center gap-2 text-sm font-extrabold text-slate-200">
-                <Bell className="h-4 w-4 text-slate-400" /> Notificaciones (Discord / Slack / HTTP)
+                <Bell className="h-4 w-4 text-slate-400" /> Avisos en Discord o Slack
                 <InfoTip>
-                  Al terminar una sesión envía el resumen de los mejores clips con enlaces al editor.{" "}
-                  {maint?.webhook_configured ? "CLIPS_WEBHOOK_URL está configurada." : "Puedes probar una URL aquí."}
+                  Recibe un mensaje automático en tu servidor de Discord o Slack apenas tus clips estén listos para ver y
+                  descargar.
                 </InfoTip>
               </h3>
               <div className="flex gap-2">
@@ -854,7 +863,7 @@ export default function SessionsPage() {
                 />
                 <button type="button" onClick={handleTestWebhook} disabled={testingWebhook} className={`${btnSecondary} shrink-0`}>
                   {testingWebhook ? <SoftSpinner className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
-                  Probar
+                  Enviar prueba
                 </button>
               </div>
             </div>

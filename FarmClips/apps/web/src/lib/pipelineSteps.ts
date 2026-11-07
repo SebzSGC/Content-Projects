@@ -3,13 +3,13 @@ import type { PipelineStep, StepStatus } from "@/components/StepProgress";
 import type { SessionSummary } from "@/lib/api/client";
 
 export const PIPELINE_STEPS: PipelineStep[] = [
-  { key: "import", label: "Importar", hint: "Ingesta de gameplay.mp4 y camara.mp4 (local o Google Drive)" },
-  { key: "prepare", label: "Preparar audio", hint: "Audio Opus mono 16 kHz y sincronización cámara ↔ juego por FFT" },
-  { key: "transcribe", label: "Transcribir", hint: "STT de la voz y señales de emoción en Parquet" },
-  { key: "curate", label: "Elegir momentos", hint: "La IA elige los mejores tramos por IDs de frase" },
-  { key: "frame", label: "Encuadrar", hint: "Tracking facial MediaPipe por clip y EditPlan v2" },
-  { key: "render", label: "Renderizar", hint: "Render 1080×1920 con NVENC / libx264" },
-  { key: "deliver", label: "Entregado", hint: "Clips publicados en Salidas/" },
+  { key: "import", label: "Importar", hint: "Recibe el video del juego y el de tu cámara para trabajarlos juntos" },
+  { key: "prepare", label: "Sincronizar", hint: "Alinea tu voz con la partida para que cada reacción coincida a tiempo" },
+  { key: "transcribe", label: "Escuchar", hint: "Convierte lo que dices en texto y detecta dónde sube la emoción" },
+  { key: "curate", label: "Elegir momentos", hint: "Selecciona las jugadas más entretenidas y con mejor historia" },
+  { key: "frame", label: "Encuadrar", hint: "Centra tu cámara en formato vertical y recorta las pausas largas" },
+  { key: "render", label: "Crear video", hint: "Genera el Short vertical con subtítulos animados o lo envía a DaVinci Resolve" },
+  { key: "deliver", label: "Listo", hint: "Tus clips están terminados y listos para revisar o publicar" },
 ];
 
 /** Step that is running while the session sits in each state (a state means the previous step just finished). */
@@ -47,15 +47,15 @@ export function sessionSteps(s: SessionSummary): StepState {
 }
 
 const FRIENDLY_STATE: Record<string, string> = {
-  NEW: "Importando",
-  DOWNLOADED: "Preparando audio",
-  PREPARED: "Transcribiendo",
-  TRANSCRIBED: "Eligiendo momentos",
-  CURATED: "Encuadrando",
-  PLANNING: "Encuadrando",
-  RENDERING: "Renderizando",
-  DELIVERED: "Entregado",
-  FAILED: "Con error",
+  NEW: "Importando videos",
+  DOWNLOADED: "Sincronizando audio",
+  PREPARED: "Escuchando partida",
+  TRANSCRIBED: "Eligiendo mejores momentos",
+  CURATED: "Armando encuadre vertical",
+  PLANNING: "Armando encuadre vertical",
+  RENDERING: "Creando videos finales",
+  DELIVERED: "Listo para publicar",
+  FAILED: "Se detuvo",
   CANCELLED: "Cancelada",
 };
 

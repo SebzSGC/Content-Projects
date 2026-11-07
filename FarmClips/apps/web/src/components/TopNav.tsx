@@ -117,18 +117,15 @@ export function TopNav() {
             <>
               <span className="hidden items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-bold text-slate-300 md:inline-flex">
                 <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]" />
-                Servidor listo
-                <InfoTip label="Detalles del servidor" side="bottom" align="end">
-                  STT: <span className="font-mono text-slate-100">{health.stt_primary}</span> (respaldo{" "}
-                  {health.stt_backup})
+                Sistema activo
+                <InfoTip label="Estado del sistema" side="bottom" align="end">
+                  Todo listo para crear clips.
                   <br />
-                  LLM: <span className="font-mono text-slate-100">{health.llm_model}</span> (respaldo{" "}
-                  {health.llm_backup})
+                  Voz: <span className="text-slate-100">{health.stt_primary}</span> · Selección:{" "}
+                  <span className="text-slate-100">{health.llm_model}</span>
                   <br />
-                  Render: {health.use_nvenc ? "NVENC" : "libx264"} · {health.render_slots} slots ·{" "}
-                  {health.cpu_workers} núcleos
-                  <br />
-                  Drive: {health.drive_mode} · Preset: {health.style_preset}
+                  Video acelerado por {health.use_nvenc ? "tarjeta gráfica (GPU)" : "procesador"} · Estilo{" "}
+                  {health.style_preset}.
                 </InfoTip>
               </span>
 
@@ -136,7 +133,7 @@ export function TopNav() {
                 href="/analytics"
                 className="flex items-center gap-2.5 rounded-full border border-amber-300/25 bg-amber-400/10 py-1.5 pl-3 pr-2 transition-colors hover:border-amber-300/45 hover:bg-amber-400/15"
                 aria-label={`Presupuesto: ${spent.toFixed(2)} de ${cap.toFixed(2)} USD`}
-                title="Abrir panel de Consumo y Presupuesto (/analytics)"
+                title="Ver tu saldo y consumo"
               >
                 <Wallet className="h-3.5 w-3.5 text-amber-300" />
                 <span className="flex flex-col">
@@ -152,9 +149,9 @@ export function TopNav() {
                     />
                   </span>
                 </span>
-                <InfoTip label="Detalle del presupuesto" side="bottom" align="end">
-                  Gastado ${spent.toFixed(4)} de ${cap.toFixed(2)} USD. {health.budget.calls_count} llamadas guardadas
-                  en caché: repetir una sesión no vuelve a cobrar.
+                <InfoTip label="Tu presupuesto" side="bottom" align="end">
+                  Llevas ${spent.toFixed(2)} de tu límite de ${cap.toFixed(2)} USD. Si vuelves a procesar una grabación ya
+                  analizada, no te cuesta nada extra.
                 </InfoTip>
               </Link>
             </>

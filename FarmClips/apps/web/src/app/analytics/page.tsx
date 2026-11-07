@@ -273,43 +273,43 @@ function getAlertMeta(status: AnalyticsAlertStatus) {
   switch (status) {
     case "BLOCKED":
       return {
-        label: "BLOQUEADO (TOPE ALCANZADO)",
+        label: "LÍMITE ALCANZADO",
         barClass: "from-rose-500 via-red-500 to-rose-600",
         badgeClass: "border-rose-400/40 bg-rose-500/20 text-rose-200",
         panelClass: "border-rose-500/35 bg-rose-950/30",
         icon: ShieldAlert,
         description:
-          "El gasto alcanzó el 100% del presupuesto máximo. Las nuevas llamadas a APIs están bloqueadas hasta ampliar el tope en Configuración.",
+          "Has alcanzado el 100% de tu presupuesto. Pausamos nuevas llamadas a APIs para protegerte de cobros inesperados hasta que aumentes el límite en Configuración.",
       };
     case "CRITICAL":
       return {
-        label: "CRÍTICO (> 90%)",
+        label: "ATENCIÓN (> 90%)",
         barClass: "from-rose-500 via-amber-500 to-red-500",
         badgeClass: "border-rose-400/40 bg-rose-500/15 text-rose-200",
         panelClass: "border-rose-500/30 bg-rose-950/20",
         icon: AlertTriangle,
         description:
-          "Atención: has superado el 90% de tu presupuesto configurado. Revisa el saldo antes de lanzar grabaciones largas.",
+          "Te queda menos del 10% de tu presupuesto. Si planeas procesar partidas extensas, considera revisar tu saldo disponible.",
       };
     case "WARNING":
       return {
-        label: "ADVERTENCIA (70% - 90%)",
+        label: "CONSUMO MODERADO (70% - 90%)",
         barClass: "from-amber-400 via-amber-500 to-orange-500",
         badgeClass: "border-amber-400/40 bg-amber-500/15 text-amber-200",
         panelClass: "border-amber-500/25 bg-amber-950/20",
         icon: AlertTriangle,
         description:
-          "Consumo moderado-alto (entre 70% y 90% del límite). Los artefactos ya procesados siguen en caché a $0.00.",
+          "Has utilizado entre el 70% y 90% de tu presupuesto. Recuerda que editar clips de videos ya procesados no consume saldo.",
       };
     default:
       return {
-        label: "NORMAL (< 70%)",
+        label: "PRESUPUESTO SALUDABLE (< 70%)",
         barClass: "from-emerald-400 via-teal-400 to-cyan-400",
         badgeClass: "border-emerald-400/30 bg-emerald-500/15 text-emerald-300",
         panelClass: "border-emerald-500/20 bg-emerald-950/15",
         icon: CheckCircle2,
         description:
-          "Presupuesto saludable. El candado de presupuesto y la caché por hash están activos para evitar cobros duplicados.",
+          "Tu saldo rinde con normalidad. El sistema almacena en memoria local las grabaciones procesadas para evitar costos repetidos.",
       };
   }
 }
@@ -583,7 +583,7 @@ export default function AnalyticsDashboardPage() {
               <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-400/15 text-amber-300 ring-1 ring-amber-300/30">
                 <BarChart3 className="h-5 w-5" />
               </span>
-              Analíticas y Trazabilidad de APIs
+              Control de Consumo e IA
             </h1>
             {summary && (
               <span
@@ -595,7 +595,7 @@ export default function AnalyticsDashboardPage() {
             )}
           </div>
           <p className="mt-1 text-sm text-slate-400">
-            Auditoría en tiempo real de llamadas a Deepgram, Gemini, Groq y OpenAI, proyecciones de capacidad y simulador de costos.
+            Monitorea con total transparencia cuánto inviertes en transcripción de voz y curación de clips, revisa tu saldo disponible y simula costos antes de subir partidas.
           </p>
         </div>
 
@@ -615,14 +615,14 @@ export default function AnalyticsDashboardPage() {
             className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-bold text-slate-100 transition-all hover:border-amber-300/40 hover:bg-amber-400/15 hover:text-amber-200 disabled:opacity-50"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin text-amber-300" : ""}`} />
-            {refreshing ? "Actualizando..." : "Refrescar en tiempo real"}
+            {refreshing ? "Actualizando..." : "Actualizar datos"}
           </button>
           <Link
             href="/settings"
             className="inline-flex items-center gap-1.5 rounded-full bg-amber-400 px-4 py-2 text-xs font-black text-slate-950 shadow-lg shadow-amber-500/20 transition-all hover:bg-amber-300"
           >
             <Wallet className="h-3.5 w-3.5" />
-            Ajustar Tope USD
+            Ajustar Presupuesto
           </Link>
         </div>
       </div>
@@ -639,7 +639,7 @@ export default function AnalyticsDashboardPage() {
         {/* Card 1: Gasto Total USD */}
         <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/75 p-5 shadow-xl">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Gasto Acumulado</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Inversión Total</span>
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-400/15 text-amber-300">
               <DollarSign className="h-4 w-4" />
             </span>
@@ -652,10 +652,10 @@ export default function AnalyticsDashboardPage() {
           </div>
           <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2.5 text-xs text-slate-400">
             <span>
-              STT: <strong className="font-mono text-emerald-300">${(summary?.stt_cost_usd ?? 0).toFixed(4)}</strong>
+              Transcripción: <strong className="font-mono text-emerald-300">${(summary?.stt_cost_usd ?? 0).toFixed(4)}</strong>
             </span>
             <span>
-              LLM: <strong className="font-mono text-sky-300">${(summary?.llm_cost_usd ?? 0).toFixed(4)}</strong>
+              Curación IA: <strong className="font-mono text-sky-300">${(summary?.llm_cost_usd ?? 0).toFixed(4)}</strong>
             </span>
           </div>
         </div>
@@ -663,7 +663,7 @@ export default function AnalyticsDashboardPage() {
         {/* Card 2: Saldo Restante */}
         <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/75 p-5 shadow-xl">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Saldo Restante</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Saldo Disponible</span>
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300">
               <Wallet className="h-4 w-4" />
             </span>
@@ -673,15 +673,15 @@ export default function AnalyticsDashboardPage() {
               ${(summary?.remaining_usd ?? 0).toFixed(4)}
             </span>
             <span className="text-xs font-bold text-slate-400">
-              / ${(summary?.max_budget_usd ?? 9.0).toFixed(2)}
+              / ${(summary?.max_budget_usd ?? 9.0).toFixed(2)} límite
             </span>
           </div>
           <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2.5 text-xs text-slate-400">
             <span>
-              Consumo: <strong className="font-mono text-slate-200">{(summary?.usage_pct ?? 0).toFixed(2)}%</strong>
+              Uso: <strong className="font-mono text-slate-200">{(summary?.usage_pct ?? 0).toFixed(1)}%</strong>
             </span>
             <span>
-              Clips curados: <strong className="font-mono text-amber-300">{summary?.total_clips_rendered ?? 0}</strong>
+              Clips creados: <strong className="font-mono text-amber-300">{summary?.total_clips_rendered ?? 0}</strong>
             </span>
           </div>
         </div>
@@ -689,7 +689,7 @@ export default function AnalyticsDashboardPage() {
         {/* Card 3: Tokens Totales */}
         <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/75 p-5 shadow-xl">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Tokens Procesados</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Palabras Procesadas (Tokens)</span>
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-400/15 text-sky-300">
               <Sparkles className="h-4 w-4" />
             </span>
@@ -702,10 +702,10 @@ export default function AnalyticsDashboardPage() {
           </div>
           <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2.5 text-xs text-slate-400">
             <span>
-              In: <strong className="font-mono text-slate-200">{(summary?.input_tokens ?? 0).toLocaleString("es-CO")}</strong>
+              Lectura: <strong className="font-mono text-slate-200">{(summary?.input_tokens ?? 0).toLocaleString("es-CO")}</strong>
             </span>
             <span>
-              Out:{" "}
+              Respuestas IA:{" "}
               <strong className="font-mono text-sky-300">{(summary?.output_tokens ?? 0).toLocaleString("es-CO")}</strong>
             </span>
           </div>
@@ -714,7 +714,7 @@ export default function AnalyticsDashboardPage() {
         {/* Card 4: Horas de Audio Facturadas */}
         <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/75 p-5 shadow-xl">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Audio Facturado (STT)</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Horas de Stream Escuchadas</span>
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-400/15 text-violet-300">
               <Headphones className="h-4 w-4" />
             </span>
@@ -729,10 +729,10 @@ export default function AnalyticsDashboardPage() {
           </div>
           <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2.5 text-xs text-slate-400">
             <span>
-              Llamadas API: <strong className="font-mono text-slate-200">{summary?.total_calls ?? 0}</strong> ({summary?.stt_calls ?? 0} STT · {summary?.llm_calls ?? 0} LLM)
+              Consultas: <strong className="font-mono text-slate-200">{summary?.total_calls ?? 0}</strong> ({summary?.stt_calls ?? 0} audio · {summary?.llm_calls ?? 0} IA)
             </span>
             <span>
-              Latencia X̄: <strong className="font-mono text-slate-200">{summary?.avg_latency_ms ?? 0} ms</strong>
+              Respuesta media: <strong className="font-mono text-slate-200">{summary?.avg_latency_ms ?? 0} ms</strong>
             </span>
           </div>
         </div>
@@ -744,12 +744,12 @@ export default function AnalyticsDashboardPage() {
         <div className={`rounded-3xl border p-6 shadow-xl lg:col-span-7 ${alertMeta.panelClass}`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="text-base font-bold text-slate-100">Estado del Tope de Presupuesto</h2>
+              <h2 className="text-base font-bold text-slate-100">Límite de Gasto Configurado</h2>
               <p className="mt-0.5 text-xs text-slate-300/90">{alertMeta.description}</p>
             </div>
             <span className="font-mono text-sm font-black text-slate-100">
               ${(summary?.spent_usd ?? 0).toFixed(4)} / ${(summary?.max_budget_usd ?? 9.0).toFixed(2)} USD (
-              {(summary?.usage_pct ?? 0).toFixed(2)}%)
+              {(summary?.usage_pct ?? 0).toFixed(1)}%)
             </span>
           </div>
 
@@ -764,9 +764,9 @@ export default function AnalyticsDashboardPage() {
             {/* Threshold markers: 70% Warning, 90% Critical */}
             <div className="mt-2 flex items-center justify-between text-[11px] font-semibold text-slate-400">
               <span>0% ($0.00)</span>
-              <span className="text-emerald-300">Normal &lt; 70%</span>
-              <span className="text-amber-300">Advertencia 70%</span>
-              <span className="text-rose-300">Crítico 90%</span>
+              <span className="text-emerald-300">Zona normal &lt; 70%</span>
+              <span className="text-amber-300">Aviso 70%</span>
+              <span className="text-rose-300">Cerca al tope 90%</span>
               <span>100% (${(summary?.max_budget_usd ?? 9.0).toFixed(2)})</span>
             </div>
           </div>
@@ -774,19 +774,19 @@ export default function AnalyticsDashboardPage() {
           {/* Unit cost metrics */}
           <div className="mt-5 grid grid-cols-1 gap-3 border-t border-white/10 pt-4 sm:grid-cols-3">
             <div className="rounded-2xl bg-slate-950/60 px-3.5 py-2.5 ring-1 ring-white/5">
-              <span className="block text-[11px] text-slate-400">Costo Promedio / Hora Stream</span>
+              <span className="block text-[11px] text-slate-400">Costo por hora de stream</span>
               <span className="font-mono text-base font-black text-amber-300">
                 ${(summary?.projections.avg_cost_per_stream_hour_usd ?? 0.3454).toFixed(4)} USD/h
               </span>
             </div>
             <div className="rounded-2xl bg-slate-950/60 px-3.5 py-2.5 ring-1 ring-white/5">
-              <span className="block text-[11px] text-slate-400">Costo Promedio / Clip Curado</span>
+              <span className="block text-[11px] text-slate-400">Costo por clip listo</span>
               <span className="font-mono text-base font-black text-emerald-300">
                 ${(summary?.projections.avg_cost_per_clip_usd ?? 0.0888).toFixed(4)} USD/clip
               </span>
             </div>
             <div className="rounded-2xl bg-slate-950/60 px-3.5 py-2.5 ring-1 ring-white/5">
-              <span className="block text-[11px] text-slate-400">Rendimiento Promedio</span>
+              <span className="block text-[11px] text-slate-400">Clips promedio por hora</span>
               <span className="font-mono text-base font-black text-sky-300">
                 {(summary?.projections.avg_clips_per_stream_hour ?? 3.0).toFixed(1)} clips / hora
               </span>
@@ -799,33 +799,33 @@ export default function AnalyticsDashboardPage() {
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-amber-300/30 bg-amber-400/15 px-3 py-1 text-xs font-extrabold text-amber-200">
               <TrendingUp className="h-3.5 w-3.5" />
-              Proyección de Capacidad Disponible
+              Proyección de Contenido Restante
             </div>
             <p className="mt-4 text-lg font-extrabold leading-snug text-slate-100">
-              Con tu saldo actual (
+              Con tu saldo disponible (
               <span className="font-mono text-amber-300">~${(summary?.remaining_usd ?? 8.56).toFixed(2)} USD</span>)
               puedes procesar aproximadamente{" "}
               <span className="font-mono text-emerald-300 underline decoration-emerald-400/50 decoration-wavy underline-offset-4">
                 {(summary?.projections.estimated_remaining_stream_hours ?? 32.0).toFixed(1)} horas
               </span>{" "}
-              de stream más.
+              de grabación adicionales.
             </p>
             <p className="mt-2 text-xs leading-relaxed text-slate-300">
-              Equivale a generar aproximadamente{" "}
+              Esto equivale a generar cerca de{" "}
               <strong className="font-mono text-amber-200">
                 ~{summary?.projections.estimated_remaining_clips ?? 96} clips verticales 9:16
               </strong>{" "}
-              adicionales manteniendo tu configuración actual (Deepgram Nova-3 + Gemini 3.5 Flash-Lite).
+              listos para publicar con tu configuración de IA seleccionada.
             </p>
           </div>
 
           <div className="mt-5 flex items-center justify-between rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-xs">
             <div className="flex items-center gap-2 text-slate-300">
               <Zap className="h-4 w-4 text-amber-300" />
-              <span>Re-ejecutar sesiones ya cacheadas:</span>
+              <span>Re-editar o exportar grabaciones ya analizadas:</span>
             </div>
             <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 font-mono font-bold text-emerald-300">
-              $0.00 USD (Gratis)
+              $0.00 (Gratis desde caché)
             </span>
           </div>
         </div>
@@ -844,18 +844,18 @@ export default function AnalyticsDashboardPage() {
               <div>
                 <div className="flex flex-wrap items-center gap-2.5">
                   <h2 className="text-lg font-black tracking-tight text-slate-50">
-                    Límites y Progreso frente a Capa Gratuita (API Rate Limits)
+                    Monitoreo de Planes y Cupos Gratuitos
                   </h2>
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/35 bg-emerald-500/15 px-3 py-0.5 text-xs font-extrabold text-emerald-300">
                     <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
-                    Free tier activo
+                    Capa gratuita activa
                   </span>
                   <span className="rounded-lg border border-white/10 bg-slate-950/80 px-2.5 py-0.5 font-mono text-[11px] text-slate-300">
-                    Rango: Último 1 Día (24h)
+                    Últimas 24 horas
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-slate-400">
-                  Uso pico por modelo comparado contra el límite de tu capa gratuita (RPM, TPM y RPD), idéntico al monitor de Google AI Studio.
+                  Supervisa la velocidad y volumen con que procesas tus partidas para aprovechar al máximo los planes gratuitos sin interrupciones.
                 </p>
               </div>
 
@@ -882,18 +882,18 @@ export default function AnalyticsDashboardPage() {
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-white/10 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    <th className=" pb-3 pr-4">Modelo</th>
-                    <th className="px-4 pb-3">Categoría / Plan</th>
-                    <th className="px-4 pb-3" title="Peticiones pico por minuto vs límite gratuito">
-                      RPM ↓ (Peticiones/min)
+                    <th className=" pb-3 pr-4">Herramienta / Modelo</th>
+                    <th className="px-4 pb-3">Tipo de Plan</th>
+                    <th className="px-4 pb-3" title="Peticiones por minuto enviadas vs límite del proveedor">
+                      Velocidad (Peticiones/min)
                     </th>
-                    <th className="px-4 pb-3" title="Tokens de entrada o segundos de audio pico por minuto">
-                      TPM / Audio por min
+                    <th className="px-4 pb-3" title="Volumen de palabras de entrada o segundos de audio por minuto">
+                      Volumen por min
                     </th>
-                    <th className="px-4 pb-3" title="Peticiones acumuladas en el día vs cuota diaria gratuita">
-                      RPD (Peticiones/día)
+                    <th className="px-4 pb-3" title="Peticiones acumuladas en el día frente a tu cuota diaria">
+                      Cuota del Día (RPD)
                     </th>
-                    <th className="pl-4 pb-3 text-right">Estado en Capa Gratuita</th>
+                    <th className="pl-4 pb-3 text-right">Beneficio Gratuito</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
@@ -1043,21 +1043,21 @@ export default function AnalyticsDashboardPage() {
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-extrabold uppercase tracking-wider text-slate-300">
-                    Tendencias de Uso Pico vs Límite de Capa Gratuita
+                    Ritmo de Procesamiento en las Últimas 24 Horas
                   </span>
                   <span className="rounded-md bg-amber-400/15 px-2 py-0.5 font-mono text-xs font-bold text-amber-300">
                     {activeFt.display_name}
                   </span>
                 </div>
                 <span className="text-[11px] text-slate-400">
-                  La línea punteada roja (<span className="font-bold text-rose-400">Limit</span>) marca el tope de la capa gratuita.
+                  La línea punteada roja (<span className="font-bold text-rose-400">Límite</span>) marca el tope seguro antes de que el proveedor aplique pausas.
                 </span>
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 {/* Chart 1: Peak RPM */}
                 <AiStudioPeakChartCard
-                  title="Peak requests per minute (RPM)"
+                  title="Peticiones por minuto (RPM)"
                   limit={activeFt.rpm.limit}
                   peakValue={activeFt.rpm.peak}
                   series={activeFt.timeline_24h.map((p) => ({ label: p.label, value: p.peak_rpm }))}
@@ -1068,8 +1068,8 @@ export default function AnalyticsDashboardPage() {
                 <AiStudioPeakChartCard
                   title={
                     activeFt.tpm.unit === "tok"
-                      ? "Peak input tokens per minute (TPM)"
-                      : "Pico de audio procesado por minuto (seg)"
+                      ? "Palabras analizadas por minuto"
+                      : "Audio procesado por minuto (seg)"
                   }
                   limit={activeFt.tpm.limit}
                   peakValue={activeFt.tpm.peak}
@@ -1079,7 +1079,7 @@ export default function AnalyticsDashboardPage() {
 
                 {/* Chart 3: Peak RPD */}
                 <AiStudioPeakChartCard
-                  title="Peak requests per day (RPD)"
+                  title="Peticiones acumuladas hoy (RPD)"
                   limit={activeFt.rpd.limit}
                   peakValue={activeFt.rpd.used}
                   series={activeFt.timeline_24h.map((p) => ({ label: p.label, value: p.cumulative_rpd }))}
@@ -1099,10 +1099,10 @@ export default function AnalyticsDashboardPage() {
             <div>
               <h2 className="flex items-center gap-2 text-base font-bold text-slate-100">
                 <Layers className="h-4 w-4 text-amber-300" />
-                Desglose Visual por Proveedor y Modelo
+                Distribución del Gasto por Servicio
               </h2>
               <p className="text-xs text-slate-400">
-                Comparativa directa de inversión, llamadas, audio transcripto y tokens entre proveedores.
+                Compara la inversión y el uso de cada herramienta de transcripción e inteligencia artificial.
               </p>
             </div>
           </div>
@@ -1125,7 +1125,7 @@ export default function AnalyticsDashboardPage() {
                         {meta.label}
                       </span>
                       <span className="text-xs font-semibold uppercase text-slate-400">
-                        {prov.kinds.join(" / ")} · {prov.calls} {prov.calls === 1 ? "llamada" : "llamadas"}
+                        {prov.kinds.join(" / ")} · {prov.calls} {prov.calls === 1 ? "consulta" : "consultas"}
                       </span>
                     </div>
                     <div className="flex items-center gap-3">
@@ -1150,13 +1150,13 @@ export default function AnalyticsDashboardPage() {
                   <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
                     <span>
                       {prov.audio_minutes > 0
-                        ? `Audio facturado: ${prov.audio_minutes.toFixed(2)} min (${(prov.audio_minutes / 60).toFixed(2)} h)`
+                        ? `Audio analizado: ${prov.audio_minutes.toFixed(2)} min (${(prov.audio_minutes / 60).toFixed(2)} h)`
                         : prov.total_tokens > 0
                         ? `Tokens procesados: ${prov.total_tokens.toLocaleString("es-CO")} tokens`
                         : "Sin consumo registrado aún"}
                     </span>
                     {prov.avg_latency_ms > 0 && (
-                      <span className="font-mono text-slate-400">Latencia media: {prov.avg_latency_ms} ms</span>
+                      <span className="font-mono text-slate-400">Respuesta media: {prov.avg_latency_ms} ms</span>
                     )}
                   </div>
                 </div>
@@ -1171,7 +1171,7 @@ export default function AnalyticsDashboardPage() {
               <div className="flex items-center justify-between text-xs font-bold text-slate-200">
                 <span className="flex items-center gap-1.5">
                   <Cpu className="h-3.5 w-3.5 text-sky-400" />
-                  Distribución de Tokens LLM
+                  Lectura vs Respuestas de la IA
                 </span>
                 <span className="font-mono text-sky-300">
                   {(summary?.total_tokens ?? 0).toLocaleString("es-CO")} tot.
@@ -1181,22 +1181,22 @@ export default function AnalyticsDashboardPage() {
                 <div
                   className="bg-indigo-400 transition-all duration-500"
                   style={{ width: `${inputTokPct}%` }}
-                  title={`Entrada: ${inputTokPct}%`}
+                  title={`Contexto enviado: ${inputTokPct}%`}
                 />
                 <div
                   className="bg-cyan-300 transition-all duration-500"
                   style={{ width: `${outputTokPct}%` }}
-                  title={`Salida: ${outputTokPct}%`}
+                  title={`Propuestas de clips: ${outputTokPct}%`}
                 />
               </div>
               <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-400">
                 <span className="flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full bg-indigo-400" />
-                  Entrada: <strong className="font-mono text-slate-200">{(summary?.input_tokens ?? 0).toLocaleString("es-CO")}</strong> ({inputTokPct}%)
+                  Enviado: <strong className="font-mono text-slate-200">{(summary?.input_tokens ?? 0).toLocaleString("es-CO")}</strong> ({inputTokPct}%)
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full bg-cyan-300" />
-                  Salida: <strong className="font-mono text-slate-200">{(summary?.output_tokens ?? 0).toLocaleString("es-CO")}</strong> ({outputTokPct}%)
+                  Creado: <strong className="font-mono text-slate-200">{(summary?.output_tokens ?? 0).toLocaleString("es-CO")}</strong> ({outputTokPct}%)
                 </span>
               </div>
             </div>
@@ -1206,9 +1206,9 @@ export default function AnalyticsDashboardPage() {
               <div className="flex items-center justify-between text-xs font-bold text-slate-200">
                 <span className="flex items-center gap-1.5">
                   <Activity className="h-3.5 w-3.5 text-emerald-400" />
-                  Llamadas Realizadas por Tipo
+                  Tareas Ejecutadas
                 </span>
-                <span className="font-mono text-emerald-300">{summary?.total_calls ?? 0} llamadas</span>
+                <span className="font-mono text-emerald-300">{summary?.total_calls ?? 0} tareas</span>
               </div>
               <div className="mt-3 flex h-3 w-full overflow-hidden rounded-full bg-slate-900">
                 <div
@@ -1235,11 +1235,11 @@ export default function AnalyticsDashboardPage() {
               <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-400">
                 <span className="flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                  Voz a Texto (STT): <strong className="font-mono text-slate-200">{summary?.stt_calls ?? 0}</strong> (tramos de 10m)
+                  Transcripción: <strong className="font-mono text-slate-200">{summary?.stt_calls ?? 0}</strong> bloques
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full bg-sky-400" />
-                  Curación (LLM): <strong className="font-mono text-slate-200">{summary?.llm_calls ?? 0}</strong>
+                  Detección de clips: <strong className="font-mono text-slate-200">{summary?.llm_calls ?? 0}</strong>
                 </span>
               </div>
             </div>
@@ -1252,20 +1252,20 @@ export default function AnalyticsDashboardPage() {
             <div className="flex items-center justify-between">
               <h2 className="flex items-center gap-2 text-base font-bold text-slate-100">
                 <Calculator className="h-4 w-4 text-amber-300" />
-                Calculadora / Simulador de Costos
+                Simulador Previo de Costos
               </h2>
               <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-0.5 text-[11px] font-bold text-amber-300">
-                Pre-vuelo
+                Estimación
               </span>
             </div>
             <p className="mt-1 text-xs text-slate-400">
-              Simula cuánto costará procesar una grabación antes de subirla o iniciarla.
+              Calcula con precisión cuánto costará procesar tu partida antes de iniciar el análisis.
             </p>
 
             {/* Input: Tengo un stream de [ X ] horas */}
             <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
               <label className="block text-xs font-bold text-slate-200">
-                &ldquo;Tengo un stream de{" "}
+                &ldquo;Duración de mi grabación:{" "}
                 <span className="font-mono text-amber-300">{simResult.hours.toFixed(1)}</span> horas&rdquo;
               </label>
 
@@ -1314,7 +1314,7 @@ export default function AnalyticsDashboardPage() {
               {/* Provider profile selector */}
               <div className="mt-4">
                 <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  Perfil de Proveedores para el Cálculo
+                  Combinación de IA a Simular
                 </label>
                 <select
                   value={simProfile}
@@ -1322,14 +1322,14 @@ export default function AnalyticsDashboardPage() {
                   className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-100 focus:border-amber-400 focus:outline-none"
                 >
                   <option value="empirical">
-                    Tasa Real Observada en Base de Datos ($
+                    Basado en tu consumo histórico real ($
                     {(summary?.projections.avg_cost_per_stream_hour_usd ?? 0.3454).toFixed(4)} USD/h)
                   </option>
                   <option value="deepgram_gemini">
-                    Deepgram Nova-3 + Keyterms + Gemini 3.5 Flash-Lite (~$0.3454 USD/h)
+                    Calidad máxima: Deepgram Nova-3 + Gemini 3.5 Flash-Lite (~$0.3454 USD/h)
                   </option>
                   <option value="groq_gemini">
-                    Groq Whisper Turbo + Gemini 3.5 Flash-Lite (~$0.0496 USD/h)
+                    Ultra económico: Groq Whisper Turbo + Gemini 3.5 Flash-Lite (~$0.0496 USD/h)
                   </option>
                 </select>
               </div>
@@ -1340,27 +1340,27 @@ export default function AnalyticsDashboardPage() {
               <div className="flex items-center justify-between text-xs text-slate-300">
                 <span className="flex items-center gap-1.5">
                   <Mic className="h-3.5 w-3.5 text-emerald-400" />
-                  Transcripción STT ({simResult.estChunks} tramos Opus de 10m):
+                  Transcripción de audio ({simResult.estChunks} bloques de 10m):
                 </span>
                 <span className="font-mono font-bold text-emerald-300">${simResult.sttCost.toFixed(4)} USD</span>
               </div>
               <div className="flex items-center justify-between text-xs text-slate-300">
                 <span className="flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5 text-sky-400" />
-                  Curación LLM (~{simResult.estTokens.toLocaleString("es-CO")} tokens):
+                  Detección de mejores momentos (IA):
                 </span>
                 <span className="font-mono font-bold text-sky-300">${simResult.llmCost.toFixed(4)} USD</span>
               </div>
               <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
-                <span className="text-sm font-extrabold text-slate-100">Costo Total Estimado:</span>
+                <span className="text-sm font-extrabold text-slate-100">Inversión Total Estimada:</span>
                 <span className="font-mono text-xl font-black text-amber-300">
                   ${simResult.totalCost.toFixed(4)} USD
                 </span>
               </div>
               <div className="flex items-center justify-between text-[11px] text-slate-400">
-                <span>Clips 9:16 esperados: ~{simResult.estClips} clips</span>
+                <span>Clips verticales esperados: ~{simResult.estClips} clips</span>
                 <span>
-                  Costo por clip: ~${(simResult.totalCost / Math.max(1, simResult.estClips)).toFixed(4)} USD
+                  Costo estimado por clip: ~${(simResult.totalCost / Math.max(1, simResult.estClips)).toFixed(4)} USD
                 </span>
               </div>
             </div>
@@ -1376,10 +1376,10 @@ export default function AnalyticsDashboardPage() {
           >
             <span>
               {simResult.fitsBudget
-                ? `Cubierto por tu saldo actual. Quedarían $${simResult.remainingAfter.toFixed(2)} USD.`
-                : `Excede tu saldo disponible actual ($${(summary?.remaining_usd ?? 0).toFixed(2)} USD).`}
+                ? `Tu saldo actual cubre esta grabación. Te sobrarían $${simResult.remainingAfter.toFixed(2)} USD.`
+                : `Supera tu saldo disponible ($${(summary?.remaining_usd ?? 0).toFixed(2)} USD). Ajusta tu presupuesto antes de procesarla.`}
             </span>
-            <span className="font-mono uppercase">{simResult.fitsBudget ? "VIABLE" : "SIN SALDO"}</span>
+            <span className="font-mono uppercase">{simResult.fitsBudget ? "ALCANZA" : "INSUFICIENTE"}</span>
           </div>
         </div>
       </div>
@@ -1391,10 +1391,10 @@ export default function AnalyticsDashboardPage() {
             <div>
               <h2 className="flex items-center gap-2 text-base font-bold text-slate-100">
                 <Calendar className="h-4 w-4 text-amber-300" />
-                Consumo Agrupado por Sesión y Día
+                Inversión por Grabación y Día
               </h2>
               <p className="text-xs text-slate-400">
-                Trazabilidad de cuánto costó cada sesión de grabación y cuántos clips produjo.
+                Historial transparente de cuánto costó procesar cada stream y el rendimiento de clips que obtuviste.
               </p>
             </div>
             {breakdown.by_day.length > 0 && (
@@ -1405,7 +1405,7 @@ export default function AnalyticsDashboardPage() {
                     className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs text-slate-300"
                   >
                     <Clock className="h-3 w-3 text-amber-300" />
-                    <span className="font-mono font-bold">{d.date}</span>: {d.calls} llamadas ·{" "}
+                    <span className="font-mono font-bold">{d.date}</span>: {d.calls} tareas ·{" "}
                     <strong className="font-mono text-amber-300">${d.cost_usd.toFixed(4)} USD</strong>
                   </span>
                 ))}
@@ -1433,7 +1433,7 @@ export default function AnalyticsDashboardPage() {
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-slate-400">
-                    {s.calls} llamadas ({s.stt_calls} STT · {s.llm_calls} LLM) · {s.audio_minutes.toFixed(1)} min audio ·{" "}
+                    {s.calls} tareas ({s.stt_calls} audio · {s.llm_calls} IA) · {s.audio_minutes.toFixed(1)} min audio ·{" "}
                     {s.total_tokens.toLocaleString("es-CO")} tokens ·{" "}
                     <strong className="text-emerald-300">{s.clips_count} clips generados</strong>
                   </p>
@@ -1458,10 +1458,10 @@ export default function AnalyticsDashboardPage() {
           <div>
             <h2 className="flex items-center gap-2 text-base font-bold text-slate-100">
               <Filter className="h-4 w-4 text-amber-300" />
-              Tabla de Auditoría y Trazabilidad Detallada (`api_calls`)
+              Historial Detallado de Consultas Externas
             </h2>
             <p className="text-xs text-slate-400">
-              Cada petición individual a proveedores externos con su hash de caché, duración/tokens, latencia y costo exacto.
+              Registro completo de cada petición a proveedores de IA y audio, con su tiempo de respuesta y costo exacto.
             </p>
           </div>
 
@@ -1576,26 +1576,26 @@ export default function AnalyticsDashboardPage() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-white/10 bg-slate-950/90 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                <th className="px-4 py-3.5">Fecha / Hora</th>
+                <th className="px-4 py-3.5">Fecha y Hora</th>
                 <th className="px-4 py-3.5">Proveedor</th>
-                <th className="px-4 py-3.5">Modelo / Tipo</th>
-                <th className="px-4 py-3.5">Duración / Tokens</th>
-                <th className="px-4 py-3.5 text-right">Costo ($USD)</th>
-                <th className="px-4 py-3.5 text-right">Latencia</th>
-                <th className="px-4 py-3.5">Sesión Vinculada</th>
+                <th className="px-4 py-3.5">Modelo y Tarea</th>
+                <th className="px-4 py-3.5">Audio / Palabras</th>
+                <th className="px-4 py-3.5 text-right">Inversión USD</th>
+                <th className="px-4 py-3.5 text-right">Tiempo</th>
+                <th className="px-4 py-3.5">Sesión</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {loading && !logsData ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">
-                    Cargando historial de llamadas a APIs...
+                    Cargando historial de consultas...
                   </td>
                 </tr>
               ) : (logsData?.items.length ?? 0) === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">
-                    No se encontraron llamadas a APIs con los filtros seleccionados.
+                    No se encontraron registros con los filtros seleccionados.
                   </td>
                 </tr>
               ) : (
@@ -1625,7 +1625,7 @@ export default function AnalyticsDashboardPage() {
                               : "bg-sky-500/15 text-sky-300"
                           }`}
                         >
-                          {item.kind === "stt" ? "STT · Audio" : "LLM · Curación"}
+                          {item.kind === "stt" ? "Audio · Transcripción" : "IA · Detección de clips"}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 font-mono text-slate-200">

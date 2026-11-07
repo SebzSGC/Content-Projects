@@ -11,8 +11,8 @@ const nunito = Nunito({
 });
 
 export const metadata: Metadata = {
-  title: "ClipsApp — Arquitectura Híbrida (IA por API, Proceso Local)",
-  description: "Pipeline local + IA por API para Shorts verticales Hormozi Gaming con Editor sobre EditPlan v2",
+  title: "FarmClips — Tus mejores jugadas, listas para publicar",
+  description: "Convierte tus grabaciones de juego y cámara en Shorts verticales con subtítulos dinámicos y edición inteligente.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

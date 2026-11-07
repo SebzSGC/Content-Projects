@@ -582,7 +582,7 @@ export default function ClipEditorPage() {
       setClip(res.clip);
       setPlan(res.editplan);
       setDirty(false);
-      setStatusMsg("EditPlan v2 guardado sin re-renderizar.");
+      setStatusMsg("Cambios guardados al instante.");
       return res.editplan;
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -606,8 +606,8 @@ export default function ClipEditorPage() {
       setClip(res.clip);
       setStatusMsg(
         quality === "final"
-          ? "MP4 1080p exportado y reemplazado en Salidas/."
-          : "Borrador rápido 540p listo."
+          ? "Video final en alta definición (1080p) listo para descargar."
+          : "Vista previa rápida lista."
       );
       setPreviewSource("rendered");
       setPlaying(false);
@@ -625,7 +625,7 @@ export default function ClipEditorPage() {
     if (!plan || !clipId) return;
     setError(null);
     setExportingResolve(true);
-    setStatusMsg("Enviando EditPlan v2 a DaVinci Resolve vía MCP…");
+    setStatusMsg("Preparando tu clip para abrirlo en DaVinci Resolve…");
     try {
       if (dirty) {
         await saveClipEditPlan(clipId, plan);
@@ -692,7 +692,7 @@ export default function ClipEditorPage() {
   if (!clip || !session || !plan) {
     return (
       <div className="flex items-center justify-center py-24 text-zinc-400">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Cargando Editor EditPlan v2…
+        <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Abriendo el editor de tu clip…
       </div>
     );
   }
@@ -713,13 +713,13 @@ export default function ClipEditorPage() {
             href={`/sessions/${session.id}`}
             className="inline-flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-300 hover:text-white"
           >
-            <ArrowLeft className="h-3.5 w-3.5" /> Sesión
+            <ArrowLeft className="h-3.5 w-3.5" /> Volver a la sesión
           </Link>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-base font-extrabold text-white">{clip.overlay_title}</h1>
               <span className="rounded bg-[#FFD400]/15 px-2 py-0.5 font-mono text-[11px] font-bold text-[#FFD400]">
-                {clip.final_score.toFixed(0)}/100
+                Nota {clip.final_score.toFixed(0)}/100
               </span>
               {dirty && (
                 <span className="rounded bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
@@ -728,8 +728,8 @@ export default function ClipEditorPage() {
               )}
             </div>
             <p className="text-[11px] text-zinc-400">
-              Reproducción instantánea sobre fuentes originales (0 s de espera) · {plan.source.ranges.length} tramos
-              activos ({totalDur.toFixed(1)}s)
+              Tus ajustes se ven al instante sin esperar a que se procese el video · Duración:{" "}
+              <strong>{totalDur.toFixed(1)} s</strong>
               {statusMsg ? ` · ${statusMsg}` : ""}
             </p>
           </div>
@@ -743,7 +743,7 @@ export default function ClipEditorPage() {
             className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50"
           >
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            Guardar EditPlan
+            Guardar cambios
           </button>
 
           <button
@@ -757,7 +757,7 @@ export default function ClipEditorPage() {
             ) : (
               <Sparkles className="h-3.5 w-3.5" />
             )}
-            Editar en DaVinci Resolve (MCP)
+            Abrir en DaVinci Resolve
           </button>
 
           <button
@@ -771,7 +771,7 @@ export default function ClipEditorPage() {
             ) : (
               <Zap className="h-3.5 w-3.5" />
             )}
-            Borrador 540p
+            Prueba rápida
           </button>
 
           <button
@@ -785,7 +785,7 @@ export default function ClipEditorPage() {
             ) : (
               <Film className="h-3.5 w-3.5" />
             )}
-            Exportar 1080p (+ Salidas/)
+            Exportar video final (1080p)
           </button>
         </div>
       </div>
@@ -797,16 +797,15 @@ export default function ClipEditorPage() {
               <div className="flex items-center gap-2 font-bold text-sky-200">
                 <Sparkles className="h-4 w-4 text-sky-400" />
                 <span>
-                  DaVinci Resolve MCP · Proyecto: <strong className="text-white">{resolveResult.project_name}</strong> ·
-                  Timeline: <strong className="font-mono text-white">{resolveResult.timeline_name}</strong>
+                  Listo para DaVinci Resolve · Proyecto: <strong className="text-white">{resolveResult.project_name}</strong> ·
+                  Línea de tiempo: <strong className="font-mono text-white">{resolveResult.timeline_name}</strong>
                 </span>
                 <span className="rounded bg-sky-500/20 px-2 py-0.5 font-mono text-[10px] uppercase text-sky-300">
-                  {resolveResult.connected_to_resolve ? "Conectado en vivo (Local)" : `Paquete Local (${resolveResult.mode_used})`}
+                  {resolveResult.connected_to_resolve ? "Abierto en DaVinci Resolve" : "Archivos listos para importar"}
                 </span>
               </div>
               <p className="mt-1 text-[11px] text-sky-200/80">
-                {resolveResult.message} ({resolveResult.segments_count} segmentos V1/V2, {resolveResult.captions_count}{" "}
-                grupos de subtítulos, {resolveResult.sfx_count} SFX, {resolveResult.markers_count} marcadores IA).
+                Incluye el juego y tu cámara ya sincronizados por separado, subtítulos editables y efectos de sonido.
               </p>
             </div>
             <button
@@ -823,35 +822,28 @@ export default function ClipEditorPage() {
               download
               className="inline-flex items-center gap-1 rounded-lg border border-sky-400/40 bg-zinc-950/70 px-2.5 py-1.5 font-semibold text-sky-200 hover:bg-zinc-900"
             >
-              <Download className="h-3.5 w-3.5" /> Timeline .fcpxml (v1.9)
+              <Download className="h-3.5 w-3.5" /> Línea de tiempo (.fcpxml)
             </a>
             <a
               href={resolveArtifactUrl(clip.id, "srt")}
               download
               className="inline-flex items-center gap-1 rounded-lg border border-sky-400/40 bg-zinc-950/70 px-2.5 py-1.5 font-semibold text-sky-200 hover:bg-zinc-900"
             >
-              <Download className="h-3.5 w-3.5" /> Subtítulos .srt
+              <Download className="h-3.5 w-3.5" /> Subtítulos (.srt)
             </a>
             <a
               href={resolveArtifactUrl(clip.id, "ass")}
               download
               className="inline-flex items-center gap-1 rounded-lg border border-sky-400/40 bg-zinc-950/70 px-2.5 py-1.5 font-semibold text-sky-200 hover:bg-zinc-900"
             >
-              <Download className="h-3.5 w-3.5" /> Subtítulos .ass (Hormozi)
+              <Download className="h-3.5 w-3.5" /> Subtítulos animados (.ass)
             </a>
             <a
               href={resolveArtifactUrl(clip.id, "script")}
               download
               className="inline-flex items-center gap-1 rounded-lg border border-sky-400/40 bg-zinc-950/70 px-2.5 py-1.5 font-semibold text-sky-200 hover:bg-zinc-900"
             >
-              <Download className="h-3.5 w-3.5" /> Script Py3 (resolve_build_timeline.py)
-            </a>
-            <a
-              href={resolveArtifactUrl(clip.id, "mcp_plan")}
-              download
-              className="inline-flex items-center gap-1 rounded-lg border border-sky-400/40 bg-zinc-950/70 px-2.5 py-1.5 font-semibold text-sky-200 hover:bg-zinc-900"
-            >
-              <Download className="h-3.5 w-3.5" /> Plan MCP JSON
+              <Download className="h-3.5 w-3.5" /> Script automático (.py)
             </a>
           </div>
         </div>
@@ -860,7 +852,7 @@ export default function ClipEditorPage() {
       {renderProgress !== null && (
         <div className="rounded-xl border border-[#FFD400]/30 bg-[#FFD400]/10 px-4 py-2.5 text-xs text-[#FFD400]">
           <div className="flex justify-between font-bold">
-            <span>Codificando con FFmpeg ({renderingQuality === "draft" ? "540p" : "1080p NVENC"})…</span>
+            <span>Creando tu archivo de video ({renderingQuality === "draft" ? "prueba rápida" : "alta calidad 1080p"})…</span>
             <span>{Math.round(renderProgress * 100)}%</span>
           </div>
           <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-zinc-900">
@@ -891,7 +883,7 @@ export default function ClipEditorPage() {
                   previewSource === "live" ? "bg-[#FFD400] text-black" : "text-zinc-400 hover:text-white"
                 }`}
               >
-                Vista Instantánea (CSS + Canvas)
+                Vista en vivo (instantánea)
               </button>
               {renderedUrl && (
                 <button
@@ -906,7 +898,7 @@ export default function ClipEditorPage() {
                     previewSource === "rendered" ? "bg-[#39FF14] text-black" : "text-zinc-400 hover:text-white"
                   }`}
                 >
-                  MP4 Renderizado
+                  Video exportado (MP4)
                 </button>
               )}
             </div>
@@ -916,7 +908,7 @@ export default function ClipEditorPage() {
                 href={`${API_PREFIX}/clips/${clip.id}/file?quality=final&download=true`}
                 className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-300 hover:text-[#FFD400]"
               >
-                <Download className="h-3.5 w-3.5" /> MP4
+                <Download className="h-3.5 w-3.5" /> Descargar MP4
               </a>
             )}
           </div>
@@ -1028,8 +1020,8 @@ export default function ClipEditorPage() {
                 />
               </div>
               <div className="flex justify-between text-[10px] text-zinc-500">
-                <span>Verde: Zoom outBack</span>
-                <span>Morado: Cámara pantalla completa (2s)</span>
+                <span>Verde: Zoom de reacción</span>
+                <span>Morado: Tu cámara en pantalla completa</span>
               </div>
             </div>
           )}
@@ -1054,7 +1046,7 @@ export default function ClipEditorPage() {
                 activeTab === "camera" ? "bg-[#FFD400] text-black" : "bg-zinc-900 text-zinc-300 hover:text-white"
               }`}
             >
-              <Camera className="h-3.5 w-3.5" /> Cámara y Zooms ({plan.camera_crop.length})
+              <Camera className="h-3.5 w-3.5" /> Tu Cámara y Zooms
             </button>
             <button
               type="button"
@@ -1063,22 +1055,26 @@ export default function ClipEditorPage() {
                 activeTab === "cuts" ? "bg-[#FFD400] text-black" : "bg-zinc-900 text-zinc-300 hover:text-white"
               }`}
             >
-              <Scissors className="h-3.5 w-3.5" /> Título, Cortes y Audio
+              <Scissors className="h-3.5 w-3.5" /> Título, Ritmo y Sonido
             </button>
             <button
               type="button"
               onClick={() => setActiveTab("json")}
-              className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 font-mono transition ${
+              className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 transition ${
                 activeTab === "json" ? "bg-[#FFD400] text-black" : "bg-zinc-900 text-zinc-300 hover:text-white"
               }`}
             >
-              EditPlan JSON
+              Datos avanzados
             </button>
           </div>
 
           {/* TAB 1: CAPTIONS & EMOJIS */}
           {activeTab === "captions" && (
             <div className="max-h-[580px] space-y-2.5 overflow-y-auto pr-1">
+              <p className="mb-2 text-xs text-zinc-400">
+                Corrige cualquier palabra, haz clic en la estrella para resaltarla en verde cuando la digas o elige un
+                emoji para acompañar la frase.
+              </p>
               {plan.captions.groups.map((grp, gIdx) => {
                 const gs = grp.words[0]?.s ?? 0;
                 const ge = grp.words[grp.words.length - 1]?.e ?? 0;
@@ -1119,7 +1115,7 @@ export default function ClipEditorPage() {
                             </span>
                           </>
                         ) : (
-                          <span className="text-zinc-400">+ Elegir Emoji ({emojiCatalog.length || 42})</span>
+                          <span className="text-zinc-400">+ Agregar emoji</span>
                         )}
                       </button>
                     </div>
@@ -1160,7 +1156,7 @@ export default function ClipEditorPage() {
                             }}
                             className="rounded bg-red-500/15 px-2 py-0.5 font-bold text-red-300 hover:bg-red-500/25"
                           >
-                            Sin emoji
+                            Quitar emoji
                           </button>
                         </div>
                         <div className="grid max-h-40 grid-cols-7 gap-1.5 overflow-y-auto sm:grid-cols-10">
@@ -1170,7 +1166,7 @@ export default function ClipEditorPage() {
                               <button
                                 key={em.id}
                                 type="button"
-                                title={`${em.char} ${em.name} (${em.id})`}
+                                title={`${em.char} ${em.name}`}
                                 onClick={() => {
                                   mutatePlan((d) => {
                                     const target = d.captions.groups[gIdx];
@@ -1223,7 +1219,7 @@ export default function ClipEditorPage() {
                                 return d;
                               })
                             }
-                            title="Alternar énfasis verde (#39FF14)"
+                            title="Resaltar esta palabra en verde"
                             className={`rounded px-1.5 py-0.5 text-[10px] font-bold transition ${
                               w.emphasis ? "bg-[#39FF14] text-black" : "bg-zinc-800 text-zinc-400 hover:text-white"
                             }`}
@@ -1242,36 +1238,41 @@ export default function ClipEditorPage() {
           {/* TAB 2: CAMERA CROP KEYFRAMES & FULLSCREEN REACTIONS */}
           {activeTab === "camera" && (
             <div className="max-h-[580px] space-y-5 overflow-y-auto pr-1">
+              <p className="text-xs text-zinc-400">
+                Tu cámara ya sigue tu rostro automáticamente. Usa estos botones para destacar un momento gracioso o de
+                sorpresa en el segundo actual:
+              </p>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={addImpactZoomAtPlayhead}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-[#39FF14]/15 px-3.5 py-2 text-xs font-bold text-[#39FF14] ring-1 ring-[#39FF14]/40 hover:bg-[#39FF14]/25"
                 >
-                  <Plus className="h-3.5 w-3.5" /> Zoom de impacto aquí ({clipTime.toFixed(2)}s)
+                  <Plus className="h-3.5 w-3.5" /> Acercar cámara aquí ({clipTime.toFixed(1)}s)
                 </button>
                 <button
                   type="button"
                   onClick={addFullscreenReactionAtPlayhead}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-purple-500/15 px-3.5 py-2 text-xs font-bold text-purple-300 ring-1 ring-purple-500/40 hover:bg-purple-500/25"
                 >
-                  <Maximize2 className="h-3.5 w-3.5" /> Cámara pantalla completa 2s aquí
+                  <Maximize2 className="h-3.5 w-3.5" /> Poner tu cámara a pantalla completa 2s aquí
                 </button>
               </div>
 
               {/* Layout overrides */}
               <div className="space-y-2">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
-                  Eventos de Layout (Split 40/60 vs Cámara Completa)
+                  Disposición en pantalla (Cámara + Juego vs Cámara completa)
                 </h3>
                 {plan.layout.map((ev, idx) => (
                   <div
                     key={idx}
                     className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-xs"
                   >
-                    <span className="font-mono text-zinc-200">
-                      <strong>{ev.kind}</strong> · {ev.t.toFixed(2)}s
-                      {ev.until != null ? ` → ${ev.until.toFixed(2)}s` : ` (ratio ${ev.camera_ratio ?? 0.4})`}
+                    <span className="text-zinc-200">
+                      <strong>{ev.kind === "camera_full" ? "Cámara a pantalla completa" : "Pantalla dividida (Cámara arriba / Juego abajo)"}</strong>{" "}
+                      · desde {ev.t.toFixed(1)}s
+                      {ev.until != null ? ` hasta ${ev.until.toFixed(1)}s` : ""}
                     </span>
                     {ev.kind !== "split" && (
                       <button
@@ -1294,7 +1295,7 @@ export default function ClipEditorPage() {
               {/* Camera Crop Keyframes */}
               <div className="space-y-2">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
-                  Keyframes de Encuadre y Zoom ({plan.camera_crop.length})
+                  Puntos de movimiento y acercamiento ({plan.camera_crop.length})
                 </h3>
                 {plan.camera_crop.map((kf, idx) => (
                   <div
@@ -1309,7 +1310,7 @@ export default function ClipEditorPage() {
                       {kf.t.toFixed(2)}s
                     </button>
                     <label className="col-span-3 flex items-center gap-1 text-[11px] text-zinc-400">
-                      cx
+                      Lado
                       <input
                         type="number"
                         step="0.02"
@@ -1326,7 +1327,7 @@ export default function ClipEditorPage() {
                       />
                     </label>
                     <label className="col-span-3 flex items-center gap-1 text-[11px] text-zinc-400">
-                      zoom
+                      Zoom
                       <input
                         type="number"
                         step="0.05"
@@ -1352,10 +1353,10 @@ export default function ClipEditorPage() {
                       }
                       className="col-span-3 rounded border border-zinc-800 bg-zinc-900 px-1.5 py-1 text-[11px] text-zinc-200"
                     >
-                      <option value="linear">linear</option>
-                      <option value="outBack">outBack</option>
-                      <option value="inOutSine">inOutSine</option>
-                      <option value="outCubic">outCubic</option>
+                      <option value="linear">Directo</option>
+                      <option value="outBack">Impacto rápido</option>
+                      <option value="inOutSine">Suave</option>
+                      <option value="outCubic">Natural</option>
                     </select>
                     <button
                       type="button"
@@ -1381,7 +1382,7 @@ export default function ClipEditorPage() {
             <div className="space-y-5">
               <div>
                 <label className="mb-1 block text-xs font-bold text-zinc-300">
-                  Título en la unión 40/60 (primeros 3 segundos)
+                  Título llamativo al inicio (se muestra los primeros 3 segundos para atrapar la atención)
                 </label>
                 <input
                   type="text"
@@ -1404,9 +1405,9 @@ export default function ClipEditorPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-zinc-300">
-                    Tramos de tiempo maestro activos — Jump Cuts ({plan.source.ranges.length})
+                    Tramos de la partida incluidos ({plan.source.ranges.length})
                   </label>
-                  <span className="text-[11px] text-zinc-500">Silencios &gt;0,7 s recortados automáticamente</span>
+                  <span className="text-[11px] text-zinc-500">Quitamos las pausas largas para mantener el ritmo</span>
                 </div>
                 {plan.source.ranges.map(([a, b], idx) => (
                   <div
@@ -1414,8 +1415,8 @@ export default function ClipEditorPage() {
                     className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-xs"
                   >
                     <span className="font-mono text-zinc-300">
-                      Tramo #{idx + 1}: <strong>{a.toFixed(2)}s</strong> → <strong>{b.toFixed(2)}s</strong> (
-                      {(b - a).toFixed(2)}s)
+                      Parte #{idx + 1}: del segundo <strong>{a.toFixed(1)}s</strong> al <strong>{b.toFixed(1)}s</strong> (
+                      {(b - a).toFixed(1)}s)
                     </span>
                     <Check className="h-3.5 w-3.5 text-[#39FF14]" />
                   </div>
@@ -1425,7 +1426,7 @@ export default function ClipEditorPage() {
               <div className="grid grid-cols-1 gap-4 border-t border-zinc-800 pt-4 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 flex items-center gap-1.5 text-xs font-bold text-zinc-300">
-                    <Volume2 className="h-3.5 w-3.5 text-[#FFD400]" /> Ganancia Micrófono (dB)
+                    <Volume2 className="h-3.5 w-3.5 text-[#FFD400]" /> Volumen de tu micrófono (dB)
                   </label>
                   <input
                     type="number"
@@ -1442,7 +1443,7 @@ export default function ClipEditorPage() {
                 </div>
                 <div>
                   <label className="mb-1 flex items-center gap-1.5 text-xs font-bold text-zinc-300">
-                    <Volume2 className="h-3.5 w-3.5 text-[#39FF14]" /> Atenuación Sidechain Juego (dB)
+                    <Volume2 className="h-3.5 w-3.5 text-[#39FF14]" /> Bajar juego cuando hablas (dB)
                   </label>
                   <input
                     type="number"
@@ -1463,15 +1464,15 @@ export default function ClipEditorPage() {
               <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-950/70 p-3.5 text-xs">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-bold text-white">
-                    Mezclador Web Audio API en vivo ·{" "}
+                    Equilibrio de voz y juego en vivo ·{" "}
                     <span className="text-[#39FF14]">
                       {session.prepared?.gameplay_clean_audio_stream != null
-                        ? "Sidechain activo sobre pista limpia"
-                        : "Filtro Highpass 75 Hz + Ganancia Mic + SFX"}
+                        ? "El juego baja solo cuando hablas"
+                        : "Voz realzada con limpieza de ruido"}
                     </span>
                   </span>
                   <span className="font-mono text-[11px] text-zinc-400">
-                    Ducking actual: <strong className="text-[#FFD400]">{liveDuckPct}%</strong>
+                    Reducción actual: <strong className="text-[#FFD400]">{liveDuckPct}%</strong>
                   </span>
                 </div>
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-900">
@@ -1483,7 +1484,7 @@ export default function ClipEditorPage() {
 
                 <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800/80 pt-3">
                   <span className="font-bold text-zinc-300">
-                    Impactos de sonido SFX ({plan.audio.sfx.length})
+                    Efectos de sonido para impactos ({plan.audio.sfx.length})
                   </span>
                   <div className="flex gap-2">
                     <button
@@ -1491,7 +1492,7 @@ export default function ClipEditorPage() {
                       onClick={() => fireSfx("boom", -3)}
                       className="inline-flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[11px] font-semibold text-zinc-200 hover:bg-zinc-800"
                     >
-                      <Volume2 className="h-3 w-3 text-[#FFD400]" /> Probar Boom
+                      <Volume2 className="h-3 w-3 text-[#FFD400]" /> Escuchar Boom
                     </button>
                     <button
                       type="button"
@@ -1506,7 +1507,7 @@ export default function ClipEditorPage() {
                       }}
                       className="inline-flex items-center gap-1 rounded-lg bg-[#FFD400]/15 px-2.5 py-1 text-[11px] font-bold text-[#FFD400] ring-1 ring-[#FFD400]/40 hover:bg-[#FFD400]/25"
                     >
-                      <Plus className="h-3 w-3" /> Añadir Boom aquí ({clipTime.toFixed(2)}s)
+                      <Plus className="h-3 w-3" /> Poner Boom aquí ({clipTime.toFixed(1)}s)
                     </button>
                   </div>
                 </div>
@@ -1526,7 +1527,7 @@ export default function ClipEditorPage() {
                           }}
                           className="font-mono text-[11px] font-semibold text-[#FFD400] hover:underline"
                         >
-                          🔊 {cue.id}.wav @ {cue.t.toFixed(2)}s ({cue.gain_db} dB)
+                          🔊 Efecto {cue.id} en el segundo {cue.t.toFixed(1)}s
                         </button>
                         <button
                           type="button"
