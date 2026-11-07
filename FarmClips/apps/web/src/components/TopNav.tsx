@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Film, Radio, Settings, Wallet } from "lucide-react";
+import { BarChart3, Film, Radio, Settings, Wallet } from "lucide-react";
 import { fetchHealth, type ServerHealth, useServerEvents } from "@/lib/api/client";
 import { InfoTip } from "@/components/ui";
 
@@ -59,6 +59,7 @@ export function TopNav() {
   const cap = health?.budget.max_budget_usd ?? 9.0;
   const pct = Math.min(100, (spent / Math.max(0.01, cap)) * 100);
   const isSettings = pathname?.startsWith("/settings");
+  const isAnalytics = pathname?.startsWith("/analytics");
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/5 bg-slate-950/70 backdrop-blur-xl">
@@ -81,6 +82,17 @@ export function TopNav() {
               }`}
             >
               Sesiones
+            </Link>
+            <Link
+              href="/analytics"
+              className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 transition-all duration-300 ${
+                isAnalytics
+                  ? "bg-amber-400/15 text-amber-300"
+                  : "text-slate-400 hover:bg-white/5 hover:text-slate-100"
+              }`}
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+              <span>Consumo y Presupuesto</span>
             </Link>
             <Link
               href="/settings"
@@ -120,9 +132,11 @@ export function TopNav() {
                 </InfoTip>
               </span>
 
-              <span
-                className="flex items-center gap-2.5 rounded-full border border-amber-300/25 bg-amber-400/10 py-1.5 pl-3 pr-2"
+              <Link
+                href="/analytics"
+                className="flex items-center gap-2.5 rounded-full border border-amber-300/25 bg-amber-400/10 py-1.5 pl-3 pr-2 transition-colors hover:border-amber-300/45 hover:bg-amber-400/15"
                 aria-label={`Presupuesto: ${spent.toFixed(2)} de ${cap.toFixed(2)} USD`}
+                title="Abrir panel de Consumo y Presupuesto (/analytics)"
               >
                 <Wallet className="h-3.5 w-3.5 text-amber-300" />
                 <span className="flex flex-col">
@@ -132,7 +146,7 @@ export function TopNav() {
                   <span className="mt-1 h-1 w-20 overflow-hidden rounded-full bg-white/10">
                     <span
                       className={`block h-full rounded-full transition-[width] duration-700 ease-out ${
-                        pct > 85 ? "bg-rose-400" : "bg-amber-400"
+                        pct > 90 ? "bg-rose-400" : pct >= 70 ? "bg-amber-400" : "bg-emerald-400"
                       }`}
                       style={{ width: `${Math.max(2, pct)}%` }}
                     />
@@ -142,9 +156,21 @@ export function TopNav() {
                   Gastado ${spent.toFixed(4)} de ${cap.toFixed(2)} USD. {health.budget.calls_count} llamadas guardadas
                   en caché: repetir una sesión no vuelve a cobrar.
                 </InfoTip>
-              </span>
+              </Link>
             </>
           ) : null}
+
+          <Link
+            href="/analytics"
+            title="Analíticas de Consumo y Presupuesto"
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-bold transition-all duration-300 sm:hidden ${
+              isAnalytics
+                ? "border-amber-300/40 bg-amber-400/15 text-amber-300"
+                : "border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10 hover:text-slate-50"
+            }`}
+          >
+            <BarChart3 className="h-3.5 w-3.5" />
+          </Link>
 
           <Link
             href="/settings"

@@ -7,6 +7,7 @@ import json
 import sqlite3
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -355,6 +356,457 @@ class OrchestratorDB:
                 "remaining_usd": round(max(0.0, max_budget_usd - spent), 6),
                 "calls_count": sum(int(r["calls"]) for r in by_prov),
                 "breakdown": [dict(r) for r in by_prov],
+            }
+
+    @staticmethod
+    def _parse_date_bound(raw: Optional[str], end_of_day: bool = False) -> Optional[float]:
+        if not raw:
+            return None
+        s = raw.strip()
+        if not s:
+            return None
+        try:
+            return float(s)
+        except ValueError:
+            pass
+        try:
+            if len(s) == 10 and s[4] == "-" and s[7] == "-":
+                dt = datetime.strptime(s, "%Y-%m-%d")
+                if end_of_day:
+                    dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+                return dt.timestamp()
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            return dt.timestamp()
+        except Exception:
+            return None
+
+    def analytics_summary(self, max_budget_usd: float) -> Dict[str, Any]:
+        """Compute aggregate KPIs, budget status, and capacity projections from `api_calls` and `clips`."""
+        with self._lock:
+            cap = max(0.01, float(max_budget_usd))
+            agg = self._conn.execute(
+                """SELECT
+                       COUNT(*) AS total_calls,
+                       COALESCE(SUM(CASE WHEN kind = 'stt' THEN 1 ELSE 0 END), 0) AS stt_calls,
+                       COALESCE(SUM(CASE WHEN kind = 'llm' THEN 1 ELSE 0 END), 0) AS llm_calls,
+                       COALESCE(SUM(cost_usd), 0.0) AS spent_usd,
+                       COALESCE(SUM(CASE WHEN kind = 'stt' THEN cost_usd ELSE 0.0 END), 0.0) AS stt_cost_usd,
+                       COALESCE(SUM(CASE WHEN kind = 'llm' THEN cost_usd ELSE 0.0 END), 0.0) AS llm_cost_usd,
+                       COALESCE(SUM(CASE WHEN kind = 'stt' THEN units_billed ELSE 0.0 END), 0.0) AS audio_seconds_billed,
+                       COALESCE(SUM(input_tokens), 0) AS input_tokens,
+                       COALESCE(SUM(output_tokens), 0) AS output_tokens,
+                       COALESCE(AVG(latency_ms), 0.0) AS avg_latency_ms,
+                       COUNT(DISTINCT session_id) AS sessions_with_calls
+                   FROM api_calls"""
+            ).fetchone()
+
+            total_calls = int(agg["total_calls"] or 0)
+            stt_calls = int(agg["stt_calls"] or 0)
+            llm_calls = int(agg["llm_calls"] or 0)
+            spent_usd = round(float(agg["spent_usd"] or 0.0), 6)
+            stt_cost_usd = round(float(agg["stt_cost_usd"] or 0.0), 6)
+            llm_cost_usd = round(float(agg["llm_cost_usd"] or 0.0), 6)
+            audio_seconds = round(float(agg["audio_seconds_billed"] or 0.0), 3)
+            audio_minutes = round(audio_seconds / 60.0, 2)
+            audio_hours = round(audio_seconds / 3600.0, 4)
+            input_tokens = int(agg["input_tokens"] or 0)
+            output_tokens = int(agg["output_tokens"] or 0)
+            total_tokens = input_tokens + output_tokens
+            avg_latency_ms = int(round(float(agg["avg_latency_ms"] or 0.0)))
+            sessions_with_calls = int(agg["sessions_with_calls"] or 0)
+
+            remaining_usd = round(max(0.0, cap - spent_usd), 6)
+            usage_pct = round((spent_usd / cap) * 100.0, 2)
+
+            if spent_usd >= cap or usage_pct >= 100.0:
+                alert_status = "BLOCKED"
+            elif usage_pct > 90.0:
+                alert_status = "CRITICAL"
+            elif usage_pct >= 70.0:
+                alert_status = "WARNING"
+            else:
+                alert_status = "NORMAL"
+
+            # Count clips generated in sessions that have API calls (fallback to all clips if needed)
+            clips_row = self._conn.execute(
+                """SELECT
+                       COUNT(*) AS total_clips,
+                       COALESCE(SUM(CASE WHEN state IN ('RENDERED_DRAFT', 'RENDERED_FINAL', 'DELIVERED')
+                                              OR final_mp4_path IS NOT NULL
+                                              OR draft_mp4_path IS NOT NULL
+                                         THEN 1 ELSE 0 END), 0) AS rendered_clips
+                   FROM clips
+                   WHERE session_id IN (SELECT DISTINCT session_id FROM api_calls WHERE session_id IS NOT NULL)"""
+            ).fetchone()
+            billed_clips_total = int(clips_row["total_clips"] or 0)
+            billed_clips_rendered = int(clips_row["rendered_clips"] or 0)
+
+            if billed_clips_total == 0:
+                all_clips_row = self._conn.execute(
+                    """SELECT COUNT(*) AS total_clips,
+                              COALESCE(SUM(CASE WHEN state IN ('RENDERED_DRAFT', 'RENDERED_FINAL', 'DELIVERED')
+                                                     OR final_mp4_path IS NOT NULL
+                                                THEN 1 ELSE 0 END), 0) AS rendered_clips
+                       FROM clips"""
+                ).fetchone()
+                billed_clips_total = int(all_clips_row["total_clips"] or 0)
+                billed_clips_rendered = int(all_clips_row["rendered_clips"] or 0)
+
+            effective_clips = max(billed_clips_rendered, billed_clips_total)
+
+            # Empirical vs reference rates (Deepgram Nova-3: $0.0043/min = $0.258/h + Gemini Flash-Lite ~$0.0094/h)
+            if audio_hours > 0.01 and spent_usd > 0:
+                avg_cost_per_hour = round(spent_usd / audio_hours, 6)
+                stt_cost_per_hour = round(stt_cost_usd / audio_hours, 6)
+                llm_cost_per_hour = round(llm_cost_usd / audio_hours, 6)
+                avg_tokens_per_hour = int(round(total_tokens / audio_hours))
+            else:
+                stt_cost_per_hour = 0.258
+                llm_cost_per_hour = 0.0094
+                avg_cost_per_hour = round(stt_cost_per_hour + llm_cost_per_hour, 6)
+                avg_tokens_per_hour = 25200
+
+            if effective_clips > 0 and spent_usd > 0:
+                avg_cost_per_clip = round(spent_usd / effective_clips, 6)
+            else:
+                avg_cost_per_clip = round(avg_cost_per_hour / 3.0, 6)
+
+            if audio_hours > 0.01 and effective_clips > 0:
+                avg_clips_per_hour = round(effective_clips / audio_hours, 2)
+            else:
+                avg_clips_per_hour = 3.0
+
+            est_remaining_hours = round(remaining_usd / max(0.0001, avg_cost_per_hour), 2)
+            est_remaining_clips = int(remaining_usd / max(0.0001, avg_cost_per_clip))
+
+            return {
+                "spent_usd": spent_usd,
+                "stt_cost_usd": stt_cost_usd,
+                "llm_cost_usd": llm_cost_usd,
+                "max_budget_usd": cap,
+                "remaining_usd": remaining_usd,
+                "usage_pct": usage_pct,
+                "alert_status": alert_status,
+                "total_calls": total_calls,
+                "stt_calls": stt_calls,
+                "llm_calls": llm_calls,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": total_tokens,
+                "audio_seconds_billed": audio_seconds,
+                "audio_minutes_billed": audio_minutes,
+                "audio_hours_billed": audio_hours,
+                "avg_latency_ms": avg_latency_ms,
+                "sessions_with_calls": sessions_with_calls,
+                "total_clips_curated": billed_clips_total,
+                "total_clips_rendered": effective_clips,
+                "projections": {
+                    "avg_cost_per_stream_hour_usd": avg_cost_per_hour,
+                    "stt_cost_per_stream_hour_usd": stt_cost_per_hour,
+                    "llm_cost_per_stream_hour_usd": llm_cost_per_hour,
+                    "avg_cost_per_clip_usd": avg_cost_per_clip,
+                    "avg_clips_per_stream_hour": avg_clips_per_hour,
+                    "avg_tokens_per_stream_hour": avg_tokens_per_hour,
+                    "estimated_remaining_stream_hours": est_remaining_hours,
+                    "estimated_remaining_clips": est_remaining_clips,
+                },
+            }
+
+    def analytics_breakdown(self) -> Dict[str, Any]:
+        """Group API usage by provider, model, calendar day, and session."""
+        with self._lock:
+            spent_total = max(0.0, self.total_spend_usd())
+
+            prov_rows = self._conn.execute(
+                """SELECT provider,
+                          kind,
+                          COUNT(*) AS calls,
+                          COALESCE(SUM(CASE WHEN kind = 'stt' THEN units_billed ELSE 0.0 END), 0.0) AS audio_seconds,
+                          COALESCE(SUM(input_tokens), 0) AS input_tokens,
+                          COALESCE(SUM(output_tokens), 0) AS output_tokens,
+                          COALESCE(SUM(cost_usd), 0.0) AS cost_usd,
+                          COALESCE(AVG(latency_ms), 0.0) AS avg_latency_ms
+                   FROM api_calls
+                   GROUP BY provider, kind
+                   ORDER BY cost_usd DESC, calls DESC"""
+            ).fetchall()
+
+            by_provider: List[Dict[str, Any]] = []
+            for r in prov_rows:
+                c_usd = round(float(r["cost_usd"] or 0.0), 6)
+                a_sec = round(float(r["audio_seconds"] or 0.0), 3)
+                in_tok = int(r["input_tokens"] or 0)
+                out_tok = int(r["output_tokens"] or 0)
+                by_provider.append(
+                    {
+                        "provider": str(r["provider"]),
+                        "kind": str(r["kind"]),
+                        "calls": int(r["calls"] or 0),
+                        "audio_seconds": a_sec,
+                        "audio_minutes": round(a_sec / 60.0, 2),
+                        "audio_hours": round(a_sec / 3600.0, 4),
+                        "input_tokens": in_tok,
+                        "output_tokens": out_tok,
+                        "total_tokens": in_tok + out_tok,
+                        "cost_usd": c_usd,
+                        "share_pct": round((c_usd / spent_total) * 100.0, 2) if spent_total > 0 else 0.0,
+                        "avg_latency_ms": int(round(float(r["avg_latency_ms"] or 0.0))),
+                    }
+                )
+
+            model_rows = self._conn.execute(
+                """SELECT provider,
+                          model,
+                          kind,
+                          COUNT(*) AS calls,
+                          COALESCE(SUM(units_billed), 0.0) AS units_billed,
+                          COALESCE(SUM(CASE WHEN kind = 'stt' THEN units_billed ELSE 0.0 END), 0.0) AS audio_seconds,
+                          COALESCE(SUM(input_tokens), 0) AS input_tokens,
+                          COALESCE(SUM(output_tokens), 0) AS output_tokens,
+                          COALESCE(SUM(cost_usd), 0.0) AS cost_usd,
+                          COALESCE(AVG(latency_ms), 0.0) AS avg_latency_ms
+                   FROM api_calls
+                   GROUP BY provider, model, kind
+                   ORDER BY cost_usd DESC, calls DESC"""
+            ).fetchall()
+
+            by_model: List[Dict[str, Any]] = []
+            for r in model_rows:
+                c_usd = round(float(r["cost_usd"] or 0.0), 6)
+                a_sec = round(float(r["audio_seconds"] or 0.0), 3)
+                in_tok = int(r["input_tokens"] or 0)
+                out_tok = int(r["output_tokens"] or 0)
+                by_model.append(
+                    {
+                        "provider": str(r["provider"]),
+                        "model": str(r["model"]),
+                        "kind": str(r["kind"]),
+                        "calls": int(r["calls"] or 0),
+                        "units_billed": round(float(r["units_billed"] or 0.0), 3),
+                        "audio_seconds": a_sec,
+                        "audio_minutes": round(a_sec / 60.0, 2),
+                        "input_tokens": in_tok,
+                        "output_tokens": out_tok,
+                        "total_tokens": in_tok + out_tok,
+                        "cost_usd": c_usd,
+                        "share_pct": round((c_usd / spent_total) * 100.0, 2) if spent_total > 0 else 0.0,
+                        "avg_latency_ms": int(round(float(r["avg_latency_ms"] or 0.0))),
+                    }
+                )
+
+            day_rows = self._conn.execute(
+                """SELECT date(created_at, 'unixepoch', 'localtime') AS day_date,
+                          COUNT(*) AS calls,
+                          COALESCE(SUM(CASE WHEN kind = 'stt' THEN 1 ELSE 0 END), 0) AS stt_calls,
+                          COALESCE(SUM(CASE WHEN kind = 'llm' THEN 1 ELSE 0 END), 0) AS llm_calls,
+                          COALESCE(SUM(cost_usd), 0.0) AS cost_usd,
+                          COALESCE(SUM(CASE WHEN kind = 'stt' THEN cost_usd ELSE 0.0 END), 0.0) AS stt_cost_usd,
+                          COALESCE(SUM(CASE WHEN kind = 'llm' THEN cost_usd ELSE 0.0 END), 0.0) AS llm_cost_usd,
+                          COALESCE(SUM(CASE WHEN kind = 'stt' THEN units_billed ELSE 0.0 END), 0.0) AS audio_seconds,
+                          COALESCE(SUM(input_tokens), 0) AS input_tokens,
+                          COALESCE(SUM(output_tokens), 0) AS output_tokens
+                   FROM api_calls
+                   GROUP BY day_date
+                   ORDER BY day_date ASC"""
+            ).fetchall()
+
+            by_day: List[Dict[str, Any]] = []
+            for r in day_rows:
+                a_sec = round(float(r["audio_seconds"] or 0.0), 3)
+                in_tok = int(r["input_tokens"] or 0)
+                out_tok = int(r["output_tokens"] or 0)
+                by_day.append(
+                    {
+                        "date": str(r["day_date"] or "unknown"),
+                        "calls": int(r["calls"] or 0),
+                        "stt_calls": int(r["stt_calls"] or 0),
+                        "llm_calls": int(r["llm_calls"] or 0),
+                        "cost_usd": round(float(r["cost_usd"] or 0.0), 6),
+                        "stt_cost_usd": round(float(r["stt_cost_usd"] or 0.0), 6),
+                        "llm_cost_usd": round(float(r["llm_cost_usd"] or 0.0), 6),
+                        "audio_minutes": round(a_sec / 60.0, 2),
+                        "input_tokens": in_tok,
+                        "output_tokens": out_tok,
+                        "total_tokens": in_tok + out_tok,
+                    }
+                )
+
+            sess_rows = self._conn.execute(
+                """SELECT COALESCE(a.session_id, 'unassigned') AS session_id,
+                          COALESCE(s.title, a.session_id, 'Sesión sin vincular') AS session_title,
+                          COALESCE(s.state, 'UNKNOWN') AS state,
+                          COUNT(*) AS calls,
+                          COALESCE(SUM(CASE WHEN a.kind = 'stt' THEN 1 ELSE 0 END), 0) AS stt_calls,
+                          COALESCE(SUM(CASE WHEN a.kind = 'llm' THEN 1 ELSE 0 END), 0) AS llm_calls,
+                          COALESCE(SUM(a.cost_usd), 0.0) AS cost_usd,
+                          COALESCE(SUM(CASE WHEN a.kind = 'stt' THEN a.cost_usd ELSE 0.0 END), 0.0) AS stt_cost_usd,
+                          COALESCE(SUM(CASE WHEN a.kind = 'llm' THEN a.cost_usd ELSE 0.0 END), 0.0) AS llm_cost_usd,
+                          COALESCE(SUM(CASE WHEN a.kind = 'stt' THEN a.units_billed ELSE 0.0 END), 0.0) AS audio_seconds,
+                          COALESCE(SUM(a.input_tokens), 0) AS input_tokens,
+                          COALESCE(SUM(a.output_tokens), 0) AS output_tokens,
+                          MIN(a.created_at) AS first_call_at,
+                          MAX(a.created_at) AS last_call_at,
+                          (SELECT COUNT(*) FROM clips c WHERE c.session_id = a.session_id) AS clips_count
+                   FROM api_calls a
+                   LEFT JOIN sessions s ON s.id = a.session_id
+                   GROUP BY a.session_id
+                   ORDER BY last_call_at DESC"""
+            ).fetchall()
+
+            by_session: List[Dict[str, Any]] = []
+            for r in sess_rows:
+                c_usd = round(float(r["cost_usd"] or 0.0), 6)
+                a_sec = round(float(r["audio_seconds"] or 0.0), 3)
+                in_tok = int(r["input_tokens"] or 0)
+                out_tok = int(r["output_tokens"] or 0)
+                c_cnt = int(r["clips_count"] or 0)
+                by_session.append(
+                    {
+                        "session_id": str(r["session_id"]),
+                        "session_title": str(r["session_title"]),
+                        "state": str(r["state"]),
+                        "calls": int(r["calls"] or 0),
+                        "stt_calls": int(r["stt_calls"] or 0),
+                        "llm_calls": int(r["llm_calls"] or 0),
+                        "cost_usd": c_usd,
+                        "stt_cost_usd": round(float(r["stt_cost_usd"] or 0.0), 6),
+                        "llm_cost_usd": round(float(r["llm_cost_usd"] or 0.0), 6),
+                        "audio_seconds": a_sec,
+                        "audio_minutes": round(a_sec / 60.0, 2),
+                        "audio_hours": round(a_sec / 3600.0, 4),
+                        "input_tokens": in_tok,
+                        "output_tokens": out_tok,
+                        "total_tokens": in_tok + out_tok,
+                        "clips_count": c_cnt,
+                        "cost_per_clip_usd": round(c_usd / c_cnt, 6) if c_cnt > 0 else 0.0,
+                        "first_call_at": float(r["first_call_at"] or 0.0),
+                        "last_call_at": float(r["last_call_at"] or 0.0),
+                    }
+                )
+
+            return {
+                "spent_usd": spent_total,
+                "by_provider": by_provider,
+                "by_model": by_model,
+                "by_day": by_day,
+                "by_session": by_session,
+            }
+
+    def analytics_logs(
+        self,
+        provider: Optional[str] = None,
+        kind: Optional[str] = None,
+        session_id: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        search: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """Return paginated individual API call logs with filters."""
+        clauses: List[str] = []
+        params: List[Any] = []
+
+        if provider and provider.strip().lower() not in {"all", "todos", ""}:
+            p = provider.strip().lower()
+            if p in {"openai", "openai_compat"}:
+                clauses.append("LOWER(a.provider) IN ('openai', 'openai_compat')")
+            else:
+                clauses.append("LOWER(a.provider) = ?")
+                params.append(p)
+
+        if kind and kind.strip().lower() not in {"all", "todos", ""}:
+            clauses.append("LOWER(a.kind) = ?")
+            params.append(kind.strip().lower())
+
+        if session_id and session_id.strip().lower() not in {"all", "todas", ""}:
+            clauses.append("a.session_id = ?")
+            params.append(session_id.strip())
+
+        ts_from = self._parse_date_bound(date_from, end_of_day=False)
+        if ts_from is not None:
+            clauses.append("a.created_at >= ?")
+            params.append(ts_from)
+
+        ts_to = self._parse_date_bound(date_to, end_of_day=True)
+        if ts_to is not None:
+            clauses.append("a.created_at <= ?")
+            params.append(ts_to)
+
+        if search and search.strip():
+            q = f"%{search.strip().lower()}%"
+            clauses.append(
+                "(LOWER(a.id) LIKE ? OR LOWER(a.provider) LIKE ? OR LOWER(a.model) LIKE ? "
+                "OR LOWER(COALESCE(a.session_id, '')) LIKE ? OR LOWER(COALESCE(s.title, '')) LIKE ? "
+                "OR LOWER(a.task_hash) LIKE ?)"
+            )
+            params.extend([q, q, q, q, q, q])
+
+        where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+
+        with self._lock:
+            count_row = self._conn.execute(
+                f"""SELECT COUNT(*) AS cnt,
+                           COALESCE(SUM(a.cost_usd), 0.0) AS filtered_cost_usd
+                    FROM api_calls a
+                    LEFT JOIN sessions s ON s.id = a.session_id
+                    {where_sql}""",
+                params,
+            ).fetchone()
+            total = int(count_row["cnt"] or 0)
+            filtered_cost_usd = round(float(count_row["filtered_cost_usd"] or 0.0), 6)
+
+            rows = self._conn.execute(
+                f"""SELECT a.*,
+                           COALESCE(s.title, '') AS session_title
+                    FROM api_calls a
+                    LEFT JOIN sessions s ON s.id = a.session_id
+                    {where_sql}
+                    ORDER BY a.created_at DESC, a.id DESC
+                    LIMIT ? OFFSET ?""",
+                [*params, max(1, int(limit)), max(0, int(offset))],
+            ).fetchall()
+
+            items: List[Dict[str, Any]] = []
+            for r in rows:
+                k = str(r["kind"])
+                u_billed = round(float(r["units_billed"] or 0.0), 3)
+                a_sec = u_billed if k == "stt" else 0.0
+                in_tok = int(r["input_tokens"] or 0)
+                out_tok = int(r["output_tokens"] or 0)
+                ts = float(r["created_at"] or 0.0)
+                try:
+                    iso_str = datetime.fromtimestamp(ts).isoformat(timespec="seconds")
+                except Exception:
+                    iso_str = ""
+                items.append(
+                    {
+                        "id": str(r["id"]),
+                        "session_id": r["session_id"],
+                        "session_title": str(r["session_title"] or ""),
+                        "task_hash": str(r["task_hash"]),
+                        "provider": str(r["provider"]),
+                        "model": str(r["model"]),
+                        "kind": k,
+                        "units_billed": u_billed,
+                        "audio_seconds": a_sec,
+                        "audio_minutes": round(a_sec / 60.0, 2) if k == "stt" else 0.0,
+                        "input_tokens": in_tok,
+                        "output_tokens": out_tok,
+                        "total_tokens": in_tok + out_tok,
+                        "cost_usd": round(float(r["cost_usd"] or 0.0), 6),
+                        "latency_ms": int(r["latency_ms"] or 0),
+                        "created_at": ts,
+                        "created_iso": iso_str,
+                    }
+                )
+
+            return {
+                "total": total,
+                "limit": int(limit),
+                "offset": int(offset),
+                "filtered_cost_usd": filtered_cost_usd,
+                "items": items,
             }
 
     # --- Clips -------------------------------------------------------------

@@ -337,6 +337,36 @@ def create_app(
     def get_budget() -> Dict[str, Any]:
         return orch.db.budget_summary(cfg.max_budget_usd)
 
+    @app.get("/analytics/summary")
+    def get_analytics_summary() -> Dict[str, Any]:
+        return orch.db.analytics_summary(cfg.max_budget_usd)
+
+    @app.get("/analytics/breakdown")
+    def get_analytics_breakdown() -> Dict[str, Any]:
+        return orch.db.analytics_breakdown()
+
+    @app.get("/analytics/logs")
+    def get_analytics_logs(
+        provider: Optional[str] = Query(default=None),
+        kind: Optional[str] = Query(default=None),
+        session_id: Optional[str] = Query(default=None),
+        date_from: Optional[str] = Query(default=None),
+        date_to: Optional[str] = Query(default=None),
+        search: Optional[str] = Query(default=None),
+        limit: int = Query(default=50, ge=1, le=500),
+        offset: int = Query(default=0, ge=0),
+    ) -> Dict[str, Any]:
+        return orch.db.analytics_logs(
+            provider=provider,
+            kind=kind,
+            session_id=session_id,
+            date_from=date_from,
+            date_to=date_to,
+            search=search,
+            limit=limit,
+            offset=offset,
+        )
+
     @app.get("/settings")
     def get_settings_endpoint() -> Dict[str, Any]:
         return cfg.to_masked_dict()
