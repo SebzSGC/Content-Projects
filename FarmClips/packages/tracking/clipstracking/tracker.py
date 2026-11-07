@@ -59,6 +59,9 @@ def track_clip_face(
     cam_end = max(cam_start + 0.2, min(cam_info.duration, sync.camera_time(master_end)))
     cam_dur = max(0.2, cam_end - cam_start)
 
+    # Adaptive downsampling: 10 fps for clips >= 30s (One Euro Filter smoothly interpolates to 60 fps)
+    eff_fps = 10.0 if (fps == 15.0 and cam_dur >= 30.0) else fps
+
     model_file = ensure_face_detector_model()
     options = vision.FaceDetectorOptions(
         base_options=BaseOptions(model_asset_path=str(model_file)),
@@ -80,7 +83,7 @@ def track_clip_face(
         str(camera_path),
         "-an",
         "-vf",
-        f"fps={fps:g},scale={pipe_w}:{pipe_h}",
+        f"fps={eff_fps:g},scale={pipe_w}:{pipe_h}",
         "-f",
         "rawvideo",
         "-pix_fmt",
@@ -95,6 +98,9 @@ def track_clip_face(
     size_list: List[float] = []
     conf_list: List[float] = []
 
+    # Pre-allocated reusable frame buffer to avoid per-frame `.copy()` allocations
+    reusable_arr = np.empty((pipe_h, pipe_w, 3), dtype=np.uint8)
+
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     assert proc.stdout is not None
     try:
@@ -105,14 +111,14 @@ def track_clip_face(
                 buf = proc.stdout.read(frame_bytes)
                 if len(buf) < frame_bytes:
                     break
-                cam_t = cam_start + (frame_idx / fps)
-                ts_ms = int(round((frame_idx / fps) * 1000.0))
+                cam_t = cam_start + (frame_idx / eff_fps)
+                ts_ms = int(round((frame_idx / eff_fps) * 1000.0))
                 if ts_ms <= last_ts_ms:
                     ts_ms = last_ts_ms + 1
                 last_ts_ms = ts_ms
 
-                arr = np.frombuffer(buf, dtype=np.uint8).reshape((pipe_h, pipe_w, 3)).copy()
-                mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=arr)
+                np.copyto(reusable_arr, np.frombuffer(buf, dtype=np.uint8).reshape((pipe_h, pipe_w, 3)))
+                mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=reusable_arr)
                 res = detector.detect_for_video(mp_img, ts_ms)
 
                 mt = round(sync.master_time(cam_t), 3)
@@ -150,7 +156,7 @@ def track_clip_face(
         proc.wait(timeout=15)
 
     traj = FaceTrajectory(
-        fps=fps,
+        fps=eff_fps,
         width=pipe_w,
         height=pipe_h,
         master_start=round(master_start, 3),

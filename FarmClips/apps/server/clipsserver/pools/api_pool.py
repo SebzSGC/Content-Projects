@@ -121,6 +121,21 @@ class ApiPool:
         async with self._download_sem:
             return await fn()
 
+    @staticmethod
+    def _chunk_speech_ratio(chunk: AudioChunk, silences: Sequence[SilenceSpan]) -> float:
+        """Compute active speech fraction in [0.0, 1.0] for an AudioChunk using pre-detected camera silences."""
+        if chunk.duration <= 0.0 or not silences:
+            return 1.0
+        c_start = chunk.start_cam_sec
+        c_end = chunk.end_cam_sec
+        silent_sec = 0.0
+        for s in silences:
+            ov_s = max(c_start, s.start)
+            ov_e = min(c_end, s.end)
+            if ov_e > ov_s:
+                silent_sec += ov_e - ov_s
+        return max(0.0, min(1.0, 1.0 - (silent_sec / chunk.duration)))
+
     async def transcribe_chunk_cached(
         self,
         session_id: str,
@@ -131,7 +146,7 @@ class ApiPool:
         silences: Sequence[SilenceSpan],
         chunks_work_dir: Path,
     ) -> List[TranscriptWord]:
-        """Transcribe one Opus chunk (cached by audio SHA-256; splits finer automatically on 413)."""
+        """Transcribe one Opus chunk (cached by audio SHA-256; skips silent/AFK chunks; splits finer on 413)."""
         audio_p = Path(chunk.path)
         audio_digest = chunk.sha256 or _file_sha256(audio_p)
         task_hash = stable_hash(
@@ -150,6 +165,13 @@ class ApiPool:
             raw_words = json.loads(cached_path.read_text(encoding="utf-8"))
             chunk_words = [TranscriptWord.model_validate(w) for w in raw_words]
             return offset_and_map_words_to_master(chunk_words, chunk.start_cam_sec, sync.master_time)
+
+        # VAD / Silence Pre-Filter: skip external STT billing if chunk (>=10s) is >=97% silence (AFK / BRB)
+        if chunk.duration >= 10.0 and self._chunk_speech_ratio(chunk, silences) < 0.03:
+            norm_file = self.norm_dir / f"stt_words_{task_hash}.json"
+            norm_file.write_text("[]", encoding="utf-8")
+            self.db.put_artifact(task_hash, "stt_words", norm_file)
+            return []
 
         self.db.assert_within_budget(self.settings.max_budget_usd)
         tid = self.db.start_task(session_id, "stt_chunk", task_hash)

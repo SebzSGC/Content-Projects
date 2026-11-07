@@ -79,6 +79,11 @@ export default function ClipEditorPage() {
   const camWrapRef = useRef<HTMLDivElement | null>(null);
   const gameWrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const scrubberInputRef = useRef<HTMLInputElement | null>(null);
+  const timeLabelRef = useRef<HTMLSpanElement | null>(null);
+  const playheadBarRef = useRef<HTMLDivElement | null>(null);
+  const wordWidthCacheRef = useRef<Map<string, number>>(new Map());
+  const lastReactTimeSyncRef = useRef<number>(0);
   const emojiCacheRef = useRef<Record<string, HTMLImageElement>>({});
   const clipTimeRef = useRef(0);
   const playingRef = useRef(false);
@@ -306,9 +311,14 @@ export default function ClipEditorPage() {
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           const txt = ov.text.trim();
-          const metrics = ctx.measureText(txt);
+          const titleKey = `title:24:${txt}`;
+          let titleW = wordWidthCacheRef.current.get(titleKey);
+          if (titleW === undefined) {
+            titleW = ctx.measureText(txt).width;
+            wordWidthCacheRef.current.set(titleKey, titleW);
+          }
           const padX = 20;
-          const boxW = Math.min(W - 36, metrics.width + padX * 2);
+          const boxW = Math.min(W - 36, titleW + padX * 2);
           const boxH = 44;
           const bx = (W - boxW) / 2;
           const by = seamY - boxH / 2;
@@ -350,7 +360,7 @@ export default function ClipEditorPage() {
           }
         }
 
-        // Measure each word to render multi-colored inline words centered cleanly
+        // Measure each word (cached by fontPx + word) to render multi-colored inline words centered cleanly
         ctx.save();
         const wordSpecs = activeGroup.words.map((w) => {
           const isActive = t >= w.s && t < w.e;
@@ -377,8 +387,13 @@ export default function ClipEditorPage() {
           }
 
           const fontPx = Math.round(baseFontPx * scale);
-          ctx.font = `800 ${fontPx}px "Montserrat ExtraBold", Impact, sans-serif`;
-          const width = ctx.measureText(w.w).width;
+          const cacheKey = `${fontPx}:${w.w}`;
+          let width = wordWidthCacheRef.current.get(cacheKey);
+          if (width === undefined) {
+            ctx.font = `800 ${fontPx}px "Montserrat ExtraBold", Impact, sans-serif`;
+            width = ctx.measureText(w.w).width;
+            wordWidthCacheRef.current.set(cacheKey, width);
+          }
           return { text: w.w, color, fontPx, width };
         });
 
@@ -491,7 +506,20 @@ export default function ClipEditorPage() {
           }
         }
         clipTimeRef.current = nextT;
-        setClipTime(nextT);
+        // Direct 60fps DOM updates without triggering full React Virtual DOM reconciliation on every frame
+        if (scrubberInputRef.current) {
+          scrubberInputRef.current.value = String(nextT);
+        }
+        if (timeLabelRef.current) {
+          timeLabelRef.current.textContent = `${nextT.toFixed(2)}s / ${total.toFixed(1)}s`;
+        }
+        if (playheadBarRef.current) {
+          playheadBarRef.current.style.left = `${(nextT / Math.max(0.1, total)) * 100}%`;
+        }
+        if (now - lastReactTimeSyncRef.current >= 120 || nextT === 0) {
+          lastReactTimeSyncRef.current = now;
+          setClipTime(nextT);
+        }
       }
 
       renderFrameAt(clipTimeRef.current);
@@ -515,6 +543,7 @@ export default function ClipEditorPage() {
     } else {
       gv?.pause();
       cv?.pause();
+      setClipTime(clipTimeRef.current);
     }
   }
 
@@ -522,6 +551,9 @@ export default function ClipEditorPage() {
     const total = plan ? getTotalClipDuration(plan) : 0;
     const clamped = Math.max(0, Math.min(total, newT));
     clipTimeRef.current = clamped;
+    if (scrubberInputRef.current) scrubberInputRef.current.value = String(clamped);
+    if (timeLabelRef.current) timeLabelRef.current.textContent = `${clamped.toFixed(2)}s / ${total.toFixed(1)}s`;
+    if (playheadBarRef.current) playheadBarRef.current.style.left = `${(clamped / Math.max(0.1, total)) * 100}%`;
     setClipTime(clamped);
     syncVideosToClipTime(clamped, true);
     renderFrameAt(clamped);
@@ -840,15 +872,16 @@ export default function ClipEditorPage() {
                   {playing ? <Pause className="h-4 w-4 fill-black" /> : <Play className="h-4 w-4 fill-black" />}
                 </button>
                 <input
+                  ref={scrubberInputRef}
                   type="range"
                   min={0}
                   max={Math.max(0.1, totalDur)}
                   step={0.02}
-                  value={clipTime}
+                  defaultValue={clipTime}
                   onChange={(e) => seekTo(parseFloat(e.target.value))}
                   className="h-2 flex-1 cursor-pointer accent-[#FFD400]"
                 />
-                <span className="w-24 text-right font-mono text-xs text-zinc-300">
+                <span ref={timeLabelRef} className="w-24 text-right font-mono text-xs text-zinc-300">
                   {clipTime.toFixed(2)}s / {totalDur.toFixed(1)}s
                 </span>
               </div>
@@ -883,6 +916,7 @@ export default function ClipEditorPage() {
                   ))}
                 {/* Playhead */}
                 <div
+                  ref={playheadBarRef}
                   style={{ left: `${(clipTime / Math.max(0.1, totalDur)) * 100}%` }}
                   className="absolute inset-y-0 w-0.5 bg-[#FFD400]"
                 />

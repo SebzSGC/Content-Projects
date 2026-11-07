@@ -25,14 +25,14 @@ class LlmClipProposal(BaseModel):
 
     start_id: str = Field(description="ID de la frase inicial, p.ej. 'u0012'")
     end_id: str = Field(description="ID de la frase final, p.ej. 'u0028'")
-    hook: str = Field(description="Frase inicial o gancho de los primeros 3 segundos")
+    hook: str = Field(default="", description="Frase inicial o gancho de los primeros 3 segundos")
     overlay_title: str = Field(description="Título quemado en pantalla (3 a 7 palabras, ortografía impecable)")
-    post_title: str = Field(description="Título de publicación en MAYÚSCULAS con emoji al final")
+    post_title: str = Field(default="", description="Título de publicación en MAYÚSCULAS con emoji al final")
     hashtags: List[str] = Field(default_factory=list, description="3 a 5 hashtags en minúsculas sin #")
     emphasis_words: List[str] = Field(default_factory=list, description="Palabras exactas clave para resaltar en verde")
     emojis: List[LlmEmojiItem] = Field(default_factory=list, description="Emojis sugeridos asociados a palabras de énfasis")
     score: int = Field(ge=0, le=100, description="Puntuación de viralidad de 0 a 100")
-    reason: str = Field(description="Explicación breve de por qué funciona de forma autónoma")
+    reason: str = Field(default="", description="Explicación ultra concisa (máx 10 palabras)")
 
 
 class CurationEnvelope(BaseModel):
@@ -74,14 +74,8 @@ CURATION_JSON_SCHEMA: Dict[str, Any] = {
                 "required": [
                     "start_id",
                     "end_id",
-                    "hook",
                     "overlay_title",
-                    "post_title",
-                    "hashtags",
-                    "emphasis_words",
-                    "emojis",
                     "score",
-                    "reason",
                 ],
                 "additionalProperties": False,
             },
@@ -91,28 +85,28 @@ CURATION_JSON_SCHEMA: Dict[str, Any] = {
     "additionalProperties": False,
 }
 
+# Static prefix kept invariant at the top of the prompt to maximize automatic Prompt Caching hits
 CURATION_SYSTEM_PROMPT = """Eres director y editor senior de Shorts verticales de gaming en español (estilo Hormozi Gaming).
-Recibes la línea de tiempo compacta del VOD completo con:
+Recibes la línea de tiempo compacta del VOD con:
 - Una línea por frase del streamer: `u0412 [1:02:03] texto`
 - Marcas de picos acústicos y de juego: `>>> PICO [1:02:05] (score=... mic=... juego=...)`
 
 REGLAS CRÍTICAS:
 1. Devuelve IDs de frase exactos (`start_id` y `end_id`, como `"u0004"` y `"u0015"`), NUNCA inventes tiempos en segundos.
 2. Cada clip debe contar una micro-historia autónoma con arco completo: preparación/situación → evento en el juego o giro → reacción/remate del streamer.
-3. Duración objetivo entre {min_len:.0f} y {max_len:.0f} segundos (guíate por las marcas `[h:mm:ss]`).
-4. Evita charla de relleno, agradecimientos de suscripciones o momentos que no se entienden solos.
-5. Para cada clip entrega:
+3. Evita charla de relleno, agradecimientos de suscripciones o momentos que no se entienden solos.
+4. Para cada clip entrega de forma compacta:
    - `start_id` y `end_id`: IDs de frase inicial y final.
-   - `hook`: qué engancha en los primeros 3 segundos.
-   - `overlay_title`: 3 a 7 palabras, tildes correctas, para mostrar en la unión cámara/juego (máx 2 líneas).
+   - `hook`: gancho de 3 a 6 palabras.
+   - `overlay_title`: 3 a 7 palabras, tildes correctas, para mostrar en la unión cámara/juego.
    - `post_title`: MAYÚSCULAS, primera persona, gancho + 1 emoji al final.
-   - `hashtags`: 3 a 5 etiquetas en minúscula sin `#`.
-   - `emphasis_words`: 2 a 6 palabras clave exactas dichas por el streamer donde habrá énfasis verde y zoom de impacto.
-   - `emojis`: pares `{{"word": "palabra_enfasis", "emoji": "1f631"}}` usando códigos hex Unicode de emoji (ej. `1f631`, `1f480`, `1f525`, `1f602`, `1f92f`) asociados solo a palabras de énfasis.
+   - `hashtags`: 3 etiquetas en minúscula sin `#`.
+   - `emphasis_words`: 2 a 4 palabras clave exactas dichas por el streamer donde habrá énfasis verde.
+   - `emojis`: hasta 2 pares `{{"word": "palabra_enfasis", "emoji": "1f631"}}` en código hex Unicode (`1f631`, `1f480`, `1f525`, `1f602`, `1f92f`).
    - `score`: entero 0 a 100 (solo >60 pasan a render automático).
-   - `reason`: 1 frase concisa.
+   - `reason`: máx 8 palabras.
 
-Contexto de la grabación: "{title}". Elige hasta {max_clips} mejores clips."""
+PARÁMETROS DE SESIÓN: Grabación="{title}" | Duración objetivo={min_len:.0f}s a {max_len:.0f}s | Máximo de clips={max_clips}."""
 
 
 class RawLlmCallOutput(BaseModel):
@@ -181,7 +175,7 @@ class LlmAdapter(ABC):
         max_clips: int = 12,
         on_raw_call: Optional[Callable[[RawLlmCallOutput], None]] = None,
     ) -> LlmCurationResult:
-        """Curate timeline with JSON Schema + Pydantic validation; retries once with validation error before failing over."""
+        """Curate timeline with JSON Schema + Pydantic validation; retries once with compact error feedback."""
         sys_prompt = CURATION_SYSTEM_PROMPT.format(
             min_len=min_len,
             max_len=max_len,
@@ -198,8 +192,19 @@ class LlmAdapter(ABC):
             parsed = CurationEnvelope.model_validate(extract_json_dict(first.raw_text))
             return LlmCurationResult(provider=self.provider_name, model=self.model_name, envelope=parsed, calls=calls)
         except (json.JSONDecodeError, ValidationError) as err1:
+            # Token Optimization: do NOT resend full multi-hour transcript on validation retry
+            timeline_snippet = (
+                timeline_text
+                if len(timeline_text) <= 1200
+                else (
+                    f"{timeline_text[:600]}\n"
+                    f"...[TRANSCRIPCIÓN TRUNCADA EN REINTENTO PARA AHORRO DE TOKENS]...\n"
+                    f"{timeline_text[-400:]}"
+                )
+            )
             repair_prompt = (
-                f"{timeline_text}\n\n"
+                f"[BORRADOR JSON GENERADO PREVIAMENTE]\n{first.raw_text}\n\n"
+                f"[CONTEXTO DE REFERENCIA]\n{timeline_snippet}\n\n"
                 f"[CORRECCIÓN DE ESQUEMA REQUERIDA]\n"
                 f"Tu respuesta anterior no cumplió el JSON Schema exacto:\n{err1}\n"
                 f"Devuelve ÚNICAMENTE el objeto JSON corregido que cumpla estrictamente el esquema."

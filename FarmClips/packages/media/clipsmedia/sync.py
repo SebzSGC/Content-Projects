@@ -84,12 +84,57 @@ def estimate_audio_sync(
     first_max_lag_sec: float = 45.0,
     refine_lag_sec: float = 3.0,
     windows: int = 5,
+    fast_initial_cap_sec: float = 600.0,
 ) -> SyncResult:
-    """Align camera recording to gameplay master timeline via FFT cross-correlation of onset envelopes."""
+    """Align camera recording to gameplay master timeline via FFT cross-correlation of onset envelopes.
+
+    For long recordings (> 10 min), runs a fast first-pass on the initial 10-minute acoustic window
+    and returns early if alignment confidence is high (>= 7.5), avoiding full multi-hour disk seeks.
+    """
     master_dur = _wav_duration(master_wav)
     camera_dur = _wav_duration(camera_wav)
-    eff_win = min(window_sec, max(4.0, min(master_dur, camera_dur) * 0.7))
-    eff_lag = min(first_max_lag_sec, max(2.0, min(master_dur, camera_dur) * 0.4))
+    min_dur = min(master_dur, camera_dur)
+    eff_win = min(window_sec, max(4.0, min_dur * 0.7))
+    eff_lag = min(first_max_lag_sec, max(2.0, min_dur * 0.4))
+
+    def _probe_starts(starts_seq: Sequence[float]) -> List[Tuple[float, float, float]]:
+        pts: List[Tuple[float, float, float]] = []
+        pred_shift: Optional[float] = None
+        for t in starts_seq:
+            ref_x, sr = _read_window(master_wav, t, eff_win)
+            ref = onset_envelope(ref_x, sr)
+            lag_sec = eff_lag if pred_shift is None else refine_lag_sec
+            center = t if pred_shift is None else t + pred_shift
+            cam_start = max(0.0, center - lag_sec)
+            cam_x, csr = _read_window(camera_wav, cam_start, eff_win + 2 * lag_sec)
+            other = onset_envelope(cam_x, csr)
+            if len(other) < max(10, len(ref) // 3) or len(ref) < 10:
+                continue
+            lo = int(round((center - lag_sec - cam_start) * ENV_HZ))
+            hi = int(round((center + lag_sec - cam_start) * ENV_HZ))
+            k, conf = xcorr_lag(ref, other, lo, hi)
+            cam_t = cam_start + k / ENV_HZ
+            pts.append((t, cam_t, conf))
+            if pred_shift is None and conf >= 5.5:
+                pred_shift = cam_t - t
+        return pts
+
+    # Fast first-pass on initial 10-minute window for long VODs
+    if min_dur > fast_initial_cap_sec and fast_initial_cap_sec > eff_win * 2.0:
+        fast_usable = fast_initial_cap_sec - eff_win
+        fast_starts = [float(fast_usable * f) for f in (0.05, 0.45, 0.85)]
+        fast_pts = _probe_starts(fast_starts)
+        fast_fit = _fit_linear(fast_pts, min_conf=7.5)
+        if fast_fit is not None:
+            f_scale, f_shift, f_conf = fast_fit
+            samples = [{"t": round(p[0], 2), "camera_t": round(p[1], 2), "confidence": round(p[2], 2)} for p in fast_pts]
+            return SyncResult(
+                shift_sec=round(f_shift, 4),
+                scale=round(f_scale, 6),
+                method="audio_xcorr",
+                confidence=round(min(1.0, f_conf / 14.0), 3),
+                samples=samples,
+            )
 
     if master_dur <= eff_win * 1.4:
         starts = [0.0]
@@ -97,27 +142,7 @@ def estimate_audio_sync(
         usable = max(0.1, min(master_dur, camera_dur + eff_lag) - eff_win)
         starts = [float(usable * f) for f in np.linspace(0.05, 0.90, windows)]
 
-    points: List[Tuple[float, float, float]] = []
-    predicted_shift: Optional[float] = None
-
-    for t in starts:
-        ref_x, sr = _read_window(master_wav, t, eff_win)
-        ref = onset_envelope(ref_x, sr)
-        lag_sec = eff_lag if predicted_shift is None else refine_lag_sec
-        center = t if predicted_shift is None else t + predicted_shift
-        cam_start = max(0.0, center - lag_sec)
-        cam_x, csr = _read_window(camera_wav, cam_start, eff_win + 2 * lag_sec)
-        other = onset_envelope(cam_x, csr)
-        if len(other) < max(10, len(ref) // 3) or len(ref) < 10:
-            continue
-        lo = int(round((center - lag_sec - cam_start) * ENV_HZ))
-        hi = int(round((center + lag_sec - cam_start) * ENV_HZ))
-        k, conf = xcorr_lag(ref, other, lo, hi)
-        cam_t = cam_start + k / ENV_HZ
-        points.append((t, cam_t, conf))
-        if predicted_shift is None and conf >= 5.5:
-            predicted_shift = cam_t - t
-
+    points = _probe_starts(starts)
     fit = _fit_linear(points, min_conf=5.0)
     samples = [{"t": round(p[0], 2), "camera_t": round(p[1], 2), "confidence": round(p[2], 2)} for p in points]
     if fit is None:

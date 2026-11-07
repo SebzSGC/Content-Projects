@@ -123,6 +123,79 @@ def dedupe_clips(clips: Sequence[CuratedClip], max_iou: float = 0.35) -> List[Cu
     return kept
 
 
+# Zero-token CPU fallback dictionary mapping common gaming/reaction words to 42-emoji catalog hex codes
+LOCAL_GAMING_EMOJI_MAP: Dict[str, str] = {
+    "increíble": "1f525",
+    "increible": "1f525",
+    "fuego": "1f525",
+    "racha": "1f525",
+    "clutch": "1f525",
+    "ganamos": "1f3c6",
+    "victoria": "1f3c6",
+    "campeón": "1f3c6",
+    "torneo": "1f3c6",
+    "ronda": "1f3af",
+    "headshot": "1f3af",
+    "disparo": "1f3af",
+    "bala": "1f3af",
+    "ace": "1f4a5",
+    "bomba": "1f4a5",
+    "explosión": "1f4a5",
+    "muerto": "1f480",
+    "morí": "1f480",
+    "calavera": "1f480",
+    "imposible": "1f92f",
+    "locura": "1f92f",
+    "loco": "1f92f",
+    "dios": "1f631",
+    "grito": "1f631",
+    "susto": "1f631",
+    "risa": "1f602",
+    "jaja": "1f602",
+}
+
+
+def infer_local_emphasis_and_emojis(
+    utterances_slice: Sequence[Utterance],
+    existing_emphasis: Sequence[str],
+    existing_emojis: Sequence[EmojiSuggestion],
+) -> Tuple[List[str], List[EmojiSuggestion]]:
+    """Infer emphasis words and emoji hex codes locally on CPU when omitted by minified LLM output."""
+    emph = list(existing_emphasis)
+    emojis = list(existing_emojis)
+    seen_emph = {w.lower() for w in emph}
+    seen_emoji_words = {e.word.lower() for e in emojis}
+
+    for u in utterances_slice:
+        for w in u.words:
+            clean = re.sub(r"[^\wáéíóúñü]", "", w.text.lower())
+            if not clean or len(clean) < 3:
+                continue
+            if clean in LOCAL_GAMING_EMOJI_MAP:
+                if clean not in seen_emph and len(emph) < 5:
+                    emph.append(clean)
+                    seen_emph.add(clean)
+                if clean not in seen_emoji_words and len(emojis) < 3:
+                    emojis.append(EmojiSuggestion(word=clean, emoji=LOCAL_GAMING_EMOJI_MAP[clean]))
+                    seen_emoji_words.add(clean)
+
+    if not emph:
+        for u in utterances_slice:
+            for w in u.words:
+                clean = re.sub(r"[^\wáéíóúñü]", "", w.text.lower())
+                if len(clean) >= 6 and clean not in seen_emph:
+                    emph.append(clean)
+                    seen_emph.add(clean)
+                    if not emojis:
+                        emojis.append(EmojiSuggestion(word=clean, emoji="1f525"))
+                    if len(emph) >= 3:
+                        break
+            if len(emph) >= 3:
+                break
+
+    return emph, emojis
+
+
 def resolve_curated_clips(
     llm_clips: Sequence[Dict[str, Any]],
     utterances: Sequence[Utterance],
@@ -131,7 +204,7 @@ def resolve_curated_clips(
     min_sec: float = 20.0,
     max_sec: float = 60.0,
 ) -> List[CuratedClip]:
-    """Convert LLM utterance IDs into exact word-bounded CuratedClip objects."""
+    """Convert LLM utterance IDs into exact word-bounded CuratedClip objects with local CPU enrichment."""
     if not utterances or not llm_clips:
         return []
     uid_map = {u.id.lower(): i for i, u in enumerate(utterances)}
@@ -159,6 +232,18 @@ def resolve_curated_clips(
             if isinstance(em, dict) and em.get("word") and em.get("emoji"):
                 emojis.append(EmojiSuggestion(word=str(em["word"]).strip(), emoji=str(em["emoji"]).strip()))
 
+        raw_emph = [str(w).strip() for w in (item.get("emphasis_words") or []) if str(w).strip()]
+        span_utts = utterances[s_i : e_i + 1]
+        emph_words, enriched_emojis = infer_local_emphasis_and_emojis(span_utts, raw_emph, emojis)
+
+        raw_hashtags = [str(h).lstrip("#").strip().lower() for h in (item.get("hashtags") or []) if str(h).strip()]
+        if not raw_hashtags:
+            raw_hashtags = ["gaming", "clips", "shorts"]
+
+        hook_text = str(item.get("hook", "")).strip()
+        if not hook_text and span_utts:
+            hook_text = span_utts[0].text[:80].strip()
+
         resolved.append(
             CuratedClip(
                 id=new_id("clip"),
@@ -166,16 +251,16 @@ def resolve_curated_clips(
                 end_id=utterances[e_i].id,
                 start=start_t,
                 end=end_t,
-                hook=str(item.get("hook", "")).strip(),
+                hook=hook_text,
                 overlay_title=str(item.get("overlay_title", "")).strip() or "Momentazo en directo",
                 post_title=str(item.get("post_title", "")).strip() or "NO PUEDE SER ESTO 💀",
-                hashtags=[str(h).lstrip("#").strip().lower() for h in (item.get("hashtags") or []) if str(h).strip()],
-                emphasis_words=[str(w).strip() for w in (item.get("emphasis_words") or []) if str(w).strip()],
-                emojis=emojis,
+                hashtags=raw_hashtags,
+                emphasis_words=emph_words,
+                emojis=enriched_emojis,
                 llm_score=llm_score,
                 signal_score=sig_score,
                 final_score=combined,
-                reason=str(item.get("reason", "")).strip(),
+                reason=str(item.get("reason", "")).strip() or "Seleccionado por alta energía y arco narrativo.",
                 reaction_peaks=r_peaks,
             )
         )

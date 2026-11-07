@@ -211,7 +211,17 @@ class OrchestratorDB:
 
     def list_sessions(self) -> List[Dict[str, Any]]:
         with self._lock:
-            rows = self._conn.execute("SELECT * FROM sessions ORDER BY created_at DESC").fetchall()
+            rows = self._conn.execute(
+                """
+                SELECT s.*,
+                       COUNT(c.id) AS clips_count,
+                       COALESCE(SUM(CASE WHEN c.final_mp4_path IS NOT NULL AND c.final_mp4_path != '' THEN 1 ELSE 0 END), 0) AS rendered_count
+                FROM sessions s
+                LEFT JOIN clips c ON c.session_id = s.id
+                GROUP BY s.id
+                ORDER BY s.created_at DESC
+                """
+            ).fetchall()
             return [dict(r) for r in rows]
 
     def update_session(self, session_id: str, **fields: Any) -> None:

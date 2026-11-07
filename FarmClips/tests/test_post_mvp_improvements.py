@@ -875,4 +875,161 @@ def test_google_drive_oauth_connector_explorer_and_session_creation(
         assert not token_file.is_file()
 
 
+async def test_token_optimizations_and_performance_improvements(tmp_path: Path) -> None:
+    from clipscore.domain import AudioChunk, SilenceSpan, TranscriptWord, Utterance
+    from clipscore.selection import resolve_curated_clips
+    from clipscore.timeline import build_timeline_windows_if_needed, prune_utterances_by_signal_clusters
+    from clipsproviders.llm import LlmAdapter, RawLlmCallOutput
+    from clipsproviders.stt import SttAdapter, SttResult
+
+    # 1. Signal-Clustered Timeline Pruning (>65% token reduction on 30-min VOD with 2 active clusters)
+    long_utts: List[Utterance] = []
+    for i in range(300):
+        t_s = float(i * 6)
+        t_e = t_s + 4.5
+        w1 = TranscriptWord(text="increíble" if i in (33, 34, 233) else "caminando", start=t_s, end=t_s + 2.0, prob=0.99)
+        w2 = TranscriptWord(text="clutch" if i in (33, 34, 233) else "tranquilo", start=t_s + 2.1, end=t_e, prob=0.99)
+        long_utts.append(
+            Utterance(
+                id=f"u{i + 1:04d}",
+                start=t_s,
+                end=t_e,
+                text=f"{w1.text} {w2.text}",
+                words=[w1, w2],
+            )
+        )
+
+    exc_series = [0.85 if (190 <= s <= 215 or 1390 <= s <= 1415) else 0.10 for s in range(1800)]
+    long_signals = SignalSeries(
+        duration=1800.0,
+        excitement=exc_series,
+        reaction=exc_series,
+        peaks=[
+            SignalPeak(t=200.0, score=0.94, mic=0.90, game=0.80),
+            SignalPeak(t=1400.0, score=0.91, mic=0.85, game=0.75),
+        ],
+    )
+    pruned_utts = prune_utterances_by_signal_clusters(long_utts, long_signals)
+    assert len(pruned_utts) < len(long_utts) * 0.35
+    unpruned_win = build_timeline_windows_if_needed(long_utts, long_signals, prune_dead_zones=False)[0]
+    pruned_win = build_timeline_windows_if_needed(long_utts, long_signals, prune_dead_zones=True)[0]
+    assert len(pruned_win) < len(unpruned_win) * 0.40
+
+    # 2. Non-duplicating Pydantic repair prompt + Minified LLM output with local CPU enrichment
+    class MinifiedRepairLlm(LlmAdapter):
+        provider_name = "minified_test"
+        model_name = "fast-llm"
+
+        def __init__(self) -> None:
+            self.seen_user_prompts: List[str] = []
+
+        async def generate_raw(self, system_prompt: str, user_text: str, json_schema: Dict[str, Any], max_output_tokens: int = 8192) -> RawLlmCallOutput:
+            self.seen_user_prompts.append(user_text)
+            if len(self.seen_user_prompts) == 1:
+                return RawLlmCallOutput(provider="minified_test", model="fast-llm", raw_text='{"clips": [{"start_id": "u0033"}]}')
+            # Second call returns minified proposal (omitting hook, post_title, hashtags, emphasis_words, emojis, reason)
+            minified_valid = json.dumps(
+                {
+                    "clips": [
+                        {
+                            "start_id": "u0033",
+                            "end_id": "u0036",
+                            "overlay_title": "Clutch increíble final",
+                            "score": 91,
+                        }
+                    ]
+                }
+            )
+            return RawLlmCallOutput(provider="minified_test", model="fast-llm", raw_text=minified_valid)
+
+    llm_adapter = MinifiedRepairLlm()
+    cur_res = await llm_adapter.curate_timeline(unpruned_win, title="Torneo Valorant")
+    assert len(llm_adapter.seen_user_prompts) == 2
+    # Repair prompt must truncate the massive transcript (>80% smaller than initial prompt)
+    assert len(llm_adapter.seen_user_prompts[1]) < len(llm_adapter.seen_user_prompts[0]) * 0.25
+    assert "TRANSCRIPCIÓN TRUNCADA EN REINTENTO" in llm_adapter.seen_user_prompts[1]
+
+    resolved = resolve_curated_clips(
+        [c.model_dump(mode="json") for c in cur_res.envelope.clips],
+        long_utts,
+        long_signals,
+        vod_duration=1800.0,
+    )
+    assert len(resolved) == 1
+    assert "increíble" in resolved[0].emphasis_words or "clutch" in resolved[0].emphasis_words
+    assert len(resolved[0].emojis) >= 1
+    assert resolved[0].emojis[0].emoji == "1f525"
+    assert resolved[0].hashtags == ["gaming", "clips", "shorts"]
+    assert resolved[0].hook != ""
+
+    # 3. VAD / Silence Pre-Filter skips paid STT calls on >=97% silent chunks
+    stt_calls = 0
+
+    class CountingStt(SttAdapter):
+        provider_name = "counting"
+        model_name = "counting-stt"
+
+        async def transcribe_chunk(self, audio_path: Path, duration_sec: float, language: str = "es", keyterms=()):
+            nonlocal stt_calls
+            stt_calls += 1
+            return SttResult(provider="counting", model="counting-stt", words=[], raw_response={}, units_billed_sec=duration_sec, cost_usd=0.05)
+
+    settings = ServerSettings(
+        data_dir=tmp_path / "perf_data",
+        drive_mode="local",
+        drive_local_dir=tmp_path / "drive_local",
+        stt_primary="fixture",
+        stt_backup="none",
+        llm_primary="fixture",
+        llm_backup="none",
+        fixtures_dir=FIXTURES_DIR,
+    )
+    app = create_app(settings, use_process_pool=False, enable_drive_watcher=False)
+    orch: Orchestrator = app.state.orchestrator
+    orch.api_pool.stt_router.primary = CountingStt()
+
+    dummy_opus = tmp_path / "silent_afk.opus"
+    dummy_opus.write_bytes(b"OggS-silent-chunk")
+    afk_chunk = AudioChunk(index=0, path=str(dummy_opus), start_cam_sec=0.0, end_cam_sec=120.0, sha256="sha_afk_001")
+    afk_silences = [SilenceSpan(start=0.0, end=119.0)]
+    words_out = await orch.api_pool.transcribe_chunk_cached(
+        session_id="ses_afk",
+        chunk=afk_chunk,
+        sync=SyncResult(shift_sec=0.0, scale=1.0),
+        language="es",
+        keyterms=[],
+        silences=afk_silences,
+        chunks_work_dir=tmp_path,
+    )
+    assert words_out == []
+    assert stt_calls == 0  # Zero external API calls for silent AFK chunk!
+
+    # 4. Disk Frame Cache (MISS -> HIT) & N+1-free GET /sessions
+    with TestClient(app) as client:
+        r_create = client.post(
+            "/sessions",
+            json={
+                "title": "Sesión Cache Frame",
+                "gameplay_path": str(GOLDEN_GAMEPLAY),
+                "camera_path": str(GOLDEN_CAMERA),
+                "auto_start": False,
+            },
+        )
+        assert r_create.status_code == 200
+        sid = r_create.json()["id"]
+
+        r_f1 = client.get(f"/sessions/{sid}/frame", params={"source": "gameplay", "t": 1.5, "width": 320})
+        assert r_f1.status_code == 200
+        assert r_f1.headers.get("X-Frame-Cache") == "MISS"
+
+        r_f2 = client.get(f"/sessions/{sid}/frame", params={"source": "gameplay", "t": 1.52, "width": 320})
+        assert r_f2.status_code == 200
+        assert r_f2.headers.get("X-Frame-Cache") == "HIT"
+
+        r_list = client.get("/sessions")
+        assert r_list.status_code == 200
+        assert any(s["id"] == sid and s["clips_count"] == 0 for s in r_list.json())
+
+
+
 

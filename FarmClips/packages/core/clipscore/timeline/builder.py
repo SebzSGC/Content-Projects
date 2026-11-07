@@ -81,6 +81,52 @@ def _format_peak(p: SignalPeak) -> str:
     return f">>> PICO [{fmt_hms(p.t)}] ({' '.join(parts)})"
 
 
+def prune_utterances_by_signal_clusters(
+    utterances: Sequence[Utterance],
+    signals: Optional[SignalSeries],
+    min_vod_sec: float = 600.0,
+    pre_peak_sec: float = 45.0,
+    post_peak_sec: float = 60.0,
+    min_excitement: float = 0.42,
+) -> List[Utterance]:
+    """Two-stage coarse-to-fine token filter: prune low-energy dead zones in long VODs (>= 10 min) using CPU signals."""
+    if not utterances or signals is None:
+        return list(utterances)
+    total_dur = max(float(signals.duration or 0.0), max(u.end for u in utterances))
+    if total_dur < min_vod_sec:
+        return list(utterances)
+
+    raw_spans: List[Tuple[float, float]] = []
+    for p in signals.peaks:
+        raw_spans.append((max(0.0, p.t - pre_peak_sec), min(total_dur, p.t + post_peak_sec)))
+
+    for idx, exc in enumerate(signals.excitement):
+        if exc >= min_excitement:
+            t_sec = float(idx)
+            raw_spans.append((max(0.0, t_sec - pre_peak_sec * 0.6), min(total_dur, t_sec + post_peak_sec * 0.6)))
+
+    if not raw_spans:
+        return list(utterances)
+
+    raw_spans.sort(key=lambda item: item[0])
+    merged: List[Tuple[float, float]] = [raw_spans[0]]
+    for s, e in raw_spans[1:]:
+        prev_s, prev_e = merged[-1]
+        if s <= prev_e + 5.0:
+            merged[-1] = (prev_s, max(prev_e, e))
+        else:
+            merged.append((s, e))
+
+    kept = [
+        u
+        for u in utterances
+        if any(u.end >= span_s and u.start <= span_e for span_s, span_e in merged)
+    ]
+    if len(kept) < min(len(utterances), 8):
+        return list(utterances)
+    return kept
+
+
 def build_compact_timeline(
     utterances: Sequence[Utterance],
     signals: Optional[SignalSeries] = None,
@@ -102,18 +148,24 @@ def build_timeline_windows_if_needed(
     max_chars_per_call: int = 320_000,
     window_sec: float = 3600.0,
     overlap_sec: float = 180.0,
+    prune_dead_zones: bool = True,
 ) -> List[str]:
-    """Single call for normal 1-6h VODs; falls back to overlapping windows only if transcript exceeds context cap."""
-    full_text = build_compact_timeline(utterances, signals)
-    if len(full_text) <= max_chars_per_call or not utterances:
+    """Single call for normal VODs (with CPU signal-cluster dead-zone pruning on >=10m streams); splits if exceeding cap."""
+    active_utts = (
+        prune_utterances_by_signal_clusters(utterances, signals)
+        if prune_dead_zones
+        else list(utterances)
+    )
+    full_text = build_compact_timeline(active_utts, signals)
+    if len(full_text) <= max_chars_per_call or not active_utts:
         return [full_text] if full_text.strip() else []
 
-    total_dur = max(u.end for u in utterances)
+    total_dur = max(u.end for u in active_utts)
     windows: List[str] = []
     start = 0.0
     while start < total_dur:
         end = min(total_dur, start + window_sec)
-        sub_utts = [u for u in utterances if u.end > start and u.start < end]
+        sub_utts = [u for u in active_utts if u.end > start and u.start < end]
         sub_sig = None
         if signals is not None:
             sub_peaks = [p for p in signals.peaks if start <= p.t < end]

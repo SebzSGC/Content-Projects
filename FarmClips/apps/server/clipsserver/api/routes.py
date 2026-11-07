@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import json
 import re
@@ -79,6 +80,7 @@ class ManualSyncBody(BaseModel):
 class RenderClipBody(BaseModel):
     quality: Literal["draft", "final"] = "final"
     upload_to_drive: bool = True
+    async_mode: bool = False
 
 
 class CleanupBody(BaseModel):
@@ -294,7 +296,13 @@ def _serialize_clip(row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _serialize_session(orch: Orchestrator, row: Dict[str, Any]) -> Dict[str, Any]:
-    clips = orch.db.list_clips(row["id"])
+    if "clips_count" in row and "rendered_count" in row:
+        clips_count = int(row["clips_count"] or 0)
+        rendered_count = int(row["rendered_count"] or 0)
+    else:
+        clips = orch.db.list_clips(row["id"])
+        clips_count = len(clips)
+        rendered_count = sum(1 for c in clips if c.get("final_mp4_path") and Path(c["final_mp4_path"]).is_file())
     prep = json.loads(row["prepared_json"]) if row.get("prepared_json") else None
     sync = json.loads(row["sync_json"]) if row.get("sync_json") else None
     detected_game, resolved_terms = resolve_game_keyterms(
@@ -317,8 +325,8 @@ def _serialize_session(orch: Orchestrator, row: Dict[str, Any]) -> Dict[str, Any
         "sync": sync,
         "prepared": prep,
         "error": row["error"],
-        "clips_count": len(clips),
-        "rendered_count": sum(1 for c in clips if c.get("final_mp4_path") and Path(c["final_mp4_path"]).is_file()),
+        "clips_count": clips_count,
+        "rendered_count": rendered_count,
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -580,7 +588,11 @@ def create_app(
         fpath = get_fonts_dir() / "Montserrat-ExtraBold.ttf"
         if not fpath.is_file():
             raise HTTPException(404, "Fuente no encontrada")
-        return FileResponse(fpath, media_type="font/ttf")
+        return FileResponse(
+            fpath,
+            media_type="font/ttf",
+            headers={"Cache-Control": "public, max-age=86400, immutable"},
+        )
 
     @app.get("/emojis")
     def get_emojis_catalog() -> List[Dict[str, str]]:
@@ -592,12 +604,20 @@ def create_app(
     @app.get("/emojis/{emoji_id}.png")
     def serve_emoji(emoji_id: str) -> FileResponse:
         png = ensure_emoji_png(emoji_id)
-        return FileResponse(png, media_type="image/png")
+        return FileResponse(
+            png,
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=86400, immutable"},
+        )
 
     @app.get("/sfx/{sfx_id}.wav")
     def serve_sfx(sfx_id: str) -> FileResponse:
         wav = ensure_sfx_wav(sfx_id)
-        return FileResponse(wav, media_type="audio/wav")
+        return FileResponse(
+            wav,
+            media_type="audio/wav",
+            headers={"Cache-Control": "public, max-age=86400, immutable"},
+        )
 
     @app.get("/keyterms")
     def get_keyterms_profiles(
@@ -1034,10 +1054,24 @@ def create_app(
         src_path = row.get("gameplay_path") if source == "gameplay" else row.get("camera_path")
         if not src_path or not Path(src_path).is_file():
             raise HTTPException(404, f"Fuente {source} no disponible")
-        with tempfile.TemporaryDirectory() as tmp:
-            dst = Path(tmp) / "frame.jpg"
-            extract_frame(src_path, t, dst, width=width)
-            return Response(dst.read_bytes(), media_type="image/jpeg")
+
+        frames_cache_dir = cfg.data_dir / "cache" / "frames"
+        frames_cache_dir.mkdir(parents=True, exist_ok=True)
+        t_bucket_ds = int(round(t * 10.0))
+        cached_jpg = frames_cache_dir / f"{session_id}_{source}_{width}_{t_bucket_ds}.jpg"
+        if cached_jpg.is_file() and cached_jpg.stat().st_size > 100:
+            return Response(
+                cached_jpg.read_bytes(),
+                media_type="image/jpeg",
+                headers={"Cache-Control": "public, max-age=3600", "X-Frame-Cache": "HIT"},
+            )
+
+        extract_frame(src_path, t, cached_jpg, width=width)
+        return Response(
+            cached_jpg.read_bytes(),
+            media_type="image/jpeg",
+            headers={"Cache-Control": "public, max-age=3600", "X-Frame-Cache": "MISS"},
+        )
 
     @app.get("/sessions/{session_id}/stream/{source}")
     def stream_source_video(
@@ -1050,7 +1084,11 @@ def create_app(
         src_path = row.get("gameplay_path") if source == "gameplay" else row.get("camera_path")
         if not src_path or not Path(src_path).is_file():
             raise HTTPException(404, f"Video original {source} no encontrado")
-        return FileResponse(src_path, media_type="video/mp4")
+        return FileResponse(
+            src_path,
+            media_type="video/mp4",
+            headers={"Accept-Ranges": "bytes", "Cache-Control": "public, max-age=3600"},
+        )
 
     @app.get("/sessions/{session_id}/utterances")
     def get_utterances(session_id: str) -> List[Dict[str, Any]]:
@@ -1102,6 +1140,16 @@ def create_app(
         crow = orch.db.get_clip(clip_id)
         if not crow:
             raise HTTPException(404, "Clip no encontrado")
+        if body.async_mode:
+            asyncio.create_task(
+                orch.render_and_deliver_clip(
+                    clip_id=clip_id,
+                    quality=body.quality,
+                    priority=1000.0,
+                    upload_to_drive=(body.quality == "final" and body.upload_to_drive),
+                )
+            )
+            return {"clip": _serialize_clip(crow), "mp4_path": None, "queued": True}
         mp4 = await orch.render_and_deliver_clip(
             clip_id=clip_id,
             quality=body.quality,
@@ -1110,7 +1158,7 @@ def create_app(
         )
         updated = orch.db.get_clip(clip_id)
         assert updated is not None
-        return {"clip": _serialize_clip(updated), "mp4_path": str(mp4)}
+        return {"clip": _serialize_clip(updated), "mp4_path": str(mp4), "queued": False}
 
     @app.get("/clips/{clip_id}/file")
     def serve_rendered_clip(
@@ -1130,6 +1178,7 @@ def create_app(
             p_str,
             media_type="video/mp4",
             filename=f"{clip_id}_{quality}.mp4" if download else None,
+            headers={"Accept-Ranges": "bytes", "Cache-Control": "public, max-age=3600"},
         )
 
     # --- Server-Sent Events (SSE) ------------------------------------------

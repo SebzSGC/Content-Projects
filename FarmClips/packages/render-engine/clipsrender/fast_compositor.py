@@ -328,6 +328,11 @@ class _SequentialVideoSampler:
 
     def __init__(self, path: Path, initial_sec: float) -> None:
         self.cap = cv2.VideoCapture(str(path))
+        if hasattr(cv2, "CAP_PROP_HW_ACCELERATION") and hasattr(cv2, "VIDEO_ACCELERATION_ANY"):
+            try:
+                self.cap.set(cv2.CAP_PROP_HW_ACCELERATION, float(cv2.VIDEO_ACCELERATION_ANY))
+            except Exception:
+                pass
         self.src_fps = float(self.cap.get(cv2.CAP_PROP_FPS) or 30.0)
         self.frame_dt = 1.0 / max(1.0, self.src_fps)
         self.w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 1280
@@ -496,6 +501,7 @@ def render_fast_affine_sync(
     cam_w, cam_h_src = cam_sampler.w, cam_sampler.h
     game_w, game_h_src = game_sampler.w, game_sampler.h
 
+    yuv_h = (render_h * 3) // 2
     yuv_bytes = (render_w * render_h * 3) // 2
     enc_proc = subprocess.Popen(
         enc_cmd,
@@ -509,7 +515,13 @@ def render_fast_affine_sync(
     t_ee = threading.Thread(target=_drain_stream, args=(enc_proc.stderr, enc_err), daemon=True)
     t_ee.start()
 
-    frame_queue: "queue.Queue[Optional[np.ndarray]]" = queue.Queue(maxsize=16)
+    # Pre-allocated YUV420p ring buffer pool: eliminates ~5 GB of transient heap allocations per clip
+    pool_size = 10
+    free_buffers: "queue.Queue[np.ndarray]" = queue.Queue(maxsize=pool_size)
+    for _ in range(pool_size):
+        free_buffers.put_nowait(np.empty((yuv_h, render_w), dtype=np.uint8))
+
+    frame_queue: "queue.Queue[Optional[np.ndarray]]" = queue.Queue(maxsize=pool_size)
     writer_exc: List[BaseException] = []
 
     def _stdin_writer() -> None:
@@ -520,6 +532,10 @@ def render_fast_affine_sync(
                 if item is None:
                     break
                 enc_proc.stdin.write(memoryview(item))
+                try:
+                    free_buffers.put_nowait(item)
+                except queue.Full:
+                    pass
         except BaseException as exc:
             writer_exc.append(exc)
         finally:
@@ -592,8 +608,12 @@ def render_fast_affine_sync(
                     else:
                         _blend_bgra_inplace(canvas, icon_bgra, base_em_x, base_em_y)
 
-            yuv_frame = cv2.cvtColor(canvas, cv2.COLOR_BGR2YUV_I420)
-            frame_queue.put(yuv_frame)
+            try:
+                yuv_buf = free_buffers.get(timeout=0.5)
+            except queue.Empty:
+                yuv_buf = np.empty((yuv_h, render_w), dtype=np.uint8)
+            cv2.cvtColor(canvas, cv2.COLOR_BGR2YUV_I420, dst=yuv_buf)
+            frame_queue.put(yuv_buf)
 
             if emit_progress and (f_idx % 15 == 0):
                 emit_progress(min(0.98, f_idx / float(total_frames)))
