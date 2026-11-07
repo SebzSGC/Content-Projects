@@ -455,3 +455,45 @@ class OrchestratorDB:
                 (session_id,),
             ).fetchall()
             return [dict(r) for r in rows]
+
+    def delete_stale_session_clips(self, session_id: str, keep_clip_ids: List[str]) -> int:
+        """Remove clips from a previous run of `session_id` that are no longer in `keep_clip_ids`."""
+        with self._lock:
+            if not keep_clip_ids:
+                cur = self._conn.execute("DELETE FROM clips WHERE session_id = ?", (session_id,))
+            else:
+                placeholders = ",".join("?" for _ in keep_clip_ids)
+                cur = self._conn.execute(
+                    f"DELETE FROM clips WHERE session_id = ? AND id NOT IN ({placeholders})",
+                    [session_id, *keep_clip_ids],
+                )
+            self._conn.commit()
+            return cur.rowcount
+
+    def purge_fixture_cache(self) -> int:
+        """Delete cached `fixture_stt` / `fixture_llm` artifacts and api_calls so real APIs can run cleanly."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT task_hash FROM api_calls WHERE provider IN ('fixture_stt', 'fixture_llm')"
+            ).fetchall()
+            hashes = [str(r["task_hash"]) for r in rows if r["task_hash"]]
+            removed = 0
+            if hashes:
+                placeholders = ",".join("?" for _ in hashes)
+                art_rows = self._conn.execute(
+                    f"SELECT path FROM artifacts WHERE hash_key IN ({placeholders})",
+                    hashes,
+                ).fetchall()
+                for ar in art_rows:
+                    try:
+                        Path(str(ar["path"])).unlink(missing_ok=True)
+                    except OSError:
+                        pass
+                cur = self._conn.execute(
+                    f"DELETE FROM artifacts WHERE hash_key IN ({placeholders})",
+                    hashes,
+                )
+                removed = cur.rowcount
+            self._conn.execute("DELETE FROM api_calls WHERE provider IN ('fixture_stt', 'fixture_llm')")
+            self._conn.commit()
+            return removed

@@ -36,6 +36,20 @@ def resolve_dotenv_path(path: Optional[Path] = None) -> Path:
     return repo_root / ".env"
 
 
+def _parse_env_val(raw_v: str) -> str:
+    s = raw_v.strip()
+    if not s:
+        return ""
+    if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+        return s[1:-1].strip()
+    # Strip trailing inline comments like `CLIPS_FIXTURES_DIR= #tests/fixtures/api`
+    if "#" in s:
+        idx = s.find("#")
+        if idx == 0 or s[idx - 1].isspace():
+            s = s[:idx].strip()
+    return s
+
+
 def read_dotenv_values(path: Optional[Path] = None) -> Dict[str, str]:
     """Read key-value pairs directly from `.env` without mutating `os.environ`."""
     target = resolve_dotenv_path(path)
@@ -47,8 +61,7 @@ def read_dotenv_values(path: Optional[Path] = None) -> Dict[str, str]:
         if not s or s.startswith("#") or "=" not in s:
             continue
         k, _, v = s.partition("=")
-        val = v.strip().strip('"').strip("'")
-        values[k.strip()] = val
+        values[k.strip()] = _parse_env_val(v)
     return values
 
 
@@ -63,7 +76,7 @@ def load_dotenv(path: Optional[Path] = None, override: bool = False) -> None:
             continue
         k, _, v = s.partition("=")
         key = k.strip()
-        val = v.strip().strip('"').strip("'")
+        val = _parse_env_val(v)
         if override:
             os.environ[key] = val
         elif val:

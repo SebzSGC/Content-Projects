@@ -58,12 +58,9 @@ class ApiPool:
         self.llm_router = self._build_llm_router()
 
     def _make_stt(self, name: str) -> Optional[SttAdapter]:
-        if name == "fixture" or (self.settings.fixtures_dir and name != "none"):
-            if self.settings.fixtures_dir is not None:
-                return RecordedSttFixtureAdapter(self.settings.fixtures_dir / "deepgram_nova3.json")
-            fixture_fallback = Path("tests/fixtures/api/deepgram_nova3.json").resolve()
-            if fixture_fallback.is_file():
-                return RecordedSttFixtureAdapter(fixture_fallback)
+        if name == "fixture":
+            fix_dir = self.settings.fixtures_dir or Path("tests/fixtures/api").resolve()
+            return RecordedSttFixtureAdapter(fix_dir / "deepgram_nova3.json")
         if name == "deepgram":
             return DeepgramNova3Adapter(
                 api_key=self.settings.deepgram_api_key or None,
@@ -85,12 +82,9 @@ class ApiPool:
         return FailoverRouter(primary=primary, backup=backup)
 
     def _make_llm(self, name: str) -> Optional[LlmAdapter]:
-        if name == "fixture" or (self.settings.fixtures_dir and name != "none"):
-            if self.settings.fixtures_dir is not None:
-                return RecordedLlmFixtureAdapter(self.settings.fixtures_dir / "gemini_curate.json")
-            fixture_fallback = Path("tests/fixtures/api/gemini_curate.json").resolve()
-            if fixture_fallback.is_file():
-                return RecordedLlmFixtureAdapter(fixture_fallback)
+        if name == "fixture":
+            fix_dir = self.settings.fixtures_dir or Path("tests/fixtures/api").resolve()
+            return RecordedLlmFixtureAdapter(fix_dir / "gemini_curate.json")
         if name == "gemini":
             return GeminiAdapter(
                 api_key=self.settings.gemini_api_key or None,
@@ -146,7 +140,7 @@ class ApiPool:
                 "audio_sha256": audio_digest,
                 "language": language,
                 "keyterms": list(keyterms),
-                "stt_primary": self.settings.stt_primary,
+                "stt_primary": self.stt_router.primary.provider_name,
             }
         )
 
@@ -230,7 +224,7 @@ class ApiPool:
                 "min_len": min_len,
                 "max_len": max_len,
                 "prompt_version": CURATION_PROMPT_VERSION,
-                "llm_primary": self.settings.llm_primary,
+                "llm_primary": self.llm_router.primary.provider_name,
                 "llm_model": self.settings.llm_model,
             }
         )

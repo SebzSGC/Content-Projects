@@ -435,6 +435,7 @@ class Orchestrator:
                     curated_json=clip.model_dump_json(),
                     state="CURATED",
                 )
+            self.db.delete_stale_session_clips(session_id, [c.id for c in curated_clips])
 
             self._set_state(session_id, SessionState.CURATED, message=f"{len(curated_clips)} clips curados")
 

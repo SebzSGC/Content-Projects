@@ -383,6 +383,13 @@ def create_app(
         if not is_masked_or_blank(body.openai_api_key, cfg.openai_api_key):
             env_updates["OPENAI_API_KEY"] = (body.openai_api_key or "").strip()
 
+        # If switching to real providers, ensure CLIPS_FIXTURES_DIR is cleared and purge any old fixture cache
+        next_stt = env_updates.get("CLIPS_STT_PRIMARY", cfg.stt_primary)
+        next_llm = env_updates.get("CLIPS_LLM_PRIMARY", cfg.llm_primary)
+        if next_stt != "fixture" and next_llm != "fixture":
+            env_updates["CLIPS_FIXTURES_DIR"] = ""
+            orch.db.purge_fixture_cache()
+
         update_dotenv_values(env_updates)
         reloaded = reload_server_settings()
         if settings is not None:
