@@ -512,3 +512,122 @@ def test_settings_persistence_masking_hot_reload_and_test_connection(
         ).json()
         assert t_dg_ok["ok"] is True
 
+
+def test_analytics_summary_breakdown_and_logs_endpoints(tmp_path: Path) -> None:
+    settings = ServerSettings(
+        data_dir=tmp_path / "analytics_data",
+        drive_mode="disabled",
+        max_budget_usd=9.0,
+    )
+    app = create_app(settings, use_process_pool=False, enable_drive_watcher=False)
+    orch = app.state.orchestrator
+    ses = orch.db.create_session(title="Streaming general de video juegos", session_id="ses_analytics_1")
+
+    raw_dummy = tmp_path / "raw.json"
+    raw_dummy.write_text("{}", encoding="utf-8")
+
+    # Record 10 Deepgram STT calls (~5,980.8s total) + 1 Gemini LLM call (40,611 in / 1,363 out)
+    for idx in range(10):
+        orch.db.record_api_call(
+            session_id=ses["id"],
+            task_hash=f"hash_stt_{idx:02d}",
+            provider="deepgram",
+            model="nova-3",
+            kind="stt",
+            raw_response_path=raw_dummy,
+            units_billed=598.0842,
+            input_tokens=0,
+            output_tokens=0,
+            cost_usd=0.0428627,
+            latency_ms=4800 + idx * 50,
+        )
+    orch.db.record_api_call(
+        session_id=ses["id"],
+        task_hash="hash_llm_01",
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        kind="llm",
+        raw_response_path=raw_dummy,
+        units_billed=41974.0,
+        input_tokens=40611,
+        output_tokens=1363,
+        cost_usd=0.015591,
+        latency_ms=4632,
+    )
+
+    for c_i in range(5):
+        orch.db.upsert_clip(
+            clip_id=f"clip_an_{c_i}",
+            session_id=ses["id"],
+            rank_order=c_i + 1,
+            start_sec=float(c_i * 60),
+            end_sec=float(c_i * 60 + 30),
+            overlay_title=f"CLIP {c_i}",
+            post_title=f"Post {c_i}",
+            hashtags=["#gaming"],
+            reason="Momento clave",
+            llm_score=90.0,
+            signal_score=85.0,
+            final_score=88.5,
+            curated_json="{}",
+            state="DELIVERED",
+        )
+
+    with TestClient(app) as client:
+        s_res = client.get("/analytics/summary")
+        assert s_res.status_code == 200
+        summary = s_res.json()
+        assert summary["total_calls"] == 11
+        assert summary["stt_calls"] == 10
+        assert summary["llm_calls"] == 1
+        assert abs(summary["spent_usd"] - 0.444218) < 1e-4
+        assert summary["input_tokens"] == 40611
+        assert summary["output_tokens"] == 1363
+        assert summary["total_tokens"] == 41974
+        assert abs(summary["audio_minutes_billed"] - 99.68) < 0.05
+        assert summary["alert_status"] == "NORMAL"
+        assert summary["projections"]["estimated_remaining_stream_hours"] > 25.0
+        assert summary["projections"]["estimated_remaining_clips"] >= 90
+
+        b_res = client.get("/analytics/breakdown")
+        assert b_res.status_code == 200
+        brk = b_res.json()
+        provs = {p["provider"]: p for p in brk["by_provider"]}
+        assert "deepgram" in provs and "gemini" in provs
+        assert provs["deepgram"]["calls"] == 10
+        assert provs["gemini"]["calls"] == 1
+        assert len(brk["by_session"]) == 1
+        assert brk["by_session"][0]["clips_count"] == 5
+
+        l_all = client.get("/analytics/logs").json()
+        assert l_all["total"] == 11
+        assert len(l_all["items"]) == 11
+
+        l_gem = client.get("/analytics/logs", params={"provider": "gemini", "kind": "llm"}).json()
+        assert l_gem["total"] == 1
+        assert l_gem["items"][0]["model"] == "gemini-3.5-flash-lite"
+
+        # Free-tier credit: estimated by default, then anchored to the real balance from the Deepgram console
+        ft = {m["id"]: m for m in summary["free_tier"]["models"]}
+        assert ft["nova-3"]["credit"]["source"] == "estimated"
+        cal = client.post("/analytics/free-tier/calibrate", json={"provider": "deepgram", "balance_usd": 199.43})
+        assert cal.status_code == 200
+        dg = {m["id"]: m for m in cal.json()["summary"]["free_tier"]["models"]}["nova-3"]["credit"]
+        assert dg["source"] == "manual"
+        assert abs(dg["remaining_usd"] - 199.43) < 1e-6
+        assert abs(dg["used_usd"] - 0.57) < 1e-6
+
+        # New calls after calibration are subtracted from the real balance
+        orch.db.record_api_call(
+            session_id=ses["id"], task_hash="hash_stt_after", provider="deepgram", model="nova-3", kind="stt",
+            raw_response_path=raw_dummy, units_billed=600.0, cost_usd=0.056, latency_ms=4000,
+        )
+        dg2 = {m["id"]: m for m in client.get("/analytics/summary").json()["free_tier"]["models"]}["nova-3"]["credit"]
+        assert abs(dg2["remaining_usd"] - 199.374) < 1e-4
+
+        assert client.post("/analytics/free-tier/calibrate", json={"balance_usd": 250.0}).status_code == 400
+        reset = client.delete("/analytics/free-tier/calibrate/deepgram").json()
+        dg3 = {m["id"]: m for m in reset["summary"]["free_tier"]["models"]}["nova-3"]["credit"]
+        assert dg3["source"] == "estimated"
+
+

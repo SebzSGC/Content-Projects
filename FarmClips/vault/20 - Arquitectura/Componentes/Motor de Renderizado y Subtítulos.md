@@ -1,0 +1,87 @@
+---
+titulo: Motor de Renderizado y Subtítulos
+tipo: componente
+estado: vigente
+audiencia: [negocio, tecnico]
+responsable: Equipo FarmClips
+actualizado: 2026-11-07
+etiquetas: [tipo/componente, area/render]
+---
+
+# Motor de Renderizado y Subtítulos (`clipsrender`)
+
+> [!abstract] En pocas palabras
+> Es la fábrica final de video de FarmClips. Une los fragmentos elegidos, encuadra las cámaras con aceleración en C++, quema subtítulos animados con estilo Hormozi mediante [[Glosario#libass|libass]] y normaliza el sonido en dos pasadas a [[Glosario#LUFS|-14 LUFS]] para que suene perfecto en redes sociales.
+
+---
+
+## 🏗️ Flujo de Composición y Codificación
+
+```mermaid
+flowchart TD
+    EP["EditPlan v2 + Preset Hormozi"] --> AC["ass_compiler.py<br/>(Genera archivo .ass con animaciones)"]
+    EP --> FG["filtergraph.py<br/>(Genera filter_complex para FFmpeg)"]
+    
+    subgraph VideoEngine["Procesamiento de Video"]
+        V_IN["Fuentes originales (1080p 60fps)"] --> WARP["fast_compositor.py<br/>(C++ cv2.warpAffine: zooms y paneos sub-píxel)"]
+        WARP --> SUB["Filtro libass<br/>(Subtítulos activos + Títulos balanceados)"]
+        SUB --> ENC["Codificador de Video<br/>(h264_nvenc por GPU o libx264 por CPU)"]
+    end
+
+    subgraph AudioEngine["Procesamiento de Audio"]
+        A_IN["Pistas de audio limpias"] --> DUCK["Ducking Sidechain<br/>(Atenúa juego cuando el micrófono habla)"]
+        DUCK --> SFX["Inserción de efectos sonoros (boom.wav)"]
+        SFX --> LOUD["Normalización en 2 pasadas (loudnorm: -14 LUFS, -1.0 dBTP)"]
+    end
+
+    AC --> SUB
+    FG --> AudioEngine
+    ENC --> MUX["Contenedor final MP4 (1080x1920 60fps)"]
+    LOUD --> MUX
+```
+
+---
+
+## 🎨 1. Compilador de Subtítulos ASS (`ass_compiler.py`)
+
+Genera scripts compatibles con el estándar Advanced SubStation Alpha (`.ass`) interpretados por [[Glosario#libass|libass]]:
+- **Resaltado palabra por palabra**:
+  Utiliza etiquetas de control de tiempo y color de ASS:
+  - Color blanco base: `&H00FFFFFF`
+  - Palabra activa hablada: Amarillo brillante `&H0000D4FF` (`#FFD400`)
+  - Palabra con énfasis emocional: Verde fluorescente `&H0014FF39` (`#39FF14`) con escalado dinámico (`\fscx115\fscy115`).
+- **Títulos balanceados en el seam**:
+  Calcula el punto de unión (*seam*) entre la cámara superior y el juego inferior, colocando allí el título durante los primeros 3 segundos con transición suave (`\fad(120, 200)`). Si el título supera los 18 caracteres, la función `balance_title_lines()` divide las líneas buscando una longitud visual simétrica.
+
+---
+
+## 🚀 2. Compositor Acelerado C++ (`fast_compositor.py`)
+
+Aplica paneos y transiciones de cámara (*zoom in*, *zoom out*) con curvas matemáticas de aceleración (`inOutSine`, `outBack`):
+- Se apoya en transformaciones afines directas en C++ a través de OpenCV (`cv2.warpAffine` con interpolación bicúbica).
+- Evita cuellos de botella en Python procesando matrices de píxeles a resolución nativa directamente hacia la entrada de codificación [[Glosario#NVENC|NVENC]].
+
+---
+
+## 🔊 3. Mezcla de Audio y Normalización en 2 Pasadas (`runner.py`)
+
+1. **[[Glosario#Ducking Sidechain|Ducking Sidechain]]**:
+   Aplica un filtro compresor donde la voz del streamer actúa como disparador de la compresión sobre la pista de audio del videojuego:
+   ```text
+   [game][mic]sidechaincompress=threshold=0.03:ratio=4:attack=20:release=250[ducked_game]
+   ```
+2. **Normalización Lineal en 2 Pasadas con [[Glosario#Loudnorm|loudnorm]]**:
+   - *Pasada 1*: Analiza el archivo mezclado completo midiendo sonoridad integrada real (`I`), rango de sonoridad (`LRA`) y pico verdadero (`TP`).
+   - *Pasada 2*: Aplica la normalización lineal exacta inyectando los valores medidos:
+     ```text
+     loudnorm=I=-14:LRA=11:TP=-1.0:measured_I=-18.4:measured_LRA=9.2:measured_TP=-2.1:linear=true
+     ```
+   Esto asegura que el audio final cumpla estrictamente los estándares de TikTok y YouTube en [[Glosario#LUFS|-14 LUFS]] sin provocar "bombeos" ni saturaciones acústicas desagradables.
+
+---
+
+## 🔗 Relacionado
+- [[Contrato EditPlan v2]]
+- [[Sistema de Estilos y Presets]]
+- [[Pools de Trabajo]]
+- [[Flujo 6 Renderizado y Normalización]]

@@ -101,6 +101,32 @@ class TestConnectionBody(BaseModel):
     base_url: Optional[str] = None
 
 
+class FreeTierCalibrationBody(BaseModel):
+    provider: Literal["deepgram"] = "deepgram"
+    # Saldo real mostrado en la consola del proveedor. Si se omite, se intenta leer en vivo vía API.
+    balance_usd: Optional[float] = Field(default=None, ge=0.0, le=100000.0)
+    credit_usd: float = Field(default=200.0, gt=0.0, le=100000.0)
+
+
+async def fetch_deepgram_live_balance(api_key: str) -> Dict[str, Any]:
+    """Read the real Deepgram balance (requires an API key with the `billing:read` scope)."""
+    headers = {"Authorization": f"Token {api_key}"}
+    async with httpx.AsyncClient(base_url="https://api.deepgram.com/v1", headers=headers, timeout=15.0) as client:
+        projs = await client.get("/projects")
+        if projs.status_code >= 400:
+            return {"ok": False, "status_code": projs.status_code, "detail": _extract_provider_error(projs)}
+        items = projs.json().get("projects", [])
+        if not items:
+            return {"ok": False, "status_code": 404, "detail": "La API key no tiene proyectos asociados."}
+        pid = items[0]["project_id"]
+        bal = await client.get(f"/projects/{pid}/balances")
+        if bal.status_code >= 400:
+            return {"ok": False, "status_code": bal.status_code, "detail": _extract_provider_error(bal)}
+        balances = bal.json().get("balances", [])
+        total = sum(float(b.get("amount") or 0.0) for b in balances if str(b.get("units", "usd")).lower() == "usd")
+        return {"ok": True, "status_code": 200, "balance_usd": round(total, 4)}
+
+
 def _extract_provider_error(resp: httpx.Response) -> str:
     try:
         data = resp.json()
@@ -336,6 +362,62 @@ def create_app(
     @app.get("/budget")
     def get_budget() -> Dict[str, Any]:
         return orch.db.budget_summary(cfg.max_budget_usd)
+
+    @app.get("/analytics/summary")
+    def get_analytics_summary() -> Dict[str, Any]:
+        return orch.db.analytics_summary(cfg.max_budget_usd)
+
+    @app.get("/analytics/breakdown")
+    def get_analytics_breakdown() -> Dict[str, Any]:
+        return orch.db.analytics_breakdown()
+
+    @app.get("/analytics/logs")
+    def get_analytics_logs(
+        provider: Optional[str] = Query(default=None),
+        kind: Optional[str] = Query(default=None),
+        session_id: Optional[str] = Query(default=None),
+        date_from: Optional[str] = Query(default=None),
+        date_to: Optional[str] = Query(default=None),
+        search: Optional[str] = Query(default=None),
+        limit: int = Query(default=50, ge=1, le=500),
+        offset: int = Query(default=0, ge=0),
+    ) -> Dict[str, Any]:
+        return orch.db.analytics_logs(
+            provider=provider,
+            kind=kind,
+            session_id=session_id,
+            date_from=date_from,
+            date_to=date_to,
+            search=search,
+            limit=limit,
+            offset=offset,
+        )
+
+    @app.post("/analytics/free-tier/calibrate")
+    async def calibrate_free_tier(body: FreeTierCalibrationBody) -> Dict[str, Any]:
+        balance = body.balance_usd
+        source = "manual"
+        if balance is None:
+            live = await fetch_deepgram_live_balance(cfg.deepgram_api_key)
+            if not live.get("ok"):
+                hint = (
+                    " Tu API key no tiene el permiso 'billing:read'; ingresa el saldo manualmente "
+                    "o usa una key de rol Owner/Admin."
+                    if live.get("status_code") == 403
+                    else ""
+                )
+                raise HTTPException(status_code=400, detail=f"No se pudo leer el saldo de Deepgram: {live.get('detail')}.{hint}")
+            balance = float(live["balance_usd"])
+            source = "live"
+        if balance > body.credit_usd:
+            raise HTTPException(status_code=400, detail="El saldo no puede ser mayor que el crédito gratuito total.")
+        saved = orch.db.set_provider_balance(body.provider, balance, body.credit_usd, source=source)
+        return {"ok": True, "calibration": saved, "summary": orch.db.analytics_summary(cfg.max_budget_usd)}
+
+    @app.delete("/analytics/free-tier/calibrate/{provider}")
+    def reset_free_tier_calibration(provider: str) -> Dict[str, Any]:
+        orch.db.clear_provider_balance(provider)
+        return {"ok": True, "summary": orch.db.analytics_summary(cfg.max_budget_usd)}
 
     @app.get("/settings")
     def get_settings_endpoint() -> Dict[str, Any]:

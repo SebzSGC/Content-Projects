@@ -46,3 +46,7 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Obsidian vault exclusions
+**/.obsidian/workspace*.json
+**/.trash/

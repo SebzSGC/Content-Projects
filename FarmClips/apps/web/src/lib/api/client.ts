@@ -250,6 +250,211 @@ export interface TestConnectionResult {
   detail: string;
 }
 
+export type AnalyticsAlertStatus = "NORMAL" | "WARNING" | "CRITICAL" | "BLOCKED";
+
+export interface AnalyticsProjections {
+  avg_cost_per_stream_hour_usd: number;
+  stt_cost_per_stream_hour_usd: number;
+  llm_cost_per_stream_hour_usd: number;
+  avg_cost_per_clip_usd: number;
+  avg_clips_per_stream_hour: number;
+  avg_tokens_per_stream_hour: number;
+  estimated_remaining_stream_hours: number;
+  estimated_remaining_clips: number;
+}
+
+export interface AnalyticsFreeTierPoint {
+  hour_epoch: number;
+  label: string;
+  peak_rpm: number;
+  peak_tpm: number;
+  requests: number;
+  cumulative_rpd: number;
+}
+
+export interface AnalyticsFreeTierModel {
+  id: string;
+  provider: string;
+  model: string;
+  display_name: string;
+  category: string;
+  tier_name: string;
+  within_free_tier: boolean;
+  zero_cost_in_free_tier: boolean;
+  rpm: {
+    peak: number;
+    limit: number;
+    pct: number;
+  };
+  tpm: {
+    peak: number;
+    limit: number;
+    pct: number;
+    label: string;
+    unit: string;
+  };
+  rpd: {
+    used: number;
+    limit: number;
+    pct: number;
+  };
+  credit: {
+    limit_usd: number;
+    used_usd: number;
+    remaining_usd: number;
+    pct: number;
+    estimated_used_usd?: number;
+    source?: "estimated" | "manual" | "live" | string;
+    calibrated_at?: number | null;
+    used_since_calibration_usd?: number;
+  };
+  timeline_24h: AnalyticsFreeTierPoint[];
+}
+
+export interface AnalyticsFreeTierComparison {
+  window_hours: number;
+  models: AnalyticsFreeTierModel[];
+}
+
+export interface AnalyticsSummary {
+  spent_usd: number;
+  stt_cost_usd: number;
+  llm_cost_usd: number;
+  max_budget_usd: number;
+  remaining_usd: number;
+  usage_pct: number;
+  alert_status: AnalyticsAlertStatus;
+  total_calls: number;
+  stt_calls: number;
+  llm_calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  audio_seconds_billed: number;
+  audio_minutes_billed: number;
+  audio_hours_billed: number;
+  avg_latency_ms: number;
+  sessions_with_calls: number;
+  total_clips_curated: number;
+  total_clips_rendered: number;
+  projections: AnalyticsProjections;
+  free_tier?: AnalyticsFreeTierComparison;
+}
+
+export interface AnalyticsProviderItem {
+  provider: string;
+  kind: "stt" | "llm" | string;
+  calls: number;
+  audio_seconds: number;
+  audio_minutes: number;
+  audio_hours: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cost_usd: number;
+  share_pct: number;
+  avg_latency_ms: number;
+}
+
+export interface AnalyticsModelItem {
+  provider: string;
+  model: string;
+  kind: "stt" | "llm" | string;
+  calls: number;
+  units_billed: number;
+  audio_seconds: number;
+  audio_minutes: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cost_usd: number;
+  share_pct: number;
+  avg_latency_ms: number;
+}
+
+export interface AnalyticsDayItem {
+  date: string;
+  calls: number;
+  stt_calls: number;
+  llm_calls: number;
+  cost_usd: number;
+  stt_cost_usd: number;
+  llm_cost_usd: number;
+  audio_minutes: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+}
+
+export interface AnalyticsSessionItem {
+  session_id: string;
+  session_title: string;
+  state: string;
+  calls: number;
+  stt_calls: number;
+  llm_calls: number;
+  cost_usd: number;
+  stt_cost_usd: number;
+  llm_cost_usd: number;
+  audio_seconds: number;
+  audio_minutes: number;
+  audio_hours: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  clips_count: number;
+  cost_per_clip_usd: number;
+  first_call_at: number;
+  last_call_at: number;
+}
+
+export interface AnalyticsBreakdown {
+  spent_usd: number;
+  by_provider: AnalyticsProviderItem[];
+  by_model: AnalyticsModelItem[];
+  by_day: AnalyticsDayItem[];
+  by_session: AnalyticsSessionItem[];
+}
+
+export interface AnalyticsLogItem {
+  id: string;
+  session_id: string | null;
+  session_title: string;
+  task_hash: string;
+  provider: string;
+  model: string;
+  kind: "stt" | "llm" | string;
+  units_billed: number;
+  audio_seconds: number;
+  audio_minutes: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cost_usd: number;
+  latency_ms: number;
+  created_at: number;
+  created_iso: string;
+}
+
+export interface AnalyticsLogsResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  filtered_cost_usd: number;
+  items: AnalyticsLogItem[];
+}
+
+export interface AnalyticsLogsQuery {
+  provider?: string;
+  kind?: string;
+  session_id?: string;
+  date_from?: string;
+  date_to?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
 async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_PREFIX}${path}`, {
     ...init,
@@ -313,6 +518,30 @@ export interface CleanupResult {
 
 export const fetchHealth = () => apiJson<ServerHealth>("/health");
 export const fetchBudget = () => apiJson<BudgetSummary>("/budget");
+export const fetchAnalyticsSummary = () => apiJson<AnalyticsSummary>("/analytics/summary");
+export const fetchAnalyticsBreakdown = () => apiJson<AnalyticsBreakdown>("/analytics/breakdown");
+export const calibrateFreeTierBalance = (balance_usd?: number, credit_usd = 200, provider: "deepgram" = "deepgram") =>
+  apiJson<{ ok: boolean; summary: AnalyticsSummary }>("/analytics/free-tier/calibrate", {
+    method: "POST",
+    body: JSON.stringify({ provider, balance_usd, credit_usd }),
+  });
+export const resetFreeTierCalibration = (provider = "deepgram") =>
+  apiJson<{ ok: boolean; summary: AnalyticsSummary }>(`/analytics/free-tier/calibrate/${encodeURIComponent(provider)}`, {
+    method: "DELETE",
+  });
+export const fetchAnalyticsLogs = (query?: AnalyticsLogsQuery) => {
+  const params = new URLSearchParams();
+  if (query?.provider && query.provider !== "all") params.set("provider", query.provider);
+  if (query?.kind && query.kind !== "all") params.set("kind", query.kind);
+  if (query?.session_id && query.session_id !== "all") params.set("session_id", query.session_id);
+  if (query?.date_from) params.set("date_from", query.date_from);
+  if (query?.date_to) params.set("date_to", query.date_to);
+  if (query?.search) params.set("search", query.search);
+  if (typeof query?.limit === "number") params.set("limit", String(query.limit));
+  if (typeof query?.offset === "number") params.set("offset", String(query.offset));
+  const qs = params.toString();
+  return apiJson<AnalyticsLogsResponse>(`/analytics/logs${qs ? `?${qs}` : ""}`);
+};
 export const getSettings = () => apiJson<AppSettings>("/settings");
 export const saveSettings = (data: UpdateSettingsPayload) =>
   apiJson<AppSettings>("/settings", {
