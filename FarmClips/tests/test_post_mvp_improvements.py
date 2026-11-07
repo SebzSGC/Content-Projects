@@ -607,4 +607,27 @@ def test_analytics_summary_breakdown_and_logs_endpoints(tmp_path: Path) -> None:
         assert l_gem["total"] == 1
         assert l_gem["items"][0]["model"] == "gemini-3.5-flash-lite"
 
+        # Free-tier credit: estimated by default, then anchored to the real balance from the Deepgram console
+        ft = {m["id"]: m for m in summary["free_tier"]["models"]}
+        assert ft["nova-3"]["credit"]["source"] == "estimated"
+        cal = client.post("/analytics/free-tier/calibrate", json={"provider": "deepgram", "balance_usd": 199.43})
+        assert cal.status_code == 200
+        dg = {m["id"]: m for m in cal.json()["summary"]["free_tier"]["models"]}["nova-3"]["credit"]
+        assert dg["source"] == "manual"
+        assert abs(dg["remaining_usd"] - 199.43) < 1e-6
+        assert abs(dg["used_usd"] - 0.57) < 1e-6
+
+        # New calls after calibration are subtracted from the real balance
+        orch.db.record_api_call(
+            session_id=ses["id"], task_hash="hash_stt_after", provider="deepgram", model="nova-3", kind="stt",
+            raw_response_path=raw_dummy, units_billed=600.0, cost_usd=0.056, latency_ms=4000,
+        )
+        dg2 = {m["id"]: m for m in client.get("/analytics/summary").json()["free_tier"]["models"]}["nova-3"]["credit"]
+        assert abs(dg2["remaining_usd"] - 199.374) < 1e-4
+
+        assert client.post("/analytics/free-tier/calibrate", json={"balance_usd": 250.0}).status_code == 400
+        reset = client.delete("/analytics/free-tier/calibrate/deepgram").json()
+        dg3 = {m["id"]: m for m in reset["summary"]["free_tier"]["models"]}["nova-3"]["credit"]
+        assert dg3["source"] == "estimated"
+
 

@@ -27,9 +27,11 @@ import {
   Zap,
 } from "lucide-react";
 import {
+  calibrateFreeTierBalance,
   fetchAnalyticsBreakdown,
   fetchAnalyticsLogs,
   fetchAnalyticsSummary,
+  resetFreeTierCalibration,
   type AnalyticsAlertStatus,
   type AnalyticsBreakdown,
   type AnalyticsFreeTierModel,
@@ -353,6 +355,42 @@ export default function AnalyticsDashboardPage() {
   const [simHours, setSimHours] = useState<number>(2.0);
   const [simProfile, setSimProfile] = useState<"empirical" | "deepgram_gemini" | "groq_gemini">("empirical");
   const [selectedFreeTierModelId, setSelectedFreeTierModelId] = useState<string>("gemini-3.5-flash-lite");
+  const [calibratingId, setCalibratingId] = useState<string | null>(null);
+  const [calibrationInput, setCalibrationInput] = useState<string>("");
+  const [calibrationBusy, setCalibrationBusy] = useState(false);
+  const [calibrationError, setCalibrationError] = useState<string | null>(null);
+
+  const handleCalibrate = async (creditUsd: number, fromApi = false) => {
+    setCalibrationBusy(true);
+    setCalibrationError(null);
+    if (fromApi) setCalibratingId("nova-3");
+    try {
+      let balance: number | undefined;
+      if (!fromApi) {
+        balance = parseFloat(calibrationInput.replace(",", "."));
+        if (!Number.isFinite(balance) || balance < 0 || balance > creditUsd) {
+          throw new Error(`Ingresa un saldo válido entre 0 y ${creditUsd}.`);
+        }
+      }
+      const res = await calibrateFreeTierBalance(balance, creditUsd);
+      setSummary(res.summary);
+      setCalibratingId(null);
+    } catch (err) {
+      setCalibrationError(err instanceof Error ? err.message : "No se pudo ajustar el saldo.");
+    } finally {
+      setCalibrationBusy(false);
+    }
+  };
+
+  const handleResetCalibration = async () => {
+    setCalibrationBusy(true);
+    try {
+      const res = await resetFreeTierCalibration("deepgram");
+      setSummary(res.summary);
+    } finally {
+      setCalibrationBusy(false);
+    }
+  };
 
   const loadAnalytics = useCallback(
     async (isManualRefresh = false) => {
@@ -413,13 +451,13 @@ export default function AnalyticsDashboardPage() {
     const hours = Math.max(0.1, Number.isFinite(simHours) ? simHours : 1.0);
     const proj = summary?.projections;
 
-    let sttRatePerHour = proj?.stt_cost_per_stream_hour_usd ?? 0.258;
+    let sttRatePerHour = proj?.stt_cost_per_stream_hour_usd ?? 0.336;
     let llmRatePerHour = proj?.llm_cost_per_stream_hour_usd ?? 0.0094;
     let clipsPerHour = proj?.avg_clips_per_stream_hour ?? 3.0;
     let tokensPerHour = proj?.avg_tokens_per_stream_hour ?? 25200;
 
     if (simProfile === "deepgram_gemini") {
-      sttRatePerHour = 0.0043 * 60; // $0.2580/h
+      sttRatePerHour = (0.0043 + 0.0013) * 60; // Nova-3 + keyterm add-on = $0.3360/h
       llmRatePerHour = 0.0094;
     } else if (simProfile === "groq_gemini") {
       sttRatePerHour = 0.00067 * 60; // $0.0402/h
@@ -738,7 +776,7 @@ export default function AnalyticsDashboardPage() {
             <div className="rounded-2xl bg-slate-950/60 px-3.5 py-2.5 ring-1 ring-white/5">
               <span className="block text-[11px] text-slate-400">Costo Promedio / Hora Stream</span>
               <span className="font-mono text-base font-black text-amber-300">
-                ${(summary?.projections.avg_cost_per_stream_hour_usd ?? 0.2674).toFixed(4)} USD/h
+                ${(summary?.projections.avg_cost_per_stream_hour_usd ?? 0.3454).toFixed(4)} USD/h
               </span>
             </div>
             <div className="rounded-2xl bg-slate-950/60 px-3.5 py-2.5 ring-1 ring-white/5">
@@ -906,13 +944,86 @@ export default function AnalyticsDashboardPage() {
                               100% Cubierto · $0.00
                             </span>
                           ) : m.credit.limit_usd > 0 ? (
-                            <div className="inline-flex flex-col items-end">
+                            <div className="inline-flex flex-col items-end gap-1" onClick={(e) => e.stopPropagation()}>
                               <span className="font-mono text-xs font-bold text-emerald-300">
                                 ${m.credit.remaining_usd.toFixed(2)} / ${m.credit.limit_usd.toFixed(0)} libres
                               </span>
                               <span className="text-[10px] text-slate-400">
-                                Usado {m.credit.pct.toFixed(2)}% del crédito gratis
+                                Usado {m.credit.pct.toFixed(2)}% del crédito gratis ·{" "}
+                                {m.credit.source === "live" ? (
+                                  <span className="font-bold text-emerald-300">saldo real (API)</span>
+                                ) : m.credit.source === "manual" ? (
+                                  <span className="font-bold text-sky-300">calibrado con consola</span>
+                                ) : (
+                                  <span className="font-bold text-amber-300">estimado</span>
+                                )}
                               </span>
+                              {calibratingId === m.id ? (
+                                <div className="mt-1 flex items-center gap-1.5">
+                                  <span className="text-[10px] text-slate-400">Saldo real $</span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min={0}
+                                    max={m.credit.limit_usd}
+                                    value={calibrationInput}
+                                    onChange={(e) => setCalibrationInput(e.target.value)}
+                                    placeholder="199.43"
+                                    autoFocus
+                                    className="w-20 rounded-lg border border-white/15 bg-slate-950 px-2 py-1 text-right font-mono text-xs text-slate-100 focus:border-amber-400 focus:outline-none"
+                                  />
+                                  <button
+                                    type="button"
+                                    disabled={calibrationBusy}
+                                    onClick={() => handleCalibrate(m.credit.limit_usd)}
+                                    className="rounded-lg bg-amber-400 px-2 py-1 text-[10px] font-black text-slate-950 disabled:opacity-50"
+                                  >
+                                    Guardar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setCalibratingId(null)}
+                                    className="rounded-lg bg-white/10 px-2 py-1 text-[10px] font-bold text-slate-300"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 text-[10px] font-bold">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCalibratingId(m.id);
+                                      setCalibrationInput(m.credit.remaining_usd.toFixed(2));
+                                    }}
+                                    className="text-amber-300 underline-offset-2 hover:underline"
+                                  >
+                                    Ajustar con saldo real
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={calibrationBusy}
+                                    onClick={() => handleCalibrate(m.credit.limit_usd, true)}
+                                    className="text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline"
+                                    title="Lee el saldo en vivo (requiere API key con permiso billing:read)"
+                                  >
+                                    Leer de la API
+                                  </button>
+                                  {m.credit.source && m.credit.source !== "estimated" && (
+                                    <button
+                                      type="button"
+                                      disabled={calibrationBusy}
+                                      onClick={handleResetCalibration}
+                                      className="text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
+                                    >
+                                      Quitar ajuste
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                              {calibrationError && calibratingId === m.id && (
+                                <span className="max-w-[260px] text-right text-[10px] text-rose-300">{calibrationError}</span>
+                              )}
                             </div>
                           ) : (
                             <span className="rounded-full bg-amber-500/15 px-2.5 py-1 font-mono text-[11px] font-bold text-amber-300">
@@ -1212,10 +1323,10 @@ export default function AnalyticsDashboardPage() {
                 >
                   <option value="empirical">
                     Tasa Real Observada en Base de Datos ($
-                    {(summary?.projections.avg_cost_per_stream_hour_usd ?? 0.2674).toFixed(4)} USD/h)
+                    {(summary?.projections.avg_cost_per_stream_hour_usd ?? 0.3454).toFixed(4)} USD/h)
                   </option>
                   <option value="deepgram_gemini">
-                    Deepgram Nova-3 + Gemini 3.5 Flash-Lite (~$0.2674 USD/h)
+                    Deepgram Nova-3 + Keyterms + Gemini 3.5 Flash-Lite (~$0.3454 USD/h)
                   </option>
                   <option value="groq_gemini">
                     Groq Whisper Turbo + Gemini 3.5 Flash-Lite (~$0.0496 USD/h)

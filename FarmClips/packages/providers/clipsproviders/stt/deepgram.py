@@ -13,7 +13,13 @@ from clipscore.domain import TranscriptWord
 from ..http import FatalApiError, ProviderRateLimiter, classify_http_error, execute_with_retry
 from .base import SttAdapter, SttResult
 
-DEEPGRAM_NOVA3_USD_PER_MIN = 0.0043
+DEEPGRAM_NOVA3_USD_PER_MIN = float(os.environ.get("CLIPS_DEEPGRAM_USD_PER_MIN", "0.0043") or 0.0043)
+# Keyterm Prompting is billed by Deepgram as a separate add-on on top of the base rate.
+DEEPGRAM_KEYTERM_USD_PER_MIN = float(os.environ.get("CLIPS_DEEPGRAM_KEYTERM_USD_PER_MIN", "0.0013") or 0.0013)
+
+
+def deepgram_usd_per_min(uses_keyterms: bool) -> float:
+    return DEEPGRAM_NOVA3_USD_PER_MIN + (DEEPGRAM_KEYTERM_USD_PER_MIN if uses_keyterms else 0.0)
 
 
 def parse_deepgram_words(payload: Dict[str, Any]) -> List[TranscriptWord]:
@@ -108,7 +114,8 @@ class DeepgramNova3Adapter(SttAdapter):
             estimated_units=max(1.0, duration_sec),
         )
         billed_sec = float(raw.get("metadata", {}).get("duration") or duration_sec)
-        cost = round((billed_sec / 60.0) * DEEPGRAM_NOVA3_USD_PER_MIN, 6)
+        uses_keyterms = any(k == "keyterm" for k, _ in params)
+        cost = round((billed_sec / 60.0) * deepgram_usd_per_min(uses_keyterms), 6)
         return SttResult(
             provider=self.provider_name,
             model=self.model_name,

@@ -303,6 +303,10 @@ export interface AnalyticsFreeTierModel {
     used_usd: number;
     remaining_usd: number;
     pct: number;
+    estimated_used_usd?: number;
+    source?: "estimated" | "manual" | "live" | string;
+    calibrated_at?: number | null;
+    used_since_calibration_usd?: number;
   };
   timeline_24h: AnalyticsFreeTierPoint[];
 }
@@ -516,6 +520,15 @@ export const fetchHealth = () => apiJson<ServerHealth>("/health");
 export const fetchBudget = () => apiJson<BudgetSummary>("/budget");
 export const fetchAnalyticsSummary = () => apiJson<AnalyticsSummary>("/analytics/summary");
 export const fetchAnalyticsBreakdown = () => apiJson<AnalyticsBreakdown>("/analytics/breakdown");
+export const calibrateFreeTierBalance = (balance_usd?: number, credit_usd = 200, provider: "deepgram" = "deepgram") =>
+  apiJson<{ ok: boolean; summary: AnalyticsSummary }>("/analytics/free-tier/calibrate", {
+    method: "POST",
+    body: JSON.stringify({ provider, balance_usd, credit_usd }),
+  });
+export const resetFreeTierCalibration = (provider = "deepgram") =>
+  apiJson<{ ok: boolean; summary: AnalyticsSummary }>(`/analytics/free-tier/calibrate/${encodeURIComponent(provider)}`, {
+    method: "DELETE",
+  });
 export const fetchAnalyticsLogs = (query?: AnalyticsLogsQuery) => {
   const params = new URLSearchParams();
   if (query?.provider && query.provider !== "all") params.set("provider", query.provider);

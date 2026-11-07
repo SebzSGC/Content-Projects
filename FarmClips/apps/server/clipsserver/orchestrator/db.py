@@ -106,6 +106,14 @@ CREATE TABLE IF NOT EXISTS clips (
     updated_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_clips_session ON clips(session_id);
+
+CREATE TABLE IF NOT EXISTS provider_balances (
+    provider TEXT PRIMARY KEY,
+    balance_usd REAL NOT NULL,
+    credit_usd REAL NOT NULL,
+    source TEXT NOT NULL DEFAULT 'manual',
+    recorded_at REAL NOT NULL
+);
 """
 
 
@@ -358,6 +366,49 @@ class OrchestratorDB:
                 "breakdown": [dict(r) for r in by_prov],
             }
 
+    # --- Provider balance calibration (real balance reported by provider console/API) ---
+
+    def set_provider_balance(
+        self, provider: str, balance_usd: float, credit_usd: float, source: str = "manual"
+    ) -> Dict[str, Any]:
+        now = time.time()
+        with self._lock:
+            self._conn.execute(
+                """INSERT INTO provider_balances (provider, balance_usd, credit_usd, source, recorded_at)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(provider) DO UPDATE SET
+                       balance_usd = excluded.balance_usd,
+                       credit_usd = excluded.credit_usd,
+                       source = excluded.source,
+                       recorded_at = excluded.recorded_at""",
+                (provider.lower(), float(balance_usd), float(credit_usd), source, now),
+            )
+            self._conn.commit()
+        return self.get_provider_balance(provider) or {}
+
+    def get_provider_balance(self, provider: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM provider_balances WHERE provider = ?", (provider.lower(),)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def clear_provider_balance(self, provider: str) -> None:
+        with self._lock:
+            self._conn.execute("DELETE FROM provider_balances WHERE provider = ?", (provider.lower(),))
+            self._conn.commit()
+
+    def reprice_provider_calls(self, provider: str, usd_per_min: float) -> int:
+        """Recompute `cost_usd` for STT calls of `provider` from billed seconds at a corrected per-minute rate."""
+        with self._lock:
+            cur = self._conn.execute(
+                "UPDATE api_calls SET cost_usd = ROUND((units_billed / 60.0) * ?, 6) "
+                "WHERE LOWER(provider) = ? AND kind = 'stt'",
+                (float(usd_per_min), provider.lower()),
+            )
+            self._conn.commit()
+            return cur.rowcount
+
     @staticmethod
     def _parse_date_bound(raw: Optional[str], end_of_day: bool = False) -> Optional[float]:
         if not raw:
@@ -454,14 +505,14 @@ class OrchestratorDB:
 
             effective_clips = max(billed_clips_rendered, billed_clips_total)
 
-            # Empirical vs reference rates (Deepgram Nova-3: $0.0043/min = $0.258/h + Gemini Flash-Lite ~$0.0094/h)
+            # Empirical vs reference rates (Deepgram Nova-3 $0.0043/min + keyterm add-on $0.0013/min = $0.336/h; Gemini Flash-Lite ~$0.0094/h)
             if audio_hours > 0.01 and spent_usd > 0:
                 avg_cost_per_hour = round(spent_usd / audio_hours, 6)
                 stt_cost_per_hour = round(stt_cost_usd / audio_hours, 6)
                 llm_cost_per_hour = round(llm_cost_usd / audio_hours, 6)
                 avg_tokens_per_hour = int(round(total_tokens / audio_hours))
             else:
-                stt_cost_per_hour = 0.258
+                stt_cost_per_hour = 0.336
                 llm_cost_per_hour = 0.0094
                 avg_cost_per_hour = round(stt_cost_per_hour + llm_cost_per_hour, 6)
                 avg_tokens_per_hour = 25200
@@ -640,6 +691,29 @@ class OrchestratorDB:
                 and (free_credit == 0.0 or total_cost <= free_credit)
             )
 
+            # Credit: estimated from local api_calls, or anchored to the real balance reported by the provider
+            credit_source = "estimated"
+            calibrated_at: Optional[float] = None
+            used_since_calibration = 0.0
+            credit_used = total_cost
+            credit_remaining = max(0.0, free_credit - total_cost) if free_credit > 0 else 0.0
+            calib = self.get_provider_balance(prov) if free_credit > 0 else None
+            if calib:
+                calibrated_at = float(calib["recorded_at"])
+                free_credit = float(calib["credit_usd"] or free_credit)
+                used_since_calibration = round(
+                    sum(
+                        float(r["cost_usd"] or 0.0)
+                        for r in matching
+                        if float(r["created_at"] or 0.0) > calibrated_at
+                    ),
+                    6,
+                )
+                credit_remaining = max(0.0, float(calib["balance_usd"]) - used_since_calibration)
+                credit_used = max(0.0, free_credit - credit_remaining)
+                credit_source = str(calib.get("source") or "manual")
+                within_free = within_free and credit_remaining > 0
+
             models_out.append(
                 {
                     "id": sp["id"],
@@ -669,9 +743,13 @@ class OrchestratorDB:
                     },
                     "credit": {
                         "limit_usd": free_credit,
-                        "used_usd": total_cost,
-                        "remaining_usd": round(max(0.0, free_credit - total_cost), 4) if free_credit > 0 else 0.0,
-                        "pct": round(min(100.0, (total_cost / free_credit) * 100.0), 3) if free_credit > 0 else 0.0,
+                        "used_usd": round(credit_used, 6),
+                        "remaining_usd": round(credit_remaining, 4) if free_credit > 0 else 0.0,
+                        "pct": round(min(100.0, (credit_used / free_credit) * 100.0), 3) if free_credit > 0 else 0.0,
+                        "estimated_used_usd": total_cost,
+                        "source": credit_source,
+                        "calibrated_at": calibrated_at,
+                        "used_since_calibration_usd": used_since_calibration,
                     },
                     "timeline_24h": hourly_series,
                 }
