@@ -65,6 +65,16 @@ Esto genera una lista de intervalos `[SilenceSpan]` que el director utiliza para
 
 ---
 
+## ☁️ 4. Conectores de Google Drive y Explorador (`drive.py`)
+
+Implementa el protocolo `DriveConnector` con tres adaptadores intercambiables en caliente:
+- **`LocalFolderDriveConnector`**: Opera sobre el directorio local (`data/drive_mirror`), manteniendo subcarpetas `Entradas/` y `Salidas/`.
+- **`GoogleDriveServiceAccountConnector`**: Autenticación JWT RSA-256 sin dependencias pesadas y descargas/subidas resumibles en streaming hacia Google Drive API v3.
+- **`GoogleDriveOAuthConnector`**: Flujo OAuth 2.0 (`authorization_code` + renovación automática con `refresh_token` persistido en `data/drive_oauth_token.json`).
+- **Exploración y emparejamiento automático (`browse_folder` y `_pick_gameplay_and_camera`)**: Lista subcarpetas y videos con migas de pan (*breadcrumbs*), infiere el rol de cada archivo (`gameplay` o `camera`) priorizando palabras clave explícitas y sugiere el par óptimo para crear sesiones en un clic.
+
+---
+
 ## 🔗 Relacionado
 - [[Arquitectura general]]
 - [[FastAPI y Orquestador]]

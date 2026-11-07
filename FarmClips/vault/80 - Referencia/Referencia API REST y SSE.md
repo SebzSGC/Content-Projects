@@ -55,12 +55,25 @@ etiquetas: [tipo/api, area/backend]
 | Método | Endpoint | Descripción | Parámetros / Cuerpo |
 |---|---|---|---|
 | `GET` | `/settings` | Devuelve la configuración activa con claves enmascaradas. | JSON seguro |
-| `POST` | `/settings` | Actualiza claves, modelos y presupuesto en `.env` en caliente. | JSON con campos a modificar |
+| `POST` | `/settings` | Actualiza claves, modelos, modo de Drive y presupuesto en `.env` en caliente. | JSON con campos a modificar |
 | `POST` | `/settings/test-connection` | Valida credenciales contra las APIs externas en caliente. | JSON: `provider, api_key?, model?` |
 | `GET`  | `/budget` | Resumen de presupuesto y consumo en USD acumulado. | JSON: `total_usd, max_budget_usd, remaining_usd, pct` |
 | `GET`  | `/analytics/summary` | Resumen global de sesiones, clips curados y métricas. | JSON analítico |
 | `GET`  | `/analytics/breakdown` | Desglose de costos por proveedor y modelo de IA. | JSON por proveedor |
 | `POST` | `/maintenance/cleanup` | Ejecuta purga de archivos temporales según política TTL. | JSON: `ttl_days, include_inputs` |
+
+---
+
+## ☁️ 5. Conexión Directa y Explorador de Google Drive (`/drive`)
+
+| Método | Endpoint | Descripción | Parámetros / Cuerpo |
+|---|---|---|---|
+| `GET` | `/drive/status` | Estado del conector activo (`local`, `oauth`, `service_account`), correo vinculado y rutas. | JSON de estado |
+| `GET` | `/drive/auth/url` | Genera la URL de autorización OAuth 2.0 de Google (`access_type=offline`). | `?redirect_uri=...&state=...` |
+| `GET` | `/drive/auth/callback` | Intercambia el código OAuth 2.0 por tokens y persiste `data/drive_oauth_token.json`. | `?code=...&state=...` |
+| `POST` | `/drive/auth/disconnect` | Revoca la sesión OAuth local y elimina `data/drive_oauth_token.json`. | Sin cuerpo |
+| `GET` | `/drive/files` | Explora carpetas y videos en Drive con migas de pan y par auto-detectado (`detected_pair`). | `?folder_id=...&q=...` |
+| `POST` | `/drive/sessions` | Descarga `gameplay` + `cámara` en `ApiPool` con progreso SSE y lanza la sesión. | JSON: `gameplay_file_id, camera_file_id, recording_name?, game_hint?, auto_run?` |
 
 ---
 

@@ -39,8 +39,10 @@ sequenceDiagram
 
 ## 🧭 Paso a paso detallado
 
-### Paso 1: Detección y sondeo de estabilidad
-El conector de Google Drive o el escáner de carpetas locales detecta una pareja de archivos. Para evitar procesar archivos que aún se están copiando, el sistema exige dos verificaciones consecutivas separadas por 5 segundos donde el tamaño en bytes del archivo permanezca idéntico.
+### Paso 1: Detección automática o selección interactiva desde Google Drive
+FarmClips ofrece dos vías complementarias para ingresar grabaciones:
+1. **Explorador interactivo («Desde Drive» en `/sessions`)**: El creador navega visualmente sus carpetas de Google Drive (`oauth`, `service_account` o `local`) mediante `GET /drive/files`, utiliza la auto-detección en 1 clic de `gameplay` + `cámara` (o elige manualmente cada archivo) y dispara `POST /drive/sessions`. El `ApiPool` descarga ambos videos de forma concurrente y resumible mientras emite eventos SSE de progreso (`stage_progress: download`).
+2. **Sondeo automático de estabilidad**: El observador de carpetas detecta nuevas grabaciones en `Entradas/`. Para evitar procesar archivos que aún se están copiando o subiendo, el sistema exige dos verificaciones consecutivas separadas por 5 segundos donde el tamaño en bytes del archivo permanezca idéntico.
 
 ### Paso 2: Extracción acústica
 El `CpuPool` lanza procesos de FFmpeg para extraer:

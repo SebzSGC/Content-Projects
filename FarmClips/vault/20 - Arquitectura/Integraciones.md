@@ -28,7 +28,7 @@ flowchart LR
     end
 
     subgraph Almacenamiento["☁️ Almacenamiento"]
-        GDRIVE["Google Drive API v3<br/>(Service Account / Polling)"]
+        GDRIVE["Google Drive API v3<br/>(OAuth 2.0 / Service Account / Explorador)"]
     end
 
     subgraph IA["🤖 Modelos de Inteligencia Artificial"]
@@ -54,16 +54,17 @@ flowchart LR
 
 ---
 
-## ☁️ 1. Google Drive (Doble modalidad)
+## ☁️ 1. Google Drive (Triple modalidad + Explorador Interactivo)
 
-FarmClips puede operar tanto con carpetas locales vinculadas a la app de escritorio de Google Drive como mediante una cuenta de servicio formal de Google Cloud:
+FarmClips puede operar con carpetas locales sincronizadas, con una cuenta personal de Google mediante OAuth 2.0 o con una cuenta de servicio corporativa de Google Cloud, e incluye un explorador visual de carpetas y videos en `/sessions`:
 
-| Característica | Modalidad Local (`local_folder`) | Modalidad Nube (`service_account`) |
-|---|---|---|
-| **Mecanismo** | Observador de carpetas en disco duro | Llamadas directas a Google Drive API v3 |
-| **Credenciales** | Ninguna (usa el cliente de Google Drive) | Archivo `service_account.json` |
-| **Resilencia** | Exige 2 chequeos consecutivos sin cambio de tamaño | Descarga y subida resumible en fragmentos (chunks) |
-| **Estructura** | `Entradas/<grabación>/` y `Salidas/<grabación>/` | ID de carpeta raíz en Drive (`drive_root_folder_id`) |
+| Característica | Modalidad Local (`local`) | Modalidad OAuth 2.0 (`oauth`) | Modalidad Cuenta de Servicio (`service_account`) |
+|---|---|---|---|
+| **Mecanismo** | Observador y explorador de carpetas en disco duro | Google Drive API v3 con autorización de usuario | Google Drive API v3 servidor a servidor |
+| **Credenciales** | Ninguna (usa el espejo local en disco) | `CLIPS_DRIVE_CLIENT_ID` + `CLIPS_DRIVE_CLIENT_SECRET` y `refresh_token` en `data/drive_oauth_token.json` | Archivo `service_account.json` firmado con RSA-256 |
+| **Explorador interactivo** | Navegación de subcarpetas (`Entradas/`), migas de pan y filtro | Navegación en tiempo real de unidades y carpetas en la nube (`GET /drive/files`) | Navegación de carpetas compartidas con la cuenta de servicio |
+| **Auto-detección de par** | Empareja `gameplay` y `cámara` por nombre o bitrate | Sugiere par en 1 clic (`detected_pair`) y descarga en `ApiPool` (`POST /drive/sessions`) | Sugiere par en 1 clic y descarga resumible por bloques |
+| **Estructura** | `Entradas/<grabación>/` y `Salidas/<grabación>/` | `drive_root_folder_id` (o `root` de «Mi unidad») | `drive_root_folder_id` compartido con el correo del bot |
 
 ---
 

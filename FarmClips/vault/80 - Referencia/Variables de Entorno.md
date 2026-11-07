@@ -81,10 +81,12 @@ etiquetas: [tipo/guia, area/configuracion]
 
 | Variable | Valor por defecto | Descripción |
 |---|:---:|---|
-| `CLIPS_DRIVE_MODE` | `local_folder` | Modalidad de Drive (`local_folder`, `service_account` o `disabled`). |
-| `CLIPS_DRIVE_LOCAL_DIR` | `data/drive` | Carpeta local vinculada a Google Drive en la máquina. |
-| `CLIPS_DRIVE_SERVICE_ACCOUNT_JSON` | *(vacío)* | Ruta al archivo JSON de credenciales de Google Cloud. |
-| `CLIPS_DRIVE_ROOT_FOLDER_ID` | *(vacío)* | ID alfanumérico de la carpeta raíz en Google Drive. |
+| `CLIPS_DRIVE_MODE` | `local` | Modalidad de Drive (`local`, `oauth` o `service_account`). |
+| `CLIPS_DRIVE_LOCAL_DIR` | `data/drive_mirror` | Carpeta local vinculada a Google Drive en la máquina. |
+| `CLIPS_DRIVE_CLIENT_ID` | *(vacío)* | Client ID de OAuth 2.0 en Google Cloud Console (modalidad `oauth`). |
+| `CLIPS_DRIVE_CLIENT_SECRET` | *(vacío)* | Client Secret de OAuth 2.0 (persiste `refresh_token` en `data/drive_oauth_token.json`). |
+| `CLIPS_DRIVE_SERVICE_ACCOUNT_JSON` | *(vacío)* | Ruta al archivo JSON de credenciales de Google Cloud (`service_account`). |
+| `CLIPS_DRIVE_ROOT_FOLDER_ID` | *(vacío)* | ID alfanumérico de la carpeta raíz en Google Drive (`root` si se omite en `oauth`). |
 | `CLIPS_DRIVE_POLL_SEC` | `15.0` | Frecuencia en segundos para buscar nuevas grabaciones. |
 | `CLIPS_WEBHOOK_URL` | *(vacío)* | URL para notificaciones automáticas HTTP POST (Discord o Slack). |
 
