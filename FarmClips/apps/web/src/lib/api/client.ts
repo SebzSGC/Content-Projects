@@ -180,6 +180,74 @@ export interface ServerSseEvent {
   max_budget_usd?: number;
   remaining_usd?: number;
   calls_count?: number;
+  stt_primary?: string;
+  llm_primary?: string;
+  llm_model?: string;
+}
+
+export interface ApiKeyStatus {
+  masked: string;
+  has_key: boolean;
+}
+
+export interface AppSettings {
+  env_path: string;
+  stt_primary: "deepgram" | "groq" | "fixture";
+  stt_backup: "groq" | "deepgram" | "fixture" | "none";
+  deepgram_model: string;
+  groq_stt_model: string;
+  llm_primary: "gemini" | "openai_compat" | "fixture";
+  llm_model: string;
+  llm_backup: "openai_compat" | "gemini" | "fixture" | "none";
+  llm_backup_model: string;
+  llm_backup_base_url: string;
+  max_budget_usd: number;
+  webhook_url: string;
+  temp_ttl_days: number;
+  auto_render_top_k: number;
+  auto_render_min_score: number;
+  default_keyterms: string[];
+  deepgram_api_key: string;
+  groq_api_key: string;
+  gemini_api_key: string;
+  openai_api_key: string;
+  has_deepgram_key: boolean;
+  has_groq_key: boolean;
+  has_gemini_key: boolean;
+  has_openai_key: boolean;
+  api_keys: {
+    deepgram: ApiKeyStatus;
+    groq: ApiKeyStatus;
+    gemini: ApiKeyStatus;
+    openai: ApiKeyStatus;
+  };
+}
+
+export interface UpdateSettingsPayload {
+  stt_primary?: "deepgram" | "groq" | "fixture";
+  stt_backup?: "groq" | "deepgram" | "fixture" | "none";
+  deepgram_model?: string;
+  groq_stt_model?: string;
+  llm_primary?: "gemini" | "openai_compat" | "fixture";
+  llm_model?: string;
+  llm_backup?: "openai_compat" | "gemini" | "fixture" | "none";
+  llm_backup_model?: string;
+  llm_backup_base_url?: string;
+  max_budget_usd?: number;
+  deepgram_api_key?: string;
+  groq_api_key?: string;
+  gemini_api_key?: string;
+  openai_api_key?: string;
+  webhook_url?: string;
+  temp_ttl_days?: number;
+}
+
+export interface TestConnectionResult {
+  ok: boolean;
+  provider: string;
+  latency_ms: number;
+  status_code?: number;
+  detail: string;
 }
 
 async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -245,6 +313,26 @@ export interface CleanupResult {
 
 export const fetchHealth = () => apiJson<ServerHealth>("/health");
 export const fetchBudget = () => apiJson<BudgetSummary>("/budget");
+export const getSettings = () => apiJson<AppSettings>("/settings");
+export const saveSettings = (data: UpdateSettingsPayload) =>
+  apiJson<AppSettings>("/settings", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+export const testSettingsConnection = (
+  provider: "deepgram" | "groq" | "gemini" | "openai_compat" | "openai" | "fixture",
+  api_key?: string,
+  options?: { model?: string; base_url?: string }
+) =>
+  apiJson<TestConnectionResult>("/settings/test-connection", {
+    method: "POST",
+    body: JSON.stringify({
+      provider,
+      api_key,
+      model: options?.model,
+      base_url: options?.base_url,
+    }),
+  });
 export const fetchDriveStatus = () => apiJson<DriveStatus>("/drive/status");
 export const triggerDrivePoll = () => apiJson<{ launched_sessions: string[] }>("/drive/poll", { method: "POST" });
 export const fetchEmojiCatalog = () => apiJson<EmojiCatalogItem[]>("/emojis");

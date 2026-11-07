@@ -25,8 +25,8 @@ Convierte grabaciones largas de gaming separadas (`gameplay.mp4` + `camara.mp4`)
 ```text
 FarmClips/
   apps/
-    web/              Next.js 15 Studio (/sessions, /sessions/[id], /editor/[clipId])
-    server/           Servidor único FastAPI + Orquestador SQLite WAL + SSE + 3 Pools
+    web/              Next.js 15 Studio (/sessions, /sessions/[id], /editor/[clipId], /settings)
+    server/           Servidor único FastAPI + Orquestador SQLite WAL + SSE + 3 Pools + /settings hot-reload
   packages/
     styles/           Preset `hormozi-gaming`, fuente Montserrat ExtraBold, 42 emojis RGBA supersampled, keyterms por juego y SFX
     editplan/         Contrato EditPlan v2 (Pydantic + JSON Schema + generador TypeScript)
@@ -63,8 +63,8 @@ Copy-Item .env.example .env
 powershell -ExecutionPolicy Bypass -File infra\dev.ps1
 ```
 
-- **Web Studio**: `http://127.0.0.1:3040`
-- **API & SSE Server**: `http://127.0.0.1:8790/health`
+- **Web Studio**: `http://127.0.0.1:3040` (incluye panel `⚙️ /settings` para configurar y probar API Keys de Deepgram, Groq, Gemini y OpenAI en caliente sin tocar `.env` a mano)
+- **API & SSE Server**: `http://127.0.0.1:8790/health` (`GET/POST /settings`, `POST /settings/test-connection`)
 
 ### 3. Ejecutar pruebas completas (Unitarias + Resiliencia + Golden E2E con FFmpeg y MediaPipe)
 

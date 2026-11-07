@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import re
 import shutil
 import tempfile
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
+import httpx
 from clipscore.domain import SessionState, SignalSeries, SyncResult, new_id
 from clipseditplan import EditPlan
 from clipsmedia.ffmpeg import extract_frame, resolve_binary
@@ -30,7 +33,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from ..config import ServerSettings, get_server_settings
+from ..config import (
+    ServerSettings,
+    get_server_settings,
+    is_masked_or_blank,
+    reload_server_settings,
+    update_dotenv_values,
+)
 from ..orchestrator import Orchestrator, cleanup_temp_media, compute_storage_stats
 
 SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
@@ -64,6 +73,151 @@ class CleanupBody(BaseModel):
 class TestWebhookBody(BaseModel):
     webhook_url: Optional[str] = None
     session_id: Optional[str] = None
+
+
+class UpdateSettingsBody(BaseModel):
+    stt_primary: Optional[Literal["deepgram", "groq", "fixture"]] = None
+    stt_backup: Optional[Literal["groq", "deepgram", "fixture", "none"]] = None
+    deepgram_model: Optional[str] = None
+    groq_stt_model: Optional[str] = None
+    llm_primary: Optional[Literal["gemini", "openai_compat", "fixture"]] = None
+    llm_model: Optional[str] = None
+    llm_backup: Optional[Literal["openai_compat", "gemini", "fixture", "none"]] = None
+    llm_backup_model: Optional[str] = None
+    llm_backup_base_url: Optional[str] = None
+    max_budget_usd: Optional[float] = Field(default=None, ge=0.05, le=10000.0)
+    deepgram_api_key: Optional[str] = None
+    groq_api_key: Optional[str] = None
+    gemini_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None
+    webhook_url: Optional[str] = None
+    temp_ttl_days: Optional[float] = Field(default=None, ge=0.0, le=3650.0)
+
+
+class TestConnectionBody(BaseModel):
+    provider: Literal["deepgram", "groq", "gemini", "openai_compat", "openai", "fixture"]
+    api_key: Optional[str] = None
+    model: Optional[str] = None
+    base_url: Optional[str] = None
+
+
+def _extract_provider_error(resp: httpx.Response) -> str:
+    try:
+        data = resp.json()
+        if isinstance(data, dict):
+            err = data.get("error")
+            if isinstance(err, dict) and err.get("message"):
+                return str(err["message"])
+            if isinstance(err, str) and err:
+                return err
+            if data.get("err_msg"):
+                return str(data["err_msg"])
+            if data.get("message"):
+                return str(data["message"])
+            if data.get("detail"):
+                return str(data["detail"])
+    except Exception:
+        pass
+    return (resp.text or f"HTTP {resp.status_code}").strip()[:220]
+
+
+async def test_provider_connection(
+    provider: str,
+    api_key: str,
+    model: Optional[str] = None,
+    base_url: Optional[str] = None,
+    client: Optional[httpx.AsyncClient] = None,
+) -> Dict[str, Any]:
+    """Perform a fast, lightweight ping against Deepgram, Groq, Gemini, or OpenAI-compatible API."""
+    prov = provider.strip().lower()
+    if prov == "openai":
+        prov = "openai_compat"
+
+    if prov == "fixture":
+        return {
+            "ok": True,
+            "provider": "fixture",
+            "latency_ms": 1,
+            "status_code": 200,
+            "detail": "Modo offline (fixtures locales) activo sin consumo de API.",
+        }
+
+    target_base = (base_url or "https://api.openai.com/v1").rstrip("/")
+    is_local_oa = prov == "openai_compat" and any(h in target_base for h in ("127.0.0.1", "localhost"))
+
+    if not api_key and not is_local_oa:
+        return {
+            "ok": False,
+            "provider": prov,
+            "latency_ms": 0,
+            "status_code": 401,
+            "detail": f"No se ingresó ni existe una API Key configurada para {prov}.",
+        }
+
+    owns_client = client is None
+    http = client or httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=6.0))
+    t0 = time.perf_counter()
+    try:
+        if prov == "deepgram":
+            resp = await http.get(
+                "https://api.deepgram.com/v1/projects",
+                headers={"Authorization": f"Token {api_key}"},
+            )
+            label = f"Deepgram API ({model or 'nova-3'})"
+        elif prov == "groq":
+            resp = await http.get(
+                "https://api.groq.com/openai/v1/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            label = f"Groq Cloud ({model or 'whisper-large-v3-turbo'})"
+        elif prov == "gemini":
+            resp = await http.get(
+                "https://generativelanguage.googleapis.com/v1beta/models",
+                params={"key": api_key, "pageSize": "5"},
+            )
+            label = f"Google Gemini API ({model or 'gemini-3.5-flash-lite'})"
+        elif prov == "openai_compat":
+            headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+            resp = await http.get(f"{target_base}/models", headers=headers)
+            label = f"OpenAI-compatible ({target_base})"
+        else:
+            return {
+                "ok": False,
+                "provider": prov,
+                "latency_ms": 0,
+                "status_code": 400,
+                "detail": f"Proveedor no soportado: {prov}",
+            }
+
+        latency_ms = max(1, int((time.perf_counter() - t0) * 1000))
+        if 200 <= resp.status_code < 300:
+            return {
+                "ok": True,
+                "provider": prov,
+                "latency_ms": latency_ms,
+                "status_code": resp.status_code,
+                "detail": f"Conexión verificada con {label} ({latency_ms} ms).",
+            }
+        err_msg = _extract_provider_error(resp)
+        return {
+            "ok": False,
+            "provider": prov,
+            "latency_ms": latency_ms,
+            "status_code": resp.status_code,
+            "detail": f"Error {resp.status_code} en {label}: {err_msg}",
+        }
+    except Exception as exc:
+        latency_ms = max(1, int((time.perf_counter() - t0) * 1000))
+        return {
+            "ok": False,
+            "provider": prov,
+            "latency_ms": latency_ms,
+            "status_code": 0,
+            "detail": f"Error de conexión con {prov}: {exc}",
+        }
+    finally:
+        if owns_client:
+            await http.aclose()
 
 
 def _serialize_clip(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -182,6 +336,104 @@ def create_app(
     @app.get("/budget")
     def get_budget() -> Dict[str, Any]:
         return orch.db.budget_summary(cfg.max_budget_usd)
+
+    @app.get("/settings")
+    def get_settings_endpoint() -> Dict[str, Any]:
+        return cfg.to_masked_dict()
+
+    @app.post("/settings")
+    def update_settings_endpoint(body: UpdateSettingsBody) -> Dict[str, Any]:
+        nonlocal cfg
+        env_updates: Dict[str, str] = {}
+
+        if body.stt_primary is not None:
+            env_updates["CLIPS_STT_PRIMARY"] = body.stt_primary.strip().lower()
+        if body.stt_backup is not None:
+            env_updates["CLIPS_STT_BACKUP"] = body.stt_backup.strip().lower()
+        if body.deepgram_model is not None and body.deepgram_model.strip():
+            env_updates["CLIPS_DEEPGRAM_MODEL"] = body.deepgram_model.strip()
+        if body.groq_stt_model is not None and body.groq_stt_model.strip():
+            env_updates["CLIPS_GROQ_STT_MODEL"] = body.groq_stt_model.strip()
+
+        if body.llm_primary is not None:
+            env_updates["CLIPS_LLM_PRIMARY"] = body.llm_primary.strip().lower()
+        if body.llm_model is not None and body.llm_model.strip():
+            env_updates["CLIPS_LLM_MODEL"] = body.llm_model.strip()
+        if body.llm_backup is not None:
+            env_updates["CLIPS_LLM_BACKUP"] = body.llm_backup.strip().lower()
+        if body.llm_backup_model is not None and body.llm_backup_model.strip():
+            env_updates["CLIPS_LLM_BACKUP_MODEL"] = body.llm_backup_model.strip()
+        if body.llm_backup_base_url is not None and body.llm_backup_base_url.strip():
+            env_updates["CLIPS_LLM_BACKUP_BASE_URL"] = body.llm_backup_base_url.strip()
+
+        if body.max_budget_usd is not None:
+            env_updates["CLIPS_MAX_BUDGET_USD"] = f"{float(body.max_budget_usd):.2f}"
+        if body.webhook_url is not None:
+            env_updates["CLIPS_WEBHOOK_URL"] = body.webhook_url.strip()
+        if body.temp_ttl_days is not None:
+            env_updates["CLIPS_TEMP_TTL_DAYS"] = str(float(body.temp_ttl_days))
+
+        # API Keys: if blank or masked, keep existing value in .env and memory
+        if not is_masked_or_blank(body.deepgram_api_key, cfg.deepgram_api_key):
+            env_updates["DEEPGRAM_API_KEY"] = (body.deepgram_api_key or "").strip()
+        if not is_masked_or_blank(body.groq_api_key, cfg.groq_api_key):
+            env_updates["GROQ_API_KEY"] = (body.groq_api_key or "").strip()
+        if not is_masked_or_blank(body.gemini_api_key, cfg.gemini_api_key):
+            env_updates["GEMINI_API_KEY"] = (body.gemini_api_key or "").strip()
+        if not is_masked_or_blank(body.openai_api_key, cfg.openai_api_key):
+            env_updates["OPENAI_API_KEY"] = (body.openai_api_key or "").strip()
+
+        update_dotenv_values(env_updates)
+        reloaded = reload_server_settings()
+        if settings is not None:
+            reloaded = dataclasses.replace(
+                reloaded,
+                data_dir=cfg.data_dir,
+                drive_local_dir=cfg.drive_local_dir,
+                fixtures_dir=reloaded.fixtures_dir or cfg.fixtures_dir,
+            )
+        cfg = reloaded
+        app.state.settings = cfg
+        orch.reload_settings(cfg)
+
+        budget = orch.db.budget_summary(cfg.max_budget_usd)
+        orch.events.publish("budget_update", **budget)
+        orch.events.publish(
+            "settings_updated",
+            stt_primary=cfg.stt_primary,
+            llm_primary=cfg.llm_primary,
+            llm_model=cfg.llm_model,
+            max_budget_usd=cfg.max_budget_usd,
+        )
+        return cfg.to_masked_dict()
+
+    @app.post("/settings/test-connection")
+    async def test_settings_connection_endpoint(body: TestConnectionBody) -> Dict[str, Any]:
+        prov = body.provider.strip().lower()
+        if prov == "openai":
+            prov = "openai_compat"
+
+        saved_keys = {
+            "deepgram": cfg.deepgram_api_key,
+            "groq": cfg.groq_api_key,
+            "gemini": cfg.gemini_api_key,
+            "openai_compat": cfg.openai_api_key or cfg.groq_api_key,
+        }
+        saved_key = saved_keys.get(prov, "")
+        if body.api_key and not is_masked_or_blank(body.api_key, saved_key):
+            effective_key = body.api_key.strip()
+        else:
+            effective_key = saved_key
+
+        effective_base_url = body.base_url or cfg.llm_backup_base_url
+        custom_client = getattr(app.state, "test_http_client", None)
+        return await test_provider_connection(
+            provider=prov,
+            api_key=effective_key,
+            model=body.model,
+            base_url=effective_base_url,
+            client=custom_client,
+        )
 
     @app.get("/presets")
     def get_presets() -> List[str]:

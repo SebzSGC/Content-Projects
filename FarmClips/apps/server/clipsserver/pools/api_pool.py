@@ -59,36 +59,69 @@ class ApiPool:
 
     def _make_stt(self, name: str) -> Optional[SttAdapter]:
         if name == "fixture" or (self.settings.fixtures_dir and name != "none"):
-            assert self.settings.fixtures_dir is not None
-            return RecordedSttFixtureAdapter(self.settings.fixtures_dir / "deepgram_nova3.json")
+            if self.settings.fixtures_dir is not None:
+                return RecordedSttFixtureAdapter(self.settings.fixtures_dir / "deepgram_nova3.json")
+            fixture_fallback = Path("tests/fixtures/api/deepgram_nova3.json").resolve()
+            if fixture_fallback.is_file():
+                return RecordedSttFixtureAdapter(fixture_fallback)
         if name == "deepgram":
-            return DeepgramNova3Adapter(model=self.settings.deepgram_model)
+            return DeepgramNova3Adapter(
+                api_key=self.settings.deepgram_api_key or None,
+                model=self.settings.deepgram_model,
+            )
         if name == "groq":
-            return GroqWhisperAdapter(model=self.settings.groq_stt_model)
+            return GroqWhisperAdapter(
+                api_key=self.settings.groq_api_key or None,
+                model=self.settings.groq_stt_model,
+            )
         return None
 
     def _build_stt_router(self) -> FailoverRouter[SttAdapter]:
-        primary = self._make_stt(self.settings.stt_primary) or DeepgramNova3Adapter()
+        primary = self._make_stt(self.settings.stt_primary) or DeepgramNova3Adapter(
+            api_key=self.settings.deepgram_api_key or None,
+            model=self.settings.deepgram_model,
+        )
         backup = self._make_stt(self.settings.stt_backup) if self.settings.stt_backup != self.settings.stt_primary else None
         return FailoverRouter(primary=primary, backup=backup)
 
     def _make_llm(self, name: str) -> Optional[LlmAdapter]:
         if name == "fixture" or (self.settings.fixtures_dir and name != "none"):
-            assert self.settings.fixtures_dir is not None
-            return RecordedLlmFixtureAdapter(self.settings.fixtures_dir / "gemini_curate.json")
+            if self.settings.fixtures_dir is not None:
+                return RecordedLlmFixtureAdapter(self.settings.fixtures_dir / "gemini_curate.json")
+            fixture_fallback = Path("tests/fixtures/api/gemini_curate.json").resolve()
+            if fixture_fallback.is_file():
+                return RecordedLlmFixtureAdapter(fixture_fallback)
         if name == "gemini":
-            return GeminiAdapter(model=self.settings.llm_model)
+            return GeminiAdapter(
+                api_key=self.settings.gemini_api_key or None,
+                model=self.settings.llm_model,
+            )
         if name == "openai_compat":
+            oa_model = (
+                self.settings.llm_model
+                if (self.settings.llm_primary == "openai_compat" and not self.settings.llm_model.startswith("gemini"))
+                else self.settings.llm_backup_model
+            )
             return OpenAICompatibleAdapter(
-                model=self.settings.llm_backup_model,
+                api_key=self.settings.openai_api_key or self.settings.groq_api_key or None,
+                model=oa_model,
                 base_url=self.settings.llm_backup_base_url,
             )
         return None
 
     def _build_llm_router(self) -> FailoverRouter[LlmAdapter]:
-        primary = self._make_llm(self.settings.llm_primary) or GeminiAdapter(model=self.settings.llm_model)
+        primary = self._make_llm(self.settings.llm_primary) or GeminiAdapter(
+            api_key=self.settings.gemini_api_key or None,
+            model=self.settings.llm_model,
+        )
         backup = self._make_llm(self.settings.llm_backup) if self.settings.llm_backup != self.settings.llm_primary else None
         return FailoverRouter(primary=primary, backup=backup)
+
+    def reload_settings(self, new_settings: ServerSettings) -> None:
+        """Hot-reload settings and rebuild STT/LLM routers in memory without restarting the server."""
+        self.settings = new_settings
+        self.stt_router = self._build_stt_router()
+        self.llm_router = self._build_llm_router()
 
     async def run_download(self, fn: Callable[[], Awaitable[Path]]) -> Path:
         async with self._download_sem:

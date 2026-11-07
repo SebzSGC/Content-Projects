@@ -80,6 +80,11 @@ class Orchestrator:
         self._running_sessions: Dict[str, asyncio.Task] = {}
         self._drive_watcher_task: Optional[asyncio.Task] = None
 
+    def reload_settings(self, new_settings: ServerSettings) -> None:
+        """Hot-reload in-memory ServerSettings across Orchestrator and ApiPool."""
+        self.settings = new_settings
+        self.api_pool.reload_settings(new_settings)
+
     def _init_drive(self, require_two_polls: bool) -> Optional[DriveConnector]:
         mode = self.settings.drive_mode
         if mode == "disabled":

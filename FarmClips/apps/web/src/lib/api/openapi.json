@@ -46,6 +46,104 @@
         }
       }
     },
+    "/settings": {
+      "get": {
+        "summary": "Get Settings Endpoint",
+        "operationId": "get_settings_endpoint_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Settings Endpoint Settings Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Update Settings Endpoint",
+        "operationId": "update_settings_endpoint_settings_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSettingsBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Update Settings Endpoint Settings Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/settings/test-connection": {
+      "post": {
+        "summary": "Test Settings Connection Endpoint",
+        "operationId": "test_settings_connection_endpoint_settings_test_connection_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestConnectionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Test Settings Connection Endpoint Settings Test Connection Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/presets": {
       "get": {
         "summary": "Get Presets",
@@ -1806,6 +1904,60 @@
         ],
         "title": "SourcePlan"
       },
+      "TestConnectionBody": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "deepgram",
+              "groq",
+              "gemini",
+              "openai_compat",
+              "openai",
+              "fixture"
+            ],
+            "title": "Provider"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider"
+        ],
+        "title": "TestConnectionBody"
+      },
       "TestWebhookBody": {
         "properties": {
           "webhook_url": {
@@ -1833,6 +1985,214 @@
         },
         "type": "object",
         "title": "TestWebhookBody"
+      },
+      "UpdateSettingsBody": {
+        "properties": {
+          "stt_primary": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "deepgram",
+                  "groq",
+                  "fixture"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stt Primary"
+          },
+          "stt_backup": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "groq",
+                  "deepgram",
+                  "fixture",
+                  "none"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stt Backup"
+          },
+          "deepgram_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deepgram Model"
+          },
+          "groq_stt_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groq Stt Model"
+          },
+          "llm_primary": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "gemini",
+                  "openai_compat",
+                  "fixture"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Primary"
+          },
+          "llm_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Model"
+          },
+          "llm_backup": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "openai_compat",
+                  "gemini",
+                  "fixture",
+                  "none"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Backup"
+          },
+          "llm_backup_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Backup Model"
+          },
+          "llm_backup_base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Backup Base Url"
+          },
+          "max_budget_usd": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 10000.0,
+                "minimum": 0.05
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Budget Usd"
+          },
+          "deepgram_api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deepgram Api Key"
+          },
+          "groq_api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groq Api Key"
+          },
+          "gemini_api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gemini Api Key"
+          },
+          "openai_api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openai Api Key"
+          },
+          "webhook_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook Url"
+          },
+          "temp_ttl_days": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 3650.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temp Ttl Days"
+          }
+        },
+        "type": "object",
+        "title": "UpdateSettingsBody"
       },
       "ValidationError": {
         "properties": {

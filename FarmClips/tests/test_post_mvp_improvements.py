@@ -393,3 +393,122 @@ async def test_ttl_cleanup_preserves_zero_dollar_rerun_guarantee(tmp_path: Path)
         assert row_rerun is not None and row_rerun["state"] == "DELIVERED"
     finally:
         await orch.shutdown()
+
+
+def test_settings_persistence_masking_hot_reload_and_test_connection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from clipsserver.config import mask_api_key, read_dotenv_values
+
+    assert mask_api_key("AIzaSyD12345678908a9b") == "AIza...8a9b"
+    assert mask_api_key("sk-proj-12345678903f1a") == "sk-...3f1a"
+    assert mask_api_key("") == ""
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "# Comentario preservado\nCLIPS_STT_PRIMARY=deepgram\nGEMINI_API_KEY=AIzaSyInitialKey8a9b\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CLIPS_ENV_FILE", str(env_file))
+    monkeypatch.setenv("GEMINI_API_KEY", "AIzaSyInitialKey8a9b")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("DEEPGRAM_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+
+    settings = ServerSettings(
+        data_dir=tmp_path / "data",
+        drive_mode="disabled",
+        gemini_api_key="AIzaSyInitialKey8a9b",
+    )
+    app = create_app(settings, use_process_pool=False, enable_drive_watcher=False)
+
+    def _mock_provider_handler(request: httpx.Request) -> httpx.Response:
+        auth = request.headers.get("Authorization", "")
+        url_str = str(request.url)
+        if "api.deepgram.com" in url_str:
+            if auth == "Token dg_valid_key_9999":
+                return httpx.Response(200, json={"projects": [{"name": "FarmClips"}]})
+            return httpx.Response(401, json={"err_msg": "Invalid credentials"})
+        if "generativelanguage.googleapis.com" in url_str:
+            if "key=AIzaSyInitialKey8a9b" in url_str:
+                return httpx.Response(200, json={"models": [{"name": "models/gemini-3.5-flash-lite"}]})
+            return httpx.Response(400, json={"error": {"message": "API key not valid"}})
+        if "api.openai.com" in url_str:
+            if auth == "Bearer sk-live-secret-3f1a":
+                return httpx.Response(200, json={"data": [{"id": "gpt-6-luna"}]})
+            return httpx.Response(401, json={"error": {"message": "Incorrect API key provided"}})
+        return httpx.Response(200, json={"ok": True})
+
+    app.state.test_http_client = httpx.AsyncClient(transport=httpx.MockTransport(_mock_provider_handler))
+
+    with TestClient(app) as client:
+        # 1. GET /settings returns masked keys and booleans
+        r0 = client.get("/settings")
+        assert r0.status_code == 200
+        s0 = r0.json()
+        assert s0["gemini_api_key"] == "AIza...8a9b"
+        assert s0["has_gemini_key"] is True
+        assert s0["api_keys"]["gemini"] == {"masked": "AIza...8a9b", "has_key": True}
+        assert s0["has_openai_key"] is False
+        assert s0["api_keys"]["openai"] == {"masked": "", "has_key": False}
+
+        # 2. POST /settings updates new keys, preserves masked/blank keys, updates .env & hot-reloads memory
+        r1 = client.post(
+            "/settings",
+            json={
+                "stt_primary": "groq",
+                "llm_primary": "openai_compat",
+                "llm_model": "gpt-6-luna",
+                "max_budget_usd": 14.5,
+                "gemini_api_key": "AIza...8a9b",  # Masked -> must preserve AIzaSyInitialKey8a9b
+                "deepgram_api_key": "",            # Blank -> must not overwrite
+                "openai_api_key": "sk-live-secret-3f1a",
+            },
+        )
+        assert r1.status_code == 200
+        s1 = r1.json()
+        assert s1["stt_primary"] == "groq"
+        assert s1["llm_primary"] == "openai_compat"
+        assert s1["llm_model"] == "gpt-6-luna"
+        assert s1["max_budget_usd"] == 14.5
+        assert s1["gemini_api_key"] == "AIza...8a9b"
+        assert s1["has_gemini_key"] is True
+        assert s1["openai_api_key"] == "sk-...3f1a"
+        assert s1["has_openai_key"] is True
+
+        # Verify .env file on disk kept comments, preserved GEMINI_API_KEY, and added OPENAI_API_KEY
+        disk_vals = read_dotenv_values(env_file)
+        assert disk_vals["GEMINI_API_KEY"] == "AIzaSyInitialKey8a9b"
+        assert disk_vals["OPENAI_API_KEY"] == "sk-live-secret-3f1a"
+        assert disk_vals["CLIPS_STT_PRIMARY"] == "groq"
+        assert disk_vals["CLIPS_MAX_BUDGET_USD"] == "14.50"
+        assert "# Comentario preservado" in env_file.read_text(encoding="utf-8")
+
+        # Verify in-memory hot reload reflected immediately in /health and Orchestrator.api_pool
+        h1 = client.get("/health").json()
+        assert h1["stt_primary"] == "groq"
+        assert h1["llm_primary"] == "openai_compat"
+        assert h1["budget"]["max_budget_usd"] == 14.5
+        assert app.state.orchestrator.api_pool.settings.openai_api_key == "sk-live-secret-3f1a"
+
+        # 3. POST /settings/test-connection works with saved key (when omitted/masked) and explicit key
+        t_gemini = client.post("/settings/test-connection", json={"provider": "gemini"}).json()
+        assert t_gemini["ok"] is True
+        assert t_gemini["provider"] == "gemini"
+
+        t_openai = client.post("/settings/test-connection", json={"provider": "openai_compat"}).json()
+        assert t_openai["ok"] is True
+
+        t_dg_fail = client.post(
+            "/settings/test-connection",
+            json={"provider": "deepgram", "api_key": "dg_wrong_key"},
+        ).json()
+        assert t_dg_fail["ok"] is False
+        assert "Invalid credentials" in t_dg_fail["detail"]
+
+        t_dg_ok = client.post(
+            "/settings/test-connection",
+            json={"provider": "deepgram", "api_key": "dg_valid_key_9999"},
+        ).json()
+        assert t_dg_ok["ok"] is True
+
