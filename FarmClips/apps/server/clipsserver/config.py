@@ -201,13 +201,19 @@ class ServerSettings:
     groq_api_key: str = ""
     gemini_api_key: str = ""
     openai_api_key: str = ""
-    # Pools & Render
+    # Pools & Render + DaVinci Resolve MCP integration
     cpu_workers: int = 2
     use_nvenc: bool = True
     nvenc_slots: int = 2
     auto_render_top_k: int = 5
     auto_render_min_score: float = 60.0
     enable_gameplay_motion: bool = True
+    editor_backend: str = "local"        # local | resolve_mcp | both
+    resolve_mcp_mode: str = "auto"       # auto | mcp_stdio | mcp_http | direct_script | bundle_only
+    resolve_mcp_command: str = ""
+    resolve_mcp_url: str = ""
+    resolve_project_prefix: str = "FarmClips"
+    resolve_auto_export: bool = False
     # Google Drive watcher & direct OAuth 2.0
     drive_mode: str = "local"            # local | oauth | service_account | disabled
     drive_local_dir: Path = field(default_factory=lambda: Path("data/drive_mirror").resolve())
@@ -265,6 +271,14 @@ class ServerSettings:
         cpu_count = os.cpu_count() or 4
         keyterms_raw = os.environ.get("CLIPS_KEYTERMS", "clutch,headshot,boss,lag,stream,chat,bro,no puede ser")
 
+        editor_backend = os.environ.get("CLIPS_EDITOR_BACKEND", "local").strip().lower()
+        if editor_backend not in ("local", "resolve_mcp", "both"):
+            editor_backend = "local"
+
+        resolve_mcp_mode = os.environ.get("CLIPS_RESOLVE_MCP_MODE", "auto").strip().lower()
+        if resolve_mcp_mode not in ("auto", "mcp_stdio", "mcp_http", "direct_script", "bundle_only"):
+            resolve_mcp_mode = "auto"
+
         return cls(
             data_dir=data_dir,
             host=os.environ.get("CLIPS_HOST", "127.0.0.1"),
@@ -292,6 +306,12 @@ class ServerSettings:
             auto_render_top_k=int(os.environ.get("CLIPS_AUTO_RENDER_TOP_K", "5")),
             auto_render_min_score=float(os.environ.get("CLIPS_AUTO_RENDER_MIN_SCORE", "60.0")),
             enable_gameplay_motion=_bool("CLIPS_ENABLE_MOTION", True),
+            editor_backend=editor_backend,
+            resolve_mcp_mode=resolve_mcp_mode,
+            resolve_mcp_command=os.environ.get("CLIPS_RESOLVE_MCP_COMMAND", "").strip(),
+            resolve_mcp_url=os.environ.get("CLIPS_RESOLVE_MCP_URL", "").strip(),
+            resolve_project_prefix=os.environ.get("CLIPS_RESOLVE_PROJECT_PREFIX", "FarmClips").strip() or "FarmClips",
+            resolve_auto_export=_bool("CLIPS_RESOLVE_AUTO_EXPORT", False),
             drive_mode=drive_mode,
             drive_local_dir=drive_local,
             drive_service_account_json=sa_path,
@@ -336,6 +356,12 @@ class ServerSettings:
             "auto_render_top_k": self.auto_render_top_k,
             "auto_render_min_score": self.auto_render_min_score,
             "default_keyterms": list(self.default_keyterms),
+            "editor_backend": self.editor_backend,
+            "resolve_mcp_mode": self.resolve_mcp_mode,
+            "resolve_mcp_command": self.resolve_mcp_command,
+            "resolve_mcp_url": self.resolve_mcp_url,
+            "resolve_project_prefix": self.resolve_project_prefix,
+            "resolve_auto_export": self.resolve_auto_export,
             "drive_mode": self.drive_mode,
             "drive_local_dir": str(self.drive_local_dir),
             "drive_root_folder_id": self.drive_root_folder_id or "",

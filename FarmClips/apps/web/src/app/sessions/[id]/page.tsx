@@ -3,10 +3,11 @@
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Activity, ArrowLeft, CheckCircle2, Download, Flame, RefreshCw, Scissors, StopCircle, Wrench } from "lucide-react";
+import { Activity, ArrowLeft, CheckCircle2, Download, Flame, RefreshCw, Scissors, Sparkles, StopCircle, Wrench } from "lucide-react";
 import {
   API_PREFIX,
   cancelSession,
+  exportSessionToResolve,
   fetchSessionClips,
   fetchSessionDetail,
   fetchSessionSignals,
@@ -14,6 +15,7 @@ import {
   updateManualSync,
   useServerEvents,
   type ClipItem,
+  type ResolveSessionExportResponse,
   type SessionSummary,
   type SignalSeries,
 } from "@/lib/api/client";
@@ -55,6 +57,8 @@ export default function SessionDetailPage() {
   const [renderProgress, setRenderProgress] = useState<Record<string, number>>({});
   const [manualShift, setManualShift] = useState<string>("0.00");
   const [savingSync, setSavingSync] = useState(false);
+  const [exportingResolve, setExportingResolve] = useState(false);
+  const [resolveSessionResult, setResolveSessionResult] = useState<ResolveSessionExportResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
@@ -103,6 +107,20 @@ export default function SessionDetailPage() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSavingSync(false);
+    }
+  }
+
+  async function handleExportSessionToResolve() {
+    if (!sessionId) return;
+    setExportingResolve(true);
+    setError(null);
+    try {
+      const res = await exportSessionToResolve(sessionId, { open_in_resolve: true });
+      setResolveSessionResult(res);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setExportingResolve(false);
     }
   }
 
@@ -164,6 +182,17 @@ export default function SessionDetailPage() {
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {clips.length > 0 && !isRunning && (
+              <button
+                type="button"
+                onClick={handleExportSessionToResolve}
+                disabled={exportingResolve}
+                className={btnSecondary}
+              >
+                {exportingResolve ? <SoftSpinner className="h-4 w-4" /> : <Sparkles className="h-4 w-4 text-sky-400" />}
+                Enviar a DaVinci Resolve (MCP)
+              </button>
+            )}
             {isRunning ? (
               <button
                 type="button"
@@ -187,6 +216,13 @@ export default function SessionDetailPage() {
 
         <StepProgress steps={PIPELINE_STEPS} statuses={steps.statuses} fill={steps.fill} current={steps.current} />
 
+        {resolveSessionResult && (
+          <div className="rounded-2xl border border-sky-400/30 bg-sky-500/10 px-4 py-3 text-xs text-sky-100">
+            <span className="font-bold text-sky-300">DaVinci Resolve MCP:</span> Se exportaron{" "}
+            <strong>{resolveSessionResult.exported_count}</strong> timelines verticales 9:16 al proyecto{" "}
+            <strong className="font-mono text-white">{resolveSessionResult.project_name}</strong>.
+          </div>
+        )}
         {error && <p className="rounded-2xl bg-rose-500/10 px-4 py-2.5 text-sm font-semibold text-rose-200">{error}</p>}
         {session.error && (
           <p className="rounded-2xl bg-rose-500/10 px-4 py-2.5 text-sm font-semibold text-rose-200">Error del proceso: {session.error}</p>

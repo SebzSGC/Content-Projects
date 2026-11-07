@@ -25,12 +25,14 @@ import {
   type AppSettings,
   type BudgetSummary,
   type DriveStatus,
+  type ResolveStatusResponse,
   type TestConnectionResult,
   completeDriveAuthCallback,
   disconnectDriveAuth,
   fetchBudget,
   fetchDriveAuthUrl,
   fetchDriveStatus,
+  fetchResolveStatus,
   getSettings,
   saveSettings,
   testSettingsConnection,
@@ -63,6 +65,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [budget, setBudget] = useState<BudgetSummary | null>(null);
   const [driveStatus, setDriveStatus] = useState<DriveStatus | null>(null);
+  const [resolveStatus, setResolveStatus] = useState<ResolveStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +86,14 @@ export default function SettingsPage() {
   const [maxBudgetUsd, setMaxBudgetUsd] = useState<number>(9.0);
   const [webhookUrl, setWebhookUrl] = useState<string>("");
   const [tempTtlDays, setTempTtlDays] = useState<number>(7.0);
+
+  // DaVinci Resolve MCP & Editor Backend state
+  const [editorBackend, setEditorBackend] = useState<"local" | "resolve_mcp" | "both">("local");
+  const [resolveMcpMode, setResolveMcpMode] = useState<"auto" | "mcp_stdio" | "mcp_http" | "direct_script" | "bundle_only">("auto");
+  const [resolveMcpCommand, setResolveMcpCommand] = useState("");
+  const [resolveMcpUrl, setResolveMcpUrl] = useState("");
+  const [resolveProjectPrefix, setResolveProjectPrefix] = useState("FarmClips");
+  const [resolveAutoExport, setResolveAutoExport] = useState(false);
 
   // Google Drive OAuth 2.0 & Watcher state
   const [driveMode, setDriveMode] = useState<"local" | "oauth" | "service_account" | "disabled">("local");
@@ -134,6 +145,12 @@ export default function SettingsPage() {
     setMaxBudgetUsd(s.max_budget_usd);
     setWebhookUrl(s.webhook_url || "");
     setTempTtlDays(s.temp_ttl_days ?? 7.0);
+    setEditorBackend(s.editor_backend || "local");
+    setResolveMcpMode(s.resolve_mcp_mode || "auto");
+    setResolveMcpCommand(s.resolve_mcp_command || "");
+    setResolveMcpUrl(s.resolve_mcp_url || "");
+    setResolveProjectPrefix(s.resolve_project_prefix || "FarmClips");
+    setResolveAutoExport(Boolean(s.resolve_auto_export));
     setDriveMode(s.drive_mode || "local");
     setDriveClientId(s.drive_client_id || "");
     setDriveRootFolderId(s.drive_root_folder_id || "");
@@ -145,14 +162,16 @@ export default function SettingsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [s, b, d] = await Promise.all([
+      const [s, b, d, r] = await Promise.all([
         getSettings(),
         fetchBudget(),
         fetchDriveStatus().catch(() => null),
+        fetchResolveStatus().catch(() => null),
       ]);
       applyLoadedSettings(s);
       setBudget(b);
       setDriveStatus(d);
+      setResolveStatus(r);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo cargar la configuración del servidor.");
     } finally {
@@ -193,6 +212,12 @@ export default function SettingsPage() {
         max_budget_usd: Number(maxBudgetUsd) || 9.0,
         webhook_url: webhookUrl.trim(),
         temp_ttl_days: Number(tempTtlDays) >= 0 ? Number(tempTtlDays) : 7.0,
+        editor_backend: editorBackend,
+        resolve_mcp_mode: resolveMcpMode,
+        resolve_mcp_command: resolveMcpCommand.trim(),
+        resolve_mcp_url: resolveMcpUrl.trim(),
+        resolve_project_prefix: resolveProjectPrefix.trim() || "FarmClips",
+        resolve_auto_export: resolveAutoExport,
         drive_mode: driveMode,
         drive_client_id: driveClientId.trim(),
         drive_client_secret: driveClientSecret.trim() || undefined,
@@ -210,12 +235,14 @@ export default function SettingsPage() {
       setGeminiKey("");
       setOpenaiKey("");
       setDriveClientSecret("");
-      const [freshBudget, freshDrive] = await Promise.all([
+      const [freshBudget, freshDrive, freshResolve] = await Promise.all([
         fetchBudget(),
         fetchDriveStatus().catch(() => null),
+        fetchResolveStatus().catch(() => null),
       ]);
       setBudget(freshBudget);
       setDriveStatus(freshDrive);
+      setResolveStatus(freshResolve);
       showToast("ok", "Configuración guardada en .env y aplicada en memoria.");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error al guardar la configuración";
@@ -934,7 +961,145 @@ export default function SettingsPage() {
             </div>
           </GlassCard>
 
-          {/* 4. SECCIÓN CONEXIÓN DIRECTA A GOOGLE DRIVE (OAUTH 2.0 / SERVICIO / LOCAL) */}
+          {/* 4. MOTOR DE EDICIÓN DE VIDEO Y DAVINCI RESOLVE (MCP LOCAL) */}
+          <GlassCard as="section" className="p-6 sm:p-7">
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+              <div className="flex items-center gap-3.5">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-400/15 text-violet-300">
+                  <Cpu className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="text-lg font-extrabold text-slate-50">
+                    4. Motor de Edición de Video y DaVinci Resolve (MCP Local)
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Traslada la edición de los clips curados hacia DaVinci Resolve en tu PC mediante MCP (Model Context
+                    Protocol), scripting local (`DaVinciResolveScript`) y timeline multipista `.fcpxml` v1.9 + `.srt`,
+                    o combínalo con el renderizador local FFmpeg.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {resolveStatus?.scripting_connected ? (
+                  <Badge tone="success">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Resolve Conectado en Vivo
+                  </Badge>
+                ) : resolveStatus?.installed ? (
+                  <Badge tone="info">DaVinci Resolve Detectado Localmente</Badge>
+                ) : (
+                  <Badge tone="neutral">Servidor MCP Local Activo ({editorBackend})</Badge>
+                )}
+              </div>
+            </div>
+
+            <div className="grid gap-5 md:grid-cols-3">
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-slate-300">
+                  Motor de Edición Principal (<code className="text-amber-300">CLIPS_EDITOR_BACKEND</code>)
+                </label>
+                <select
+                  value={editorBackend}
+                  onChange={(e) => setEditorBackend(e.target.value as "local" | "resolve_mcp" | "both")}
+                  className={inputBase}
+                >
+                  <option value="local">local — Renderizador Local (FFmpeg + Web Studio)</option>
+                  <option value="resolve_mcp">resolve_mcp — DaVinci Resolve vía MCP (Local)</option>
+                  <option value="both">both — Híbrido (DaVinci Resolve MCP + Render Local FFmpeg)</option>
+                </select>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  En modo <code>resolve_mcp</code> la edición final se delega a DaVinci Resolve localmente.
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-slate-300">
+                  Modo de Conexión MCP (<code className="text-slate-400">CLIPS_RESOLVE_MCP_MODE</code>)
+                </label>
+                <select
+                  value={resolveMcpMode}
+                  onChange={(e) =>
+                    setResolveMcpMode(
+                      e.target.value as "auto" | "mcp_stdio" | "mcp_http" | "direct_script" | "bundle_only"
+                    )
+                  }
+                  className={inputBase}
+                >
+                  <option value="auto">auto — Automático (MCP Server + Scripting Directo + FCPXML)</option>
+                  <option value="mcp_stdio">mcp_stdio — Servidor MCP JSON-RPC 2.0 por stdio</option>
+                  <option value="mcp_http">mcp_http — Servidor MCP JSON-RPC 2.0 por HTTP</option>
+                  <option value="direct_script">direct_script — API Local DaVinciResolveScript</option>
+                  <option value="bundle_only">bundle_only — Generar Paquete Local (.fcpxml + .srt + .py)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-slate-300">
+                  Prefijo de Proyecto Resolve (<code className="text-slate-400">CLIPS_RESOLVE_PROJECT_PREFIX</code>)
+                </label>
+                <input
+                  type="text"
+                  value={resolveProjectPrefix}
+                  onChange={(e) => setResolveProjectPrefix(e.target.value)}
+                  placeholder="FarmClips"
+                  className={`${inputBase} font-mono text-xs`}
+                />
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Ej.: <code>FarmClips - Partida Ranked</code> (1 timeline 9:16 por clip).
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-5 md:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-slate-300">
+                  Comando MCP Externo Opcional (<code className="text-slate-400">CLIPS_RESOLVE_MCP_COMMAND</code>)
+                </label>
+                <input
+                  type="text"
+                  value={resolveMcpCommand}
+                  onChange={(e) => setResolveMcpCommand(e.target.value)}
+                  placeholder="Vacío = usa servidor MCP integrado (python -m clipsserver.main resolve-mcp)"
+                  className={`${inputBase} font-mono text-xs`}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-slate-300">
+                  URL MCP HTTP Opcional (<code className="text-slate-400">CLIPS_RESOLVE_MCP_URL</code>)
+                </label>
+                <input
+                  type="text"
+                  value={resolveMcpUrl}
+                  onChange={(e) => setResolveMcpUrl(e.target.value)}
+                  placeholder="http://127.0.0.1:8795/mcp (opcional)"
+                  className={`${inputBase} font-mono text-xs`}
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-xs text-slate-300">
+              <label className="flex items-center gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={resolveAutoExport}
+                  onChange={(e) => setResolveAutoExport(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-amber-400"
+                />
+                <span>
+                  Exportar automáticamente timelines 9:16 a DaVinci Resolve al finalizar cada sesión (
+                  <code>CLIPS_RESOLVE_AUTO_EXPORT</code>)
+                </span>
+              </label>
+              {resolveStatus && (
+                <span className="font-mono text-[11px] text-slate-400">
+                  Herramientas MCP activas: {resolveStatus.available_tools.length} ·{" "}
+                  {resolveStatus.process_running ? "Resolve.exe en ejecución" : "Modo paquete local + MCP listo"}
+                </span>
+              )}
+            </div>
+          </GlassCard>
+
+          {/* 5. SECCIÓN CONEXIÓN DIRECTA A GOOGLE DRIVE (OAUTH 2.0 / SERVICIO / LOCAL) */}
           <GlassCard as="section" className="p-6 sm:p-7">
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
               <div className="flex items-center gap-3.5">
@@ -943,7 +1108,7 @@ export default function SettingsPage() {
                 </span>
                 <div>
                   <h2 className="text-lg font-extrabold text-slate-50">
-                    4. Conexión Directa a Google Drive (OAuth 2.0 y Explorador)
+                    5. Conexión Directa a Google Drive (OAuth 2.0 y Explorador)
                   </h2>
                   <p className="text-xs text-slate-400">
                     Vincula tu cuenta personal o Workspace por OAuth 2.0 (`data/drive_oauth_token.json`) para explorar

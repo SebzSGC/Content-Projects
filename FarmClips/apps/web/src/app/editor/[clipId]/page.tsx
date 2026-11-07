@@ -24,13 +24,16 @@ import {
 } from "lucide-react";
 import {
   API_PREFIX,
+  exportClipToResolve,
   fetchClipDetail,
   fetchEmojiCatalog,
   renderClip,
+  resolveArtifactUrl,
   saveClipEditPlan,
   useServerEvents,
   type ClipItem,
   type EmojiCatalogItem,
+  type ResolveClipExportResponse,
   type SessionSummary,
   type StylePreset,
 } from "@/lib/api/client";
@@ -70,6 +73,8 @@ export default function ClipEditorPage() {
   const [saving, setSaving] = useState(false);
   const [renderingQuality, setRenderingQuality] = useState<"draft" | "final" | null>(null);
   const [renderProgress, setRenderProgress] = useState<number | null>(null);
+  const [exportingResolve, setExportingResolve] = useState(false);
+  const [resolveResult, setResolveResult] = useState<ResolveClipExportResponse | null>(null);
   const [statusMsg, setStatusMsg] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
@@ -616,6 +621,26 @@ export default function ClipEditorPage() {
     }
   }
 
+  async function handleExportToResolve() {
+    if (!plan || !clipId) return;
+    setError(null);
+    setExportingResolve(true);
+    setStatusMsg("Enviando EditPlan v2 a DaVinci Resolve vía MCP…");
+    try {
+      if (dirty) {
+        await saveClipEditPlan(clipId, plan);
+        setDirty(false);
+      }
+      const res = await exportClipToResolve(clipId, { open_in_resolve: true });
+      setResolveResult(res);
+      setStatusMsg(res.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setExportingResolve(false);
+    }
+  }
+
   function addImpactZoomAtPlayhead() {
     if (!plan) return;
     const total = getTotalClipDuration(plan);
@@ -723,6 +748,20 @@ export default function ClipEditorPage() {
 
           <button
             type="button"
+            onClick={handleExportToResolve}
+            disabled={exportingResolve}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-sky-500/50 bg-sky-500/15 px-3.5 py-2 text-xs font-bold text-sky-300 hover:bg-sky-500/25 disabled:opacity-50"
+          >
+            {exportingResolve ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="h-3.5 w-3.5" />
+            )}
+            Editar en DaVinci Resolve (MCP)
+          </button>
+
+          <button
+            type="button"
             onClick={() => handleRender("draft")}
             disabled={renderingQuality !== null}
             className="inline-flex items-center gap-1.5 rounded-xl border border-[#39FF14]/40 bg-[#39FF14]/10 px-3.5 py-2 text-xs font-bold text-[#39FF14] hover:bg-[#39FF14]/20 disabled:opacity-50"
@@ -750,6 +789,73 @@ export default function ClipEditorPage() {
           </button>
         </div>
       </div>
+
+      {resolveResult && (
+        <div className="rounded-2xl border border-sky-500/40 bg-sky-500/10 p-4 text-xs text-sky-100">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2 font-bold text-sky-200">
+                <Sparkles className="h-4 w-4 text-sky-400" />
+                <span>
+                  DaVinci Resolve MCP · Proyecto: <strong className="text-white">{resolveResult.project_name}</strong> ·
+                  Timeline: <strong className="font-mono text-white">{resolveResult.timeline_name}</strong>
+                </span>
+                <span className="rounded bg-sky-500/20 px-2 py-0.5 font-mono text-[10px] uppercase text-sky-300">
+                  {resolveResult.connected_to_resolve ? "Conectado en vivo (Local)" : `Paquete Local (${resolveResult.mode_used})`}
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] text-sky-200/80">
+                {resolveResult.message} ({resolveResult.segments_count} segmentos V1/V2, {resolveResult.captions_count}{" "}
+                grupos de subtítulos, {resolveResult.sfx_count} SFX, {resolveResult.markers_count} marcadores IA).
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setResolveResult(null)}
+              className="rounded-lg border border-sky-400/30 px-2 py-1 text-[10px] text-sky-300 hover:bg-sky-500/20"
+            >
+              Cerrar
+            </button>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <a
+              href={resolveArtifactUrl(clip.id, "fcpxml")}
+              download
+              className="inline-flex items-center gap-1 rounded-lg border border-sky-400/40 bg-zinc-950/70 px-2.5 py-1.5 font-semibold text-sky-200 hover:bg-zinc-900"
+            >
+              <Download className="h-3.5 w-3.5" /> Timeline .fcpxml (v1.9)
+            </a>
+            <a
+              href={resolveArtifactUrl(clip.id, "srt")}
+              download
+              className="inline-flex items-center gap-1 rounded-lg border border-sky-400/40 bg-zinc-950/70 px-2.5 py-1.5 font-semibold text-sky-200 hover:bg-zinc-900"
+            >
+              <Download className="h-3.5 w-3.5" /> Subtítulos .srt
+            </a>
+            <a
+              href={resolveArtifactUrl(clip.id, "ass")}
+              download
+              className="inline-flex items-center gap-1 rounded-lg border border-sky-400/40 bg-zinc-950/70 px-2.5 py-1.5 font-semibold text-sky-200 hover:bg-zinc-900"
+            >
+              <Download className="h-3.5 w-3.5" /> Subtítulos .ass (Hormozi)
+            </a>
+            <a
+              href={resolveArtifactUrl(clip.id, "script")}
+              download
+              className="inline-flex items-center gap-1 rounded-lg border border-sky-400/40 bg-zinc-950/70 px-2.5 py-1.5 font-semibold text-sky-200 hover:bg-zinc-900"
+            >
+              <Download className="h-3.5 w-3.5" /> Script Py3 (resolve_build_timeline.py)
+            </a>
+            <a
+              href={resolveArtifactUrl(clip.id, "mcp_plan")}
+              download
+              className="inline-flex items-center gap-1 rounded-lg border border-sky-400/40 bg-zinc-950/70 px-2.5 py-1.5 font-semibold text-sky-200 hover:bg-zinc-900"
+            >
+              <Download className="h-3.5 w-3.5" /> Plan MCP JSON
+            </a>
+          </div>
+        </div>
+      )}
 
       {renderProgress !== null && (
         <div className="rounded-xl border border-[#FFD400]/30 bg-[#FFD400]/10 px-4 py-2.5 text-xs text-[#FFD400]">

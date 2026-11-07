@@ -1031,5 +1031,136 @@ async def test_token_optimizations_and_performance_improvements(tmp_path: Path) 
         assert any(s["id"] == sid and s["clips_count"] == 0 for s in r_list.json())
 
 
+@pytest.mark.asyncio
+async def test_davinci_resolve_mcp_bridge_and_endpoints(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify DaVinci Resolve MCP server JSON-RPC 2.0 protocol, FCPXML/SRT/Script compilation, and REST endpoints."""
+    import xml.etree.ElementTree as ET
+    from clipsrender.resolve_mcp import ResolveMcpServer
+
+    env_file = tmp_path / ".env"
+    monkeypatch.setenv("CLIPS_ENV_FILE", str(env_file))
+
+    # 1. Test JSON-RPC 2.0 MCP Server directly
+    mcp_srv = ResolveMcpServer()
+    init_resp = mcp_srv.handle_jsonrpc_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "pytest"}},
+        }
+    )
+    assert init_resp is not None
+    assert init_resp["result"]["serverInfo"]["name"] == "farmclips-davinci-resolve-mcp"
+
+    tools_resp = mcp_srv.handle_jsonrpc_message({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+    assert tools_resp is not None
+    tool_names = [t["name"] for t in tools_resp["result"]["tools"]]
+    assert "resolve_get_status" in tool_names
+    assert "resolve_build_vertical_timeline" in tool_names
+
+    # 2. Run a session with editor_backend="resolve_mcp" so Step 7 delegates to DaVinci Resolve via MCP
+    settings = ServerSettings(
+        data_dir=tmp_path / "resolve_data",
+        drive_mode="local",
+        drive_local_dir=tmp_path / "drive_local",
+        stt_primary="fixture",
+        stt_backup="none",
+        llm_primary="fixture",
+        llm_backup="none",
+        fixtures_dir=FIXTURES_DIR,
+        editor_backend="resolve_mcp",
+        resolve_mcp_mode="mcp_stdio",
+        resolve_project_prefix="FarmClipsResolve",
+        auto_render_top_k=1,
+        auto_render_min_score=50.0,
+    )
+    app = create_app(settings, use_process_pool=False, enable_drive_watcher=False)
+    orch: Orchestrator = app.state.orchestrator
+
+    ses = orch.db.create_session(
+        title="Partida DaVinci MCP",
+        gameplay_path=str(GOLDEN_GAMEPLAY),
+        camera_path=str(GOLDEN_CAMERA),
+        recording_name="partida_davinci_mcp",
+    )
+    sid = ses["id"]
+    await orch.run_session(sid)
+
+    clips = orch.db.list_clips(sid)
+    assert len(clips) >= 1
+    top_clip_id = clips[0]["id"]
+
+    # Verify auto-export in resolve_mcp mode created the Resolve bundle on disk
+    resolve_dir = orch.session_dir(sid) / "clips" / top_clip_id / "resolve"
+    assert (resolve_dir / "resolve_mcp_plan.json").is_file()
+    assert (resolve_dir / "resolve_build_timeline.py").is_file()
+
+    with TestClient(app) as client:
+        # 3. GET /resolve/status
+        r_status = client.get("/resolve/status")
+        assert r_status.status_code == 200
+        st_data = r_status.json()
+        assert st_data["mcp_server_ready"] is True
+        assert st_data["editor_backend"] == "resolve_mcp"
+        assert "resolve_build_vertical_timeline" in st_data["available_tools"]
+
+        # 4. POST /clips/{clip_id}/resolve
+        r_exp = client.post(
+            f"/clips/{top_clip_id}/resolve",
+            json={"open_in_resolve": True, "trigger_render": True, "project_name": "Proyecto Custom Resolve"},
+        )
+        assert r_exp.status_code == 200
+        exp_data = r_exp.json()
+        assert exp_data["ok"] is True
+        assert exp_data["project_name"] == "Proyecto Custom Resolve"
+        assert exp_data["segments_count"] >= 1
+        assert exp_data["captions_count"] >= 1
+        assert len(exp_data["tool_calls"]) >= 4
+
+        # 5. Download artifacts (.fcpxml, .srt, .ass, script, mcp_plan) and validate FCPXML structure
+        r_xml = client.get(f"/clips/{top_clip_id}/resolve/download/fcpxml")
+        assert r_xml.status_code == 200
+        xml_root = ET.fromstring(r_xml.text)
+        assert xml_root.tag == "fcpxml"
+        assert xml_root.attrib.get("version") == "1.9"
+        fmt_el = xml_root.find("./resources/format")
+        assert fmt_el is not None
+        assert fmt_el.attrib.get("width") == "1080"
+        assert fmt_el.attrib.get("height") == "1920"
+
+        r_srt = client.get(f"/clips/{top_clip_id}/resolve/download/srt")
+        assert r_srt.status_code == 200
+        assert "-->" in r_srt.text
+
+        r_py = client.get(f"/clips/{top_clip_id}/resolve/download/script")
+        assert r_py.status_code == 200
+        assert "ImportTimelineFromFile" in r_py.text
+
+        r_plan = client.get(f"/clips/{top_clip_id}/resolve/download/mcp_plan")
+        assert r_plan.status_code == 200
+        assert r_plan.json()["protocol"] == "mcp"
+
+        # 6. POST /sessions/{session_id}/resolve batch export & POST /settings update
+        r_batch = client.post(f"/sessions/{sid}/resolve", json={"top_k": 2, "open_in_resolve": True})
+        assert r_batch.status_code == 200
+        assert r_batch.json()["exported_count"] >= 1
+
+        r_set = client.post(
+            "/settings",
+            json={
+                "editor_backend": "both",
+                "resolve_mcp_mode": "auto",
+                "resolve_project_prefix": "FarmClipsStudio",
+                "resolve_auto_export": True,
+            },
+        )
+        assert r_set.status_code == 200
+        assert r_set.json()["editor_backend"] == "both"
+        assert r_set.json()["resolve_project_prefix"] == "FarmClipsStudio"
+        assert r_set.json()["resolve_auto_export"] is True
+
+
+
 
 
