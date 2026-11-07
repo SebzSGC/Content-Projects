@@ -4,6 +4,32 @@ Réplica frontend local de alta fidelidad de **OpusClip (`https://clip.opus.pro/
 
 ---
 
+## Clips de gaming (flujo principal)
+
+La ruta `/sessions` convierte la grabación de un stream en **Shorts verticales** con cámara arriba, gameplay abajo y título en la unión. Acepta dos tipos de fuente:
+
+- **Cámara + juego por separado** (recomendado): el video del juego con el audio mezclado y el de la cámara (plugin Source Record de OBS).
+- **Stream compuesto**: un `.mp4`/`.mkv` local o un **link de Kick**, marcando en la UI dónde está la facecam.
+
+El análisis corre en el worker de Python [`worker/`](./worker/README.md): sincronización, Demucs, Whisper, MediaPipe, PANNs y OCR, más una IA que elige las historias. La IA es **intercambiable**: Claude, OpenAI, Gemini o cualquier API compatible con OpenAI (Groq, OpenRouter, Ollama…). Next.js habla con el worker vía `/api/worker/*`.
+
+```powershell
+# Terminal 1: worker
+cd worker
+pip install -e ".[claude]"     # o .[openai], .[gemini], .[all-llm]
+cp env.example .env            # proveedor de IA, claves y rutas de modelos
+gameclips serve
+
+# Terminal 2: interfaz
+cp env.example .env.local      # CLIPS_WORKER_URL (por defecto http://127.0.0.1:8790)
+npm install
+npm run dev                    # http://localhost:3040 → /sessions
+```
+
+Las pantallas heredadas (Studio, Proyectos, Plantillas…) siguen disponibles y son el flujo anterior, solo para YouTube.
+
+---
+
 ## Características Principales
 
 - **Dashboard Revamp 4.0 & Classic**: Selector de recetas de clipeo, uploader multipart, listado de proyectos con estados de render en tiempo real y cohortes activas.

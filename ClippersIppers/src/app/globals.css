@@ -142,3 +142,27 @@ body {
     linear-gradient(to bottom, rgba(255, 255, 255, 0.15) 1px, transparent 1px);
   background-size: 33.33% 33.33%;
 }
+
+/* Gaming studio (/sessions): soft sheen that travels along progress bars */
+.gc-sheen {
+  background-size: 200% 100%;
+  position: relative;
+}
+.gc-sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  transform: translateX(-100%);
+  animation: gc-sheen 2.4s ease-in-out infinite;
+}
+@keyframes gc-sheen {
+  to {
+    transform: translateX(100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gc-sheen::after {
+    animation: none;
+  }
+}

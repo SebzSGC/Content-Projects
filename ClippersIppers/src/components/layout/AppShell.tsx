@@ -14,6 +14,7 @@ import {
 import { GlobalModals } from "./GlobalModals";
 import {
   Sparkles,
+  Gamepad2,
   LayoutGrid,
   Palette,
   Search,
@@ -37,16 +38,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [, setActiveModal] = useAtom(activeModalAtom);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Apply theme to document element
+  // Apply theme to document element. The gaming studio (/sessions) is designed
+  // dark-only, so the shell follows it there without changing the saved preference.
+  const effectiveTheme = pathname.startsWith("/sessions") ? "dark" : themeMode;
   useEffect(() => {
     const root = document.documentElement;
-    root.setAttribute("data-theme", themeMode);
-    if (themeMode === "dark") {
+    root.setAttribute("data-theme", effectiveTheme);
+    if (effectiveTheme === "dark") {
       root.classList.add("dark");
     } else {
       root.classList.remove("dark");
     }
-  }, [themeMode]);
+  }, [effectiveTheme]);
 
   // Keyboard shortcut Cmd/Ctrl + K for Search
   useEffect(() => {
@@ -67,10 +70,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     {
+      label: "Clips gaming",
+      href: "/sessions",
+      icon: Gamepad2,
+      active: pathname.startsWith("/sessions"),
+    },
+    {
       label: "Studio",
       href: "/dashboard",
       icon: Sparkles,
-      active: pathname === "/" || pathname === "/dashboard" || pathname.startsWith("/workflow"),
+      active: pathname === "/dashboard" || pathname.startsWith("/workflow"),
     },
     {
       label: "Proyectos",
