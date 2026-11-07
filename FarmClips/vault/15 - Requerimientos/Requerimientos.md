@@ -40,10 +40,12 @@ flowchart LR
 | Épica | Avance | Ítems |
 |---|---|---|
 | [[EP-01 Integración con DaVinci Resolve vía MCP\|EP-01]] Integración con DaVinci Resolve vía MCP | `██████████ 100 %` | 1 |
+| [[EP-02 Claridad y Experiencia de Usuario en Web Studio\|EP-02]] Claridad y Experiencia de Usuario en Web Studio | `██████████ 100 %` | 1 |
 
 ## 🗒️ Notas de origen
 
 - [[2026-11-07 Edición externa en DaVinci Resolve vía MCP]]
+- [[2026-11-07 Textos claros y digeribles en la plataforma]]
 
 <!-- fin:indice-automatico -->
 

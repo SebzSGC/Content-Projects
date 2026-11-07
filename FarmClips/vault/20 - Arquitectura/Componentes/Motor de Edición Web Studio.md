@@ -58,6 +58,7 @@ flowchart TD
 4. **Catálogo de 42 emojis RGBA con caché inmutable**: Selector visual para sustituir o añadir iconos animados en cualquier segundo del video (servidos con `Cache-Control: immutable`).
 5. **Exportación bajo demanda (síncrona o en segundo plano)**: Botón para solicitar renderizado borrador (540p) o final (1080p con NVENC), soportando encolado no bloqueante (`async_mode`).
 6. **Edición externa en DaVinci Resolve vía MCP (`POST /clips/{clip_id}/resolve`)**: Botón directo **«Editar en DaVinci Resolve (MCP)»** en `/editor/[clipId]` y envío por lotes en `/sessions/[id]`, que construye la timeline vertical 9:16 multipista en DaVinci Resolve local y ofrece descarga directa de los artefactos `.fcpxml`, `.srt`, `.ass`, `resolve_build_timeline.py` y `resolve_mcp_plan.json`, además de su configuración en `/settings`.
+7. **Experiencia de usuario con lenguaje claro y digerible**: Toda la interfaz (`/sessions`, `/editor/[clipId]`, `/settings`, `/analytics` y mensajes SSE del backend) explica el «por qué» detrás de cada control y proceso en lenguaje natural para creadores de gaming, sustituyendo tecnicismos y siglas crudas por resultados visuales y auditivos tangibles.
 
 ---
 
@@ -67,3 +68,4 @@ flowchart TD
 - [[Cómo usar el Editor Web Studio]]
 - [[Sistema de Estilos y Presets]]
 - [[HU-001 Edición y exportación de clips en DaVinci Resolve mediante MCP local|HU-001]]
+- [[HU-002 Simplificación y lenguaje claro en toda la plataforma|HU-002]]

@@ -15,7 +15,27 @@ etiquetas: [tipo/cambios, area/general]
 
 ---
 
-## [2.3.0] — 2026-11-07 (Versión actual)
+## [2.3.1] — 2026-11-07 (Versión actual)
+
+### ✨ Simplificación, lenguaje digerible y experiencia de usuario clara en Web Studio
+
+Esta actualización rediseña por completo los textos, descripciones, tooltips, notificaciones en tiempo real y paneles del estudio web, transformando la jerga técnica y saturada en explicaciones amigables para creadores de contenido de gaming que aclaran el «por qué» detrás de cada función.
+
+#### Qué cambió
+- **Notificaciones en tiempo real y orquestador (`engine.py`, `pipelineSteps.ts`, `TopNav.tsx`)**: Reemplazo de mensajes con nombres de funciones internas por avisos paso a paso transparentes: «Escuchando partida», «Eligiendo mejores momentos», «Sincronizando audio con precisión», «Armando encuadre vertical» y «Creando videos finales».
+- **Gestión de sesiones y subida de partidas (`/sessions` y `/sessions/[id]`)**: Explicación clara de por qué se detectan juegos y palabras clave, por qué se unen dos videos en 9:16 vertical, cómo se calcula la curva de emoción combinando voz y jugabilidad, y cómo corregir la sincronización de audio manualmente.
+- **Estudio de edición de clips (`/editor/[clipId]`)**: Traducción de términos de edición técnica (curvas `outBack`, *Jump Cuts*, atenuación *ducking*) a resultados tangibles: «Zoom de reacción», «Cámara en pantalla completa», «El juego baja solo cuando hablas» y «Saltos automáticos en silencios».
+- **Configuración centralizada (`/settings`)**: Las 5 secciones eliminan nombres de variables de entorno del título y explican con claridad qué hace cada proveedor, por qué usarlo y qué requisitos tiene (como activar scripting en DaVinci Resolve o autorizar OAuth en Google Drive).
+- **Control de consumo y simulación (`/analytics`)**: Sustitución de terminología cruda de facturación por explicaciones accesibles de saldo disponible, capacidad restante en horas y clips, planes gratuitos y una calculadora para estimar el costo de procesar un stream antes de iniciarlo.
+
+> [!warning] ⚠️ Cambia para ti
+> - La plataforma ahora habla tu mismo idioma: entenderás exactamente qué está haciendo el sistema en cada momento sin lidiar con siglas técnicas crudas.
+> - En el editor, los controles de cámara, audio y subtítulos muestran su efecto visual o auditivo de forma directa.
+> - En `/settings` y `/analytics` sabrás con exactitud cuánto inviertes, cuánto te rinde el saldo y cómo aprovechar los planes gratuitos sin sorpresas.
+
+---
+
+## [2.3.0] — 2026-11-07
 
 ### 🎞️ Edición externa en DaVinci Resolve mediante MCP local y arquitectura dual de edición
 

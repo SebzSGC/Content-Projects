@@ -16,7 +16,7 @@ etiquetas: [tipo/tablero, requerimientos]
 <!-- inicio:tablero-automatico (no editar a mano: lo regenera requerimientos.py) -->
 
 > [!abstract] Avance general al 2026-11-07
-> **████████████████████ 100 %** · 1 ítem · 1 hecho · 0 en curso · 0 por hacer · 0 sin iniciar
+> **████████████████████ 100 %** · 2 ítems · 2 hechos · 0 en curso · 0 por hacer · 0 sin iniciar
 > Puntos: 8 de 8 completados.
 
 ## 🧩 Épicas
@@ -24,6 +24,7 @@ etiquetas: [tipo/tablero, requerimientos]
 | Épica | Avance | Ítems | Fechas |
 |---|---|---|---|
 | [[EP-01 Integración con DaVinci Resolve vía MCP\|EP-01]] Integración con DaVinci Resolve vía MCP | `██████████ 100 %` | 1 | 2026-11-07 → 2026-11-07 |
+| [[EP-02 Claridad y Experiencia de Usuario en Web Studio\|EP-02]] Claridad y Experiencia de Usuario en Web Studio | `██████████ 100 %` | 1 | 2026-11-07 → 2026-11-07 |
 
 ## 📋 Tablero
 
@@ -42,10 +43,11 @@ _Ninguno._
 ### ⚪ Sin iniciar (0)
 _Ninguno._
 
-### 🟢 Hecho (1)
+### 🟢 Hecho (2)
 | ID | Título | Prioridad | Responsable | Avance | Fin |
 |---|---|---|---|---|---|
 | [[HU-001 Edición y exportación de clips en DaVinci Resolve mediante MCP local\|HU-001]] | Edición y exportación de clips en DaVinci Resolve mediante MCP local | ⬆️ Alta | Sebas | `██████████ 100 %` | 2026-11-07 |
+| [[HU-002 Simplificación y lenguaje claro en toda la plataforma\|HU-002]] | Simplificación y lenguaje claro en toda la plataforma | ⬆️ Alta | Equipo FarmClips | `██████████ 100 %` | — |
 
 ## 📅 Cronograma
 
@@ -58,6 +60,9 @@ gantt
     section EP-01 Integración con DaVinci Resolve vía MCP
     HU-001 Edición y exportación de clips en DaVinci Resolve med :done, hu-001, 2026-11-07, 2026-11-07
 ```
+
+> [!info]- Sin fechas planificadas (1)
+> - [[HU-002 Simplificación y lenguaje claro en toda la plataforma|HU-002]] Simplificación y lenguaje claro en toda la plataforma · Hecho
 
 <!-- fin:tablero-automatico -->
 
