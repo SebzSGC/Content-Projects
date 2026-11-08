@@ -13,7 +13,33 @@ etiquetas: [tipo/cambios, area/general]
 > [!abstract] En pocas palabras
 > Registro cronológico de las versiones de FarmClips, nuevas funcionalidades, optimizaciones de rendimiento y ajustes en la arquitectura del sistema.
 
-## [2.4.1] — 2026-11-07 (Versión actual)
+## [2.5.0] — 2026-11-07 (Versión actual)
+
+### 🎯 Perfeccionamiento de Prompts v2.1 y Dirección Semántica de Zooms Token-Frugal
+
+Esta versión optimiza integralmente el contrato y las instrucciones del modelo de lenguaje (`clipsproviders/llm`), permitiendo que la inteligencia artificial dirija cortes precisos, títulos de alto impacto y zooms cinematográficos sin provocar aumentos de tokens ni sobrecostes en la API.
+
+#### Qué cambió
+- **Curation Prompt v2.1 con Fórmulas de Alto CTR y Corte Limpio**:
+  - Directrices estrictas para títulos en pantalla (`overlay_title`, 3 a 6 palabras en presente activo) y publicaciones para redes (`post_title`, 100% MAYÚSCULAS en 1ra persona con gancho y 1 emoji).
+  - Regla de corte narrativo en 3 actos: inicio directo en la acción y finalización inmediata tras la carcajada o remate final, prohibiendo silencios muertos y charla intrascendente.
+- **Anclaje de Zooms Semánticos (`zoom_word` y `zoom_focus`)**:
+  - Esquema estructurado y validación Pydantic extendida con los campos opcionales `zoom_word` (palabra exacta de máxima emoción) y `zoom_focus` (`"face"`, `"game"`, `"split"`).
+  - Overhead mínimo de apenas $\sim 3$ tokens por clip en la salida del modelo, blindando el sistema contra costes crecientes o exponenciales.
+- **Inferencia Local Zero-Token en CPU (`clipscore/selection/resolver.py`)**:
+  - Si el LLM omite `zoom_word` por minificación, el resolvedor local infiere la palabra de impacto analizando las palabras de énfasis y el catálogo local de reacciones sobre CPU con costo \$0.
+- **Dirección Cinematográfica en `hormozi.py`**:
+  - `build_editplan` sincroniza el `CropKeyframe` tipo `outBack` en el milisegundo exacto donde se pronuncia `zoom_word`.
+  - Si el foco es la cámara (`"face"`), programa un disparo de cámara completa de 2 segundos en el clímax; si es el juego (`"game"`), asegura que el split no tape la pantalla.
+
+> [!warning] ⚠️ Cambia para ti
+> - Los títulos generados ahora son mucho más directos, con verbos en presente y formatos probados para YouTube Shorts y TikTok.
+> - Los clips ya no se quedarán con segundos de silencio al final: cortan justo en la risa o remate del streamer.
+> - La cámara hace zoom y enfatiza la jugada exactamente en la palabra donde ocurre la acción o el grito.
+
+---
+
+## [2.4.1] — 2026-11-07
 
 ### 🖼️ Miniaturas visuales compuestas en tiempo real y eliminación de estados falsos de carga
 

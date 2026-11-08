@@ -60,11 +60,13 @@ flowchart TD
 - **`gemini.py` y `openai_compat.py`**:
   Envían la línea de tiempo compacta a `gemini-3.5-flash-lite` o proveedores compatibles con OpenAI (`gpt-6-luna`, Ollama, vLLM) con validación estricta de JSON Schema.
 - **Prefijo Invariante para *Prompt Caching***:
-  `CURATION_SYSTEM_PROMPT` mantiene las instrucciones estáticas al inicio y ubica los parámetros dinámicos de la sesión en la última línea, maximizando los aciertos automáticos de caché de prefijo en Gemini, OpenAI y Groq.
+  `CURATION_SYSTEM_PROMPT` (versión `v2.1`) mantiene las directivas estáticas al inicio y ubica los parámetros dinámicos de la sesión en la última línea, maximizando los aciertos automáticos de caché de prefijo en Gemini y OpenAI con descuentos de hasta el $75\%$.
+- **Directivas Cinematográficas de Alto Impacto y Bajo Consumo**:
+  El prompt guía al modelo a formular títulos con gancho en presente activo, cortar en seco tras la reacción cómica/triunfal e identificar la palabra exacta del clímax (`zoom_word`) y su foco (`zoom_focus`: `"face"`, `"game"`, `"split"`). Añade únicamente $\sim 3$ tokens a la respuesta de la IA sin sobrecostes.
 - **Reintento Pydantic sin Duplicación de Transcripción (`repair_prompt`)**:
   Si el modelo falla la validación de esquema en el primer intento, el segundo llamado envía el borrador JSON previo (`first.raw_text`) y trunca la transcripción de referencia a un extracto compacto ($\le 1200$ caracteres), ahorrando más del $85\%$ de los tokens de entrada en reintentos.
-- **Esquema de Salida Minificado**:
-  Solo exige como campos obligatorios `start_id`, `end_id`, `overlay_title` y `score`, permitiendo omitir metadatos decorativos que se infieren en CPU local sin costo de tokens.
+- **Esquema de Salida Minificado y Fallback Local en CPU**:
+  Solo exige como campos obligatorios `start_id`, `end_id`, `overlay_title` y `score`. Metadatos decorativos y de zoom son opcionales con inferencia automática en CPU local (`clipscore/selection/resolver.py`) si la IA los omite.
 
 ---
 
