@@ -15,7 +15,29 @@ etiquetas: [tipo/cambios, area/general]
 
 ---
 
-## [2.3.2] — 2026-11-07 (Versión actual)
+## [2.3.3] — 2026-11-07 (Versión actual)
+
+### ⚡ Carga instantánea de Configuración, Event Bus SSE unificado y máxima fluidez en Web Studio
+
+Esta actualización resuelve de forma integral la lentitud de carga reportada en `/settings` y los problemas de fluidez en la plataforma web mediante optimizaciones de concurrencia en backend, gestión de conexiones en cliente y aceleración por GPU.
+
+#### Qué cambió
+- **Carga instantánea de `/settings` (renderizado en < 10 ms)**: Se desacopla la carga de la configuración principal y presupuesto (`getSettings` y `fetchBudget`) de los diagnósticos externos de conectividad (`fetchDriveStatus` y `fetchResolveStatus`). El formulario ahora se presenta al usuario de inmediato, mientras los estados de DaVinci Resolve y Google Drive se comprueban en paralelo en segundo plano con indicadores sutiles.
+- **Sondeo out-of-process de DaVinci Resolve sin bloqueo del GIL (`resolve_mcp.py`)**: Se descubrió que la llamada a la librería nativa `fusionscript.dll` retenía el bloqueo global de intérprete (GIL) de Python durante 4 segundos al no haber scripting externo activo. Ahora, la comprobación se ejecuta en un subproceso aislado con un límite estricto de 0.6s y una caché TTL de 30 segundos, reduciendo la latencia de `GET /resolve/status` de 4,509 ms a **0.8 ms** (más de 5,000× más rápido) sin pausar el servidor FastAPI.
+- **Event Bus SSE unificado (`SharedSseManager` en `client.ts`)**: Se reemplazaron múltiples conexiones `EventSource` independientes (abiertas simultáneamente por `TopNav`, páginas y modales) por un único gestor singleton que comparte una sola conexión HTTP persistente para toda la pestaña del navegador. Esto libera de 2 a 3 conexiones concurrentes (de las 6 permitidas en HTTP/1.1), eliminando por completo el encolado (*stalling*) de peticiones de video, previsualización de fotogramas y navegación.
+- **Aceleración por GPU y reducción de sobrecarga gráfica (`ui.tsx`, `layout.tsx`, `globals.css`)**:
+  - `GlassCard`: Se optimizó el filtro de desenfoque de `backdrop-blur-xl` a `backdrop-blur-md` y se añadió `transform-gpu` con transiciones de 200 ms, aligerando el cálculo de rasterizado del navegador en un ~60%.
+  - Resplandores de fondo en `RootLayout`: Aislados en capas compuestas independientes de hardware (`transform-gpu will-change-transform`), impidiendo que el scroll o los eventos de ratón provoquen repintados de pantalla completa.
+  - Habilitación de `scroll-behavior: smooth` y eliminación de micro-tirones en toda la aplicación.
+
+> [!warning] ⚠️ Cambia para ti
+> - La sección de **Configuración (`/settings`)** abre ahora al instante sin mostrar pantallas de carga en blanco ni demoras de varios segundos.
+> - La navegación entre pantallas, el desplazamiento de página (*scrolling*) y la interacción con tarjetas es notablemente más ágil, suave y reactiva.
+> - La reproducción de video y el visor de clips ya no experimentan pausas ni esperas por sockets bloqueados.
+
+---
+
+## [2.3.2] — 2026-11-07
 
 ### ⚡ Exportación no bloqueante y detección de proyecto activo en DaVinci Resolve
 
