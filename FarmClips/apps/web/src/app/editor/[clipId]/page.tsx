@@ -795,7 +795,11 @@ export default function ClipEditorPage() {
       initialPlan: structuredClone(plan),
     };
     setIsDraggingCam(true);
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Ignorar si el navegador restringe pointer capture
+    }
   };
 
   const handleCamPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -823,8 +827,10 @@ export default function ClipEditorPage() {
   };
 
   const handleCamPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isDraggingCam && dragCamStartRef.current && plan) {
-      setUndoStack((s) => [...s.slice(-30), dragCamStartRef.current!.initialPlan]);
+    const startData = dragCamStartRef.current;
+    if (isDraggingCam && startData && plan) {
+      const initialPlan = startData.initialPlan;
+      setUndoStack((s) => [...s.slice(-30), initialPlan]);
       setRedoStack([]);
       setDirty(true);
       dragCamStartRef.current = null;
@@ -832,7 +838,9 @@ export default function ClipEditorPage() {
       setIsSnappingCenterX(false);
     }
     try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
     } catch {
       // Ignorar si el puntero se liberó
     }
@@ -859,7 +867,11 @@ export default function ClipEditorPage() {
       initialPlan: structuredClone(plan),
     };
     setIsDraggingCaptions(true);
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Ignorar
+    }
   };
 
   const handleCapPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -885,15 +897,19 @@ export default function ClipEditorPage() {
   };
 
   const handleCapPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isDraggingCaptions && dragCapStartRef.current) {
-      setUndoStack((s) => [...s.slice(-30), dragCapStartRef.current!.initialPlan]);
+    const startData = dragCapStartRef.current;
+    if (isDraggingCaptions && startData) {
+      const initialPlan = startData.initialPlan;
+      setUndoStack((s) => [...s.slice(-30), initialPlan]);
       setRedoStack([]);
       setDirty(true);
       dragCapStartRef.current = null;
       setIsDraggingCaptions(false);
     }
     try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
     } catch {
       // Ignorar si el puntero se liberó
     }
