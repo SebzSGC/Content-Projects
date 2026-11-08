@@ -59,6 +59,10 @@ flowchart TD
 5. **Exportación bajo demanda (síncrona o en segundo plano)**: Botón para solicitar renderizado borrador (540p) o final (1080p con NVENC), soportando encolado no bloqueante (`async_mode`).
 6. **Experiencia de usuario con lenguaje claro y digerible**: Toda la interfaz (`/sessions`, `/editor/[clipId]`, `/settings`, `/analytics` y mensajes SSE del backend) explica el «por qué» detrás de cada control y proceso en lenguaje natural para creadores de gaming, sustituyendo tecnicismos y siglas crudas por resultados visuales y auditivos tangibles.
 7. **Event Bus SSE unificado y aceleración por GPU (`SharedSseManager` y `GlassCard`)**: Un único socket persistente EventSource en cliente compartido por toda la aplicación distribuye eventos en memoria a `TopNav`, páginas y modales sin abrir múltiples conexiones HTTP/1.1 (evitando agotar el límite de 6 conexiones del navegador). Se combina con tarjetas `GlassCard` aceleradas en GPU (`transform-gpu`, `backdrop-blur-md`) y desacoplamiento de diagnósticos en `/settings` para ofrecer 60 fps constantes y carga inmediata (< 10 ms).
+8. **Reencuadre Directo de Cámara y Subtítulos WYSIWYG**: El usuario interactúa directamente sobre el visor vertical $9:16$ con el puntero del ratón (`PointerEvents` con `setPointerCapture`) para centrar su rostro y mover la altura del bloque de subtítulos (`vertical_ratio` persistido en `EditPlan.captions` y respetado en el renderizado final de FFmpeg y C++ FastCompositor). Incluye una **guía magnética de centrado** que encaja suavemente en $cx = 0.50$ con una línea vertical dorada y control de zoom continuo con la rueda del ratón (`wheel`).
+9. **Plantillas Rápidas de Disposición (1 Clic)**: Barra de ajustes inmediatos para alternar entre *Clásico Gaming* (40/60 split), *Gameplay Prioritario* (25/75), *Reacción Total* (100% cámara 2s) y *Juego Completo* (100% gameplay) sin necesidad de editar manualmente los bloques de la línea temporal.
+10. **Sincronización a 60 FPS sin Jitter (Hardware Master Clock)**: La cámara actúa como reloj maestro continuo evitando reasignar forzadamente `video.currentTime` en cada cuadro de animación; el video secundario del juego solo se sincroniza cuando la deriva temporal supera los $40\text{ ms}$, eliminando micro-parones en decodificadores GPU locales y aprovechando `requestVideoFrameCallback` cuando el navegador lo soporta.
+11. **Mezclador de Audio Intuitivo e Historial de Deshacer/Rehacer**: Controles visuales con deslizador de volumen de voz ($0\%$ a $150\%$), selector de atenuación del juego (Apagado, Suave, Normal, Fuerte) y soporte completo de atajos de teclado (`Ctrl+Z` / `Ctrl+Y`) respaldados por pilas inmutables de historial.
 
 ---
 
@@ -68,3 +72,4 @@ flowchart TD
 - [[Cómo usar el Editor Web Studio]]
 - [[Sistema de Estilos y Presets]]
 - [[HU-002 Simplificación y lenguaje claro en toda la plataforma|HU-002]]
+- [[HU-003 Editor interactivo WYSIWYG reencuadre visual y rendimiento 60 fps|HU-003]]

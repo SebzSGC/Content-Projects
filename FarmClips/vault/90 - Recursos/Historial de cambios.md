@@ -15,7 +15,37 @@ etiquetas: [tipo/cambios, area/general]
 
 ---
 
-## [2.3.4] — 2026-11-07 (Versión actual)
+## [2.4.0] — 2026-11-07 (Versión actual)
+
+### 🎬 Editor Web WYSIWYG: Reencuadre visual directo, plantillas de disposición en 1 clic y 60 fps sin jitter
+
+Esta versión moderniza completamente el Editor Web de Clips (`/editor/[clipId]`) introduciendo un paradigma de edición 100 % visual (WYSIWYG), eliminando la necesidad de ingresar números manuales y ofreciendo sincronización perfecta a 60 fotogramas por segundo respaldada por un sistema completo de Deshacer / Rehacer.
+
+#### Qué cambió
+- **Manipulación de Cámara y Subtítulos en Pantalla (Drag & Drop WYSIWYG)**:
+  - Arrastre directo de cámara con el ratón (`onPointerDown` / `onPointerMove`) en el visor 9:16 para reencuadrar el rostro de forma natural e intuitiva.
+  - Guía magnética visual con línea dorada y badge de centrado automático cuando $cx$ se sitúa en $0.50 \pm 2.5\%$.
+  - Ajuste de zoom continuo ($1.0\times$ a $2.5\times$) mediante la rueda del ratón (`wheel`) o mini-widget flotante con botones $+/-$.
+  - Tirador vertical interactivo de subtítulos para posicionar libremente el bloque de texto y evitar tapar la mira o HUD del juego (`vertical_ratio` en `CaptionsPlan`, respetado en el renderizado final de FFmpeg y C++ FastCompositor).
+- **Plantillas Rápidas de Disposición (Layout Templates en 1 Clic)**:
+  - Barra de plantillas inmediatas en la pestaña de cámara: *Clásico Gaming* (40/60 split), *Gameplay Prioritario* (25/75 split), *Reacción Total* (100% cámara 2s) y *Juego Completo* (100% gameplay) con inserción suave en la línea de tiempo.
+- **Rendimiento a 60 FPS sin Video Jitter**:
+  - Reloj maestro basado en el hardware de la cámara (`cv.currentTime`), eliminando las asignaciones forzadas de `currentTime` en cada ciclo de animación.
+  - Sincronización esclava del video del juego tolerante a la deriva (únicamente corrige si $|gv.currentTime - masterTime| > 40\text{ ms}$), eliminando los parones de decodificación en GPUs locales.
+  - Integración de `requestVideoFrameCallback` con fallback a RAF, caché de renderizado en `<canvas>` para textos estáticos y aceleración GPU con `translateZ(0)`.
+- **Mezclador de Audio Intuitivo y Deshacer / Rehacer**:
+  - Deslizador de «Volumen de Voz» de $0\%$ a $150\%$ (con conversión semilogarítmica a decibelios) y selector visual de atenuación de juego (Apagado, Suave, Normal, Fuerte).
+  - Pilas de historial completas para Deshacer (`Ctrl+Z`) y Rehacer (`Ctrl+Y`) ante cualquier modificación accidental.
+- **Refs**: [[HU-003 Editor interactivo WYSIWYG reencuadre visual y rendimiento 60 fps|HU-003]]
+
+> [!warning] ⚠️ Cambia para ti
+> - Ya no necesitas escribir coordenadas de cámara ni proporciones a mano: haz clic sobre tu video o subtítulos en el visor 9:16 y arrástralos directamente a donde prefieras.
+> - Puedes usar la rueda del ratón sobre tu cámara para acercar o alejar el zoom de inmediato.
+> - Presiona `Ctrl+Z` en cualquier momento para deshacer un ajuste y `Ctrl+Y` para rehacerlo.
+
+---
+
+## [2.3.4] — 2026-11-07
 
 ### 🧹 Desacoplamiento total de DaVinci Resolve MCP y consolidación del motor nativo 100 % local
 
