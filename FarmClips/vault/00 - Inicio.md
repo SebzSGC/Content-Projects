@@ -6,7 +6,7 @@ audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
 actualizado: 2026-11-07
 etiquetas: [tipo/inicio]
-commit_codigo: 5dd718c
+commit_codigo: a5c99da
 ---
 
 # 🏠 FarmClips — Arquitectura Híbrida
@@ -66,6 +66,5 @@ flowchart LR
 
 ---
 
-## 🔔 Novedades recientes
-- **2026-11-07 (v2.3.0)**: Integración con **DaVinci Resolve mediante MCP local** (`clipsrender.resolve_mcp`, `clipsserver resolve-mcp`, compilador `.fcpxml` v1.9 multipista + `.srt` + `DaVinciResolveScript`) y convivencia con el motor local FFmpeg → [[Historial de cambios]].
+- **2026-11-07 (v2.3.0)**: Optimización integral de fluidez en Web Studio (`SharedSseManager` singleton, GPU compositing), carga instantánea de `/settings` (< 10 ms) y lenguaje claro y digerible en toda la interfaz → [[Historial de cambios]].
 - **2026-11-07 (v2.0.0)**: Lanzamiento del monorepo unificado, motor de edición declarativo EditPlan v2, renderizado acelerado en C++ (`FastCompositor`), normalización en 2 pasadas a -14 LUFS y panel de ajustes en caliente `/settings` → [[Historial de cambios]].

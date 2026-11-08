@@ -77,17 +77,6 @@ etiquetas: [tipo/api, area/backend]
 
 ---
 
-## 🎞️ 6. Edición Externa en DaVinci Resolve vía MCP (`/resolve`)
-
-| Método | Endpoint | Descripción | Parámetros / Cuerpo |
-|---|---|---|---|
-| `GET` | `/resolve/status` | Detecta la instalación local de DaVinci Resolve, `fusionscript`, proceso activo y modo MCP. | JSON de diagnóstico |
-| `POST` | `/clips/{clip_id}/resolve` | Compila el paquete Resolve (`.fcpxml` v1.9 + `.srt` + `.ass` + `.py`) y sincroniza el timeline por MCP. | JSON: `mode?, project_name?, trigger_render?` |
-| `POST` | `/sessions/{session_id}/resolve` | Exporta y sincroniza en lote los mejores clips (`top_k`) de una sesión hacia DaVinci Resolve. | JSON: `mode?, top_k?, min_score?, trigger_render?` |
-| `GET` | `/clips/{clip_id}/resolve/download/{artifact}` | Descarga artefactos compilados del clip para importación manual o scripting en Resolve. | `{artifact}`: `fcpxml`, `srt`, `ass`, `script`, `plan` |
-
----
-
 ## 🔗 Relacionado
 - [[FastAPI y Orquestador]]
 - [[Motor de Renderizado y Subtítulos]]

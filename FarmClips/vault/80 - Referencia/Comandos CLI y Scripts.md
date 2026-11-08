@@ -80,24 +80,6 @@ npm --prefix apps/web run start
 
 ---
 
-## 🎞️ 5. Servidor MCP Local para DaVinci Resolve (`resolve-mcp`)
-
-Inicia el servidor JSON-RPC 2.0 sobre `stdio` compatible con el protocolo **Model Context Protocol (MCP)** para que el puente de FarmClips o agentes de IA externos (Claude Desktop, Cursor) controlen DaVinci Resolve localmente:
-
-```powershell
-.\.venv\Scripts\python.exe -m clipsserver.main resolve-mcp
-```
-
-Herramientas MCP expuestas:
-- `resolve_get_status`
-- `resolve_open_project`
-- `resolve_import_media`
-- `resolve_build_vertical_timeline`
-- `resolve_add_timeline_markers`
-- `resolve_trigger_render`
-
----
-
 ## 🔗 Relacionado
 - [[Primeros pasos]]
 - [[Motor de Renderizado y Subtítulos]]

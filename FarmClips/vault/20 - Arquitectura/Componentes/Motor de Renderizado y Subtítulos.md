@@ -81,21 +81,8 @@ Aplica paneos y transiciones de cámara (*zoom in*, *zoom out*) con curvas matem
 
 ---
 
-## 🎬 4. Puente de Edición en DaVinci Resolve vía MCP (`resolve_mcp.py`)
-
-Permite trasladar la edición de video hacia **DaVinci Resolve** (Free o Studio) ejecutándose localmente en el PC del creador mediante el protocolo **MCP (Model Context Protocol, JSON-RPC 2.0)** y el selector `CLIPS_EDITOR_BACKEND` (`local` | `resolve_mcp` | `both`):
-- **Servidor MCP Integrado (`clipsserver resolve-mcp` / `ResolveMcpServer`)**: Expone las herramientas MCP `resolve_get_status`, `resolve_open_project`, `resolve_import_media`, `resolve_build_vertical_timeline`, `resolve_add_timeline_markers` y `resolve_trigger_render` por `stdio` o `http`.
-- **Detección no invasiva de proyecto activo**: Consulta `pm.GetCurrentProject()` antes de invocar `LoadProject`. Si el usuario ya tiene un proyecto abierto en DaVinci Resolve, importa los medios directamente sobre este sin forzar el cierre del proyecto ni disparar cuadros modales de guardado que congelaban la API.
-- **Aislamiento en bin dedicado de MediaPool**: Los archivos de gameplay, cámara y audios se importan organizadamente dentro de la subcarpeta `FarmClips` del MediaPool, evitando mezclar artefactos en la raíz del usuario.
-- **Despacho asíncrono no bloqueante y eventos SSE**: Los endpoints `POST /clips/{clip_id}/resolve` y `POST /sessions/{session_id}/resolve` soportan `async_mode: true`. Devuelven una respuesta inmediata (`< 50ms`) con estado `queued` y notifican el progreso en tiempo real mediante eventos SSE (`resolve_mcp_progress` y `clip_resolve_exported`), impidiendo que peticiones HTTP síncronas agoten las conexiones del navegador y congelen la reproducción de video en Web Studio.
-- **Protección de IPC, Sondeo Out-of-Process y Caché TTL (`DaVinciResolveScript`)**: Ejecuta la comprobación de conectividad mediante un subproceso aislado con límite estricto de 0.6s y caché TTL de 30 segundos, impidiendo que la librería nativa `fusionscript.dll` bloquee el GIL de Python en el servidor principal. Permite que `GET /resolve/status` responda en **0.8 ms** y que las demás peticiones del servidor no sufran pausas.
-- **Compilador de Paquete Local Auto-contenido (`compile_fcpxml_v19`, `compile_srt`, `compile_resolve_python_script`)**: Genera en `data/sessions/<sid>/clips/<clip_id>/resolve/` un archivo `.fcpxml` v1.9 multipista (`V1` Gameplay, `V2` Cámara sincronizada con reencuadre facial, `V3` Títulos, `A1` Micrófono, `A2` Audio de juego con ducking, `A3` Efectos SFX y marcadores de IA), subtítulos `.srt`/`.ass` y el script `resolve_build_timeline.py` compatible con la consola `Py3` de DaVinci Resolve Free.
-
----
-
 ## 🔗 Relacionado
 - [[Contrato EditPlan v2]]
 - [[Sistema de Estilos y Presets]]
 - [[Pools de Trabajo]]
 - [[Flujo 6 Renderizado y Normalización]]
-- [[HU-001 Edición y exportación de clips en DaVinci Resolve mediante MCP local|HU-001]]

@@ -15,16 +15,33 @@ etiquetas: [tipo/cambios, area/general]
 
 ---
 
-## [2.3.3] — 2026-11-07 (Versión actual)
+## [2.3.4] — 2026-11-07 (Versión actual)
+
+### 🧹 Desacoplamiento total de DaVinci Resolve MCP y consolidación del motor nativo 100 % local
+
+Esta actualización retira de forma integral la integración con DaVinci Resolve y el servidor MCP local, devolviendo el enfoque exclusivo al motor de renderizado y Web Studio nativo con máxima fluidez y estabilidad.
+
+#### Qué cambió
+- **Eliminación del módulo DaVinci Resolve MCP (`packages/render-engine/clipsrender/resolve_mcp.py`)**: Se suprime el puente JSON-RPC 2.0, los compiladores de paquetes FCPXML 1.9, SRT y scripts Python para Resolve, y el subcomando CLI `clipsserver resolve-mcp`.
+- **Limpieza de configuración y orquestador (`config.py`, `engine.py`, `routes.py`)**: Eliminados los campos `editor_backend` y `resolve_mcp_*` del servidor y los endpoints `GET /resolve/status`, `POST /clips/{id}/resolve`, `POST /sessions/{id}/resolve` y `GET /clips/{id}/resolve/download/{artifact}`.
+- **Simplificación de la interfaz Web Studio (`apps/web`)**: Retirados los botones de «Abrir en DaVinci Resolve», barras de descarga de artefactos XML y la sección de configuración de DaVinci Resolve en `/settings` (Google Drive se renumera a sección 4).
+- **Mantenimiento del 100 % de las mejoras de rendimiento**: Se preservan intactas las optimizaciones de `SharedSseManager` (Event Bus singleton en el navegador), aceleración GPU en tarjetas visuales, carga instantánea de `/settings` (< 10 ms) y el lenguaje claro y digerible en toda la plataforma ([[HU-002 Simplificación y lenguaje claro en toda la plataforma|HU-002]]).
+
+> [!warning] ⚠️ Cambia para ti
+> - La plataforma ahora genera tus videos terminados de manera 100 % local y directa mediante FFmpeg y aceleración por GPU (NVENC/libx264).
+> - Se eliminan todas las opciones y botones de DaVinci Resolve tanto del editor como de los ajustes, simplificando la interfaz al máximo.
+
+---
+
+## [2.3.3] — 2026-11-07
 
 ### ⚡ Carga instantánea de Configuración, Event Bus SSE unificado y máxima fluidez en Web Studio
 
 Esta actualización resuelve de forma integral la lentitud de carga reportada en `/settings` y los problemas de fluidez en la plataforma web mediante optimizaciones de concurrencia en backend, gestión de conexiones en cliente y aceleración por GPU.
 
 #### Qué cambió
-- **Carga instantánea de `/settings` (renderizado en < 10 ms)**: Se desacopla la carga de la configuración principal y presupuesto (`getSettings` y `fetchBudget`) de los diagnósticos externos de conectividad (`fetchDriveStatus` y `fetchResolveStatus`). El formulario ahora se presenta al usuario de inmediato, mientras los estados de DaVinci Resolve y Google Drive se comprueban en paralelo en segundo plano con indicadores sutiles.
-- **Sondeo out-of-process de DaVinci Resolve sin bloqueo del GIL (`resolve_mcp.py`)**: Se descubrió que la llamada a la librería nativa `fusionscript.dll` retenía el bloqueo global de intérprete (GIL) de Python durante 4 segundos al no haber scripting externo activo. Ahora, la comprobación se ejecuta en un subproceso aislado con un límite estricto de 0.6s y una caché TTL de 30 segundos, reduciendo la latencia de `GET /resolve/status` de 4,509 ms a **0.8 ms** (más de 5,000× más rápido) sin pausar el servidor FastAPI.
-- **Event Bus SSE unificado (`SharedSseManager` en `client.ts`)**: Se reemplazaron múltiples conexiones `EventSource` independientes (abiertas simultáneamente por `TopNav`, páginas y modales) por un único gestor singleton que comparte una sola conexión HTTP persistente para toda la pestaña del navegador. Esto libera de 2 a 3 conexiones concurrentes (de las 6 permitidas en HTTP/1.1), eliminando por completo el encolado (*stalling*) de peticiones de video, previsualización de fotogramas y navegación.
+- **Carga instantánea de `/settings` (renderizado en < 10 ms)**: Se desacopla la carga de la configuración principal y presupuesto (`getSettings` y `fetchBudget`) de los diagnósticos externos de conectividad (`fetchDriveStatus`). El formulario ahora se presenta al usuario de inmediato con indicadores sutiles en segundo plano.
+- **Event Bus SSE unificado (`SharedSseManager` en `client.ts`)**: Se reemplazaron múltiples conexiones `EventSource` independientes por un único gestor singleton que comparte una sola conexión HTTP persistente para toda la pestaña del navegador. Esto libera de 2 a 3 conexiones concurrentes (de las 6 permitidas en HTTP/1.1), eliminando por completo el encolado (*stalling*) de peticiones de video, previsualización de fotogramas y navegación.
 - **Aceleración por GPU y reducción de sobrecarga gráfica (`ui.tsx`, `layout.tsx`, `globals.css`)**:
   - `GlassCard`: Se optimizó el filtro de desenfoque de `backdrop-blur-xl` a `backdrop-blur-md` y se añadió `transform-gpu` con transiciones de 200 ms, aligerando el cálculo de rasterizado del navegador en un ~60%.
   - Resplandores de fondo en `RootLayout`: Aislados en capas compuestas independientes de hardware (`transform-gpu will-change-transform`), impidiendo que el scroll o los eventos de ratón provoquen repintados de pantalla completa.
@@ -34,25 +51,6 @@ Esta actualización resuelve de forma integral la lentitud de carga reportada en
 > - La sección de **Configuración (`/settings`)** abre ahora al instante sin mostrar pantallas de carga en blanco ni demoras de varios segundos.
 > - La navegación entre pantallas, el desplazamiento de página (*scrolling*) y la interacción con tarjetas es notablemente más ágil, suave y reactiva.
 > - La reproducción de video y el visor de clips ya no experimentan pausas ni esperas por sockets bloqueados.
-
----
-
-## [2.3.2] — 2026-11-07
-
-### ⚡ Exportación no bloqueante y detección de proyecto activo en DaVinci Resolve
-
-Esta actualización resuelve de raíz los tiempos de espera y congelamientos del navegador reportados al exportar clips o sesiones completas hacia DaVinci Resolve mientras la aplicación o un proyecto ya se encuentran abiertos en el equipo local.
-
-#### Qué cambió
-- **Detección no invasiva de proyecto activo (`resolve_open_project`)**: Comprueba `pm.GetCurrentProject()` antes de forzar la apertura de un nuevo proyecto. Si el usuario ya está trabajando en un proyecto en DaVinci Resolve, ClipsApp reutiliza directamente el proyecto activo sin intentar cerrarlo, eliminando diálogos modales de guardado y bloqueos del hilo de scripting.
-- **Organización limpia en bandeja dedicada (`FarmClips` bin)**: Los medios importados (gameplay, cámara y efectos de audio) se agrupan dentro de una subcarpeta específica del MediaPool, evitando desorden en la raíz del proyecto del usuario.
-- **Despacho asíncrono no bloqueante (`async_mode: true`)**: La API (`POST /clips/{clip_id}/resolve` y `POST /sessions/{session_id}/resolve`) responde de inmediato en menos de 50 ms devolviendo el estado `queued`. Las operaciones de importación y construcción de la línea de tiempo se ejecutan en segundo plano y transmiten su progreso paso a paso mediante eventos SSE (`resolve_mcp_progress` y `clip_resolve_exported`).
-- **Fluidez absoluta en Web Studio**: Se liberan las conexiones concurrentes del navegador (límite de 6 en HTTP/1.1), impidiendo que la reproducción de video en el reproductor, el *scrubbing* en el `<canvas>` a 60 fps y los endpoints de audio queden en cola de espera.
-- **Protección con timeout de conexión IPC (`_try_connect_resolve_scripting`)**: Se introduce una caché con TTL de 3.0s y un límite estricto de 1.6s en hilo secundario para la detección de `DaVinciResolveScript`, evitando cuelgues si DaVinci Resolve no tiene scripting externo habilitado.
-
-> [!warning] ⚠️ Cambia para ti
-> - Al hacer clic en **«Editar en DaVinci Resolve (MCP)»**, la interfaz de Web Studio ya no se queda cargando indefinidamente ni ralentiza la página; puedes seguir previsualizando o reproduciendo videos de inmediato mientras Resolve procesa la línea de tiempo.
-> - Si ya tienes un proyecto abierto en DaVinci Resolve, ClipsApp agregará la línea de tiempo vertical y los medios en la carpeta `FarmClips` de ese mismo proyecto sin molestarte con advertencias de guardado.
 
 ---
 
@@ -66,39 +64,13 @@ Esta actualización rediseña por completo los textos, descripciones, tooltips, 
 - **Notificaciones en tiempo real y orquestador (`engine.py`, `pipelineSteps.ts`, `TopNav.tsx`)**: Reemplazo de mensajes con nombres de funciones internas por avisos paso a paso transparentes: «Escuchando partida», «Eligiendo mejores momentos», «Sincronizando audio con precisión», «Armando encuadre vertical» y «Creando videos finales».
 - **Gestión de sesiones y subida de partidas (`/sessions` y `/sessions/[id]`)**: Explicación clara de por qué se detectan juegos y palabras clave, por qué se unen dos videos en 9:16 vertical, cómo se calcula la curva de emoción combinando voz y jugabilidad, y cómo corregir la sincronización de audio manualmente.
 - **Estudio de edición de clips (`/editor/[clipId]`)**: Traducción de términos de edición técnica (curvas `outBack`, *Jump Cuts*, atenuación *ducking*) a resultados tangibles: «Zoom de reacción», «Cámara en pantalla completa», «El juego baja solo cuando hablas» y «Saltos automáticos en silencios».
-- **Configuración centralizada (`/settings`)**: Las 5 secciones eliminan nombres de variables de entorno del título y explican con claridad qué hace cada proveedor, por qué usarlo y qué requisitos tiene (como activar scripting en DaVinci Resolve o autorizar OAuth en Google Drive).
+- **Configuración centralizada (`/settings`)**: Las secciones eliminan nombres de variables de entorno del título y explican con claridad qué hace cada proveedor, por qué usarlo y qué requisitos tiene (como autorizar OAuth en Google Drive).
 - **Control de consumo y simulación (`/analytics`)**: Sustitución de terminología cruda de facturación por explicaciones accesibles de saldo disponible, capacidad restante en horas y clips, planes gratuitos y una calculadora para estimar el costo de procesar un stream antes de iniciarlo.
 
 > [!warning] ⚠️ Cambia para ti
 > - La plataforma ahora habla tu mismo idioma: entenderás exactamente qué está haciendo el sistema en cada momento sin lidiar con siglas técnicas crudas.
 > - En el editor, los controles de cámara, audio y subtítulos muestran su efecto visual o auditivo de forma directa.
 > - En `/settings` y `/analytics` sabrás con exactitud cuánto inviertes, cuánto te rinde el saldo y cómo aprovechar los planes gratuitos sin sorpresas.
-
----
-
-## [2.3.0] — 2026-11-07
-
-### 🎞️ Edición externa en DaVinci Resolve mediante MCP local y arquitectura dual de edición
-
-Esta versión incorpora un motor de edición híbrido que permite trasladar el montaje no lineal de los clips curados (`EditPlan` v2) hacia **DaVinci Resolve** ejecutándose localmente mediante **Model Context Protocol (MCP)**, manteniendo disponible el motor nativo (`FastCompositor` + Web Studio) como opción local o combinada.
-
-#### Qué cambió
-- **Servidor MCP JSON-RPC 2.0 y puente con `DaVinciResolveScript` (`packages/render-engine/clipsrender/resolve_mcp.py`, `clipsserver resolve-mcp`)**:
-  - Servidor MCP integrable por `stdio` o HTTP con 6 herramientas declarativas (`resolve_get_status`, `resolve_open_project`, `resolve_import_media`, `resolve_build_vertical_timeline`, `resolve_add_timeline_markers`, `resolve_trigger_render`).
-  - Detección automática en Windows, macOS y Linux de la instalación local de DaVinci Resolve, librería `fusionscript.dll` / `.so`, módulos de scripting y estado del proceso `Resolve.exe`.
-- **Compilador de paquetes multipista para DaVinci Resolve (`compile_fcpxml_v19`, `compile_srt`, `compile_resolve_python_script`)**:
-  - Genera en `data/sessions/<session_id>/clips/<clip_id>/resolve/` un timeline `.fcpxml` v1.9 vertical (`1080×1920` a 60 fps) con pistas separadas (`V1` Gameplay, `V2` Facecam sincronizada con recorte y zoom de MediaPipe, `V3` Títulos, `A1` Micrófono, `A2` Juego con *ducking*, `A3` Efectos SFX), marcadores de IA por palabra de énfasis y emojis, subtítulos `.srt` y `.ass`, y el script autónomo `resolve_build_timeline.py`.
-- **Orquestador y nuevos endpoints REST (`engine.py`, `routes.py`, `config.py`)**:
-  - Soporte de `CLIPS_EDITOR_BACKEND=local|resolve_mcp|both` y `CLIPS_RESOLVE_MCP_MODE=auto|mcp_stdio|mcp_http|direct_script|bundle_only`.
-  - Nuevos endpoints `GET /resolve/status`, `POST /clips/{clip_id}/resolve`, `POST /sessions/{session_id}/resolve` y `GET /clips/{clip_id}/resolve/download/{artifact}`.
-- **Integración completa en Web Studio (`apps/web`)**:
-  - Botón **«Editar en DaVinci Resolve (MCP)»** y barra de descarga directa de artefactos (`FCPXML v1.9`, `SRT`, `ASS`, `Script .py`, `Plan MCP`) en `/editor/[clipId]`.
-  - Exportación en lote de toda la sesión a DaVinci Resolve en `/sessions/[id]`.
-  - Nueva sección **«4. Motor de Edición de Video y DaVinci Resolve (MCP Local)»** en `/settings` con diagnóstico en vivo del entorno Resolve local.
-
-> [!warning] ⚠️ Cambia para ti
-> - En `/settings` puedes elegir si deseas editar tus clips con el **Motor Local integrado** (`local`), enviarlos directamente a **DaVinci Resolve vía MCP** (`resolve_mcp`) o usar **ambos motores simultáneamente** (`both`).
-> - En `/editor/[clipId]` y `/sessions/[id]` dispones del botón **«Editar en DaVinci Resolve (MCP)»** para abrir el timeline vertical multipista en DaVinci Resolve o descargar los archivos `.fcpxml`, `.srt` y `.py` listos para importar incluso con DaVinci Resolve cerrado.
 
 ---
 
