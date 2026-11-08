@@ -15,7 +15,26 @@ etiquetas: [tipo/cambios, area/general]
 
 ---
 
-## [2.3.1] — 2026-11-07 (Versión actual)
+## [2.3.2] — 2026-11-07 (Versión actual)
+
+### ⚡ Exportación no bloqueante y detección de proyecto activo en DaVinci Resolve
+
+Esta actualización resuelve de raíz los tiempos de espera y congelamientos del navegador reportados al exportar clips o sesiones completas hacia DaVinci Resolve mientras la aplicación o un proyecto ya se encuentran abiertos en el equipo local.
+
+#### Qué cambió
+- **Detección no invasiva de proyecto activo (`resolve_open_project`)**: Comprueba `pm.GetCurrentProject()` antes de forzar la apertura de un nuevo proyecto. Si el usuario ya está trabajando en un proyecto en DaVinci Resolve, ClipsApp reutiliza directamente el proyecto activo sin intentar cerrarlo, eliminando diálogos modales de guardado y bloqueos del hilo de scripting.
+- **Organización limpia en bandeja dedicada (`FarmClips` bin)**: Los medios importados (gameplay, cámara y efectos de audio) se agrupan dentro de una subcarpeta específica del MediaPool, evitando desorden en la raíz del proyecto del usuario.
+- **Despacho asíncrono no bloqueante (`async_mode: true`)**: La API (`POST /clips/{clip_id}/resolve` y `POST /sessions/{session_id}/resolve`) responde de inmediato en menos de 50 ms devolviendo el estado `queued`. Las operaciones de importación y construcción de la línea de tiempo se ejecutan en segundo plano y transmiten su progreso paso a paso mediante eventos SSE (`resolve_mcp_progress` y `clip_resolve_exported`).
+- **Fluidez absoluta en Web Studio**: Se liberan las conexiones concurrentes del navegador (límite de 6 en HTTP/1.1), impidiendo que la reproducción de video en el reproductor, el *scrubbing* en el `<canvas>` a 60 fps y los endpoints de audio queden en cola de espera.
+- **Protección con timeout de conexión IPC (`_try_connect_resolve_scripting`)**: Se introduce una caché con TTL de 3.0s y un límite estricto de 1.6s en hilo secundario para la detección de `DaVinciResolveScript`, evitando cuelgues si DaVinci Resolve no tiene scripting externo habilitado.
+
+> [!warning] ⚠️ Cambia para ti
+> - Al hacer clic en **«Editar en DaVinci Resolve (MCP)»**, la interfaz de Web Studio ya no se queda cargando indefinidamente ni ralentiza la página; puedes seguir previsualizando o reproduciendo videos de inmediato mientras Resolve procesa la línea de tiempo.
+> - Si ya tienes un proyecto abierto en DaVinci Resolve, ClipsApp agregará la línea de tiempo vertical y los medios en la carpeta `FarmClips` de ese mismo proyecto sin molestarte con advertencias de guardado.
+
+---
+
+## [2.3.1] — 2026-11-07
 
 ### ✨ Simplificación, lenguaje digerible y experiencia de usuario clara en Web Studio
 

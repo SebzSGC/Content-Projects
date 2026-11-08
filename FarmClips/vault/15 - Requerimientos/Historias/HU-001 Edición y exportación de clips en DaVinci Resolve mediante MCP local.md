@@ -59,6 +59,7 @@ fin_real: 2026-11-07
 - 2026-11-07 · Creada desde [[2026-11-07 Edición externa en DaVinci Resolve vía MCP]]
 - 2026-11-07 · Por hacer → **En progreso** · Iniciando implementación de puente DaVinci Resolve MCP local y paquete FCPXML
 - 2026-11-07 · En progreso → **Hecho** · Implementado puente MCP DaVinci Resolve, compilador FCPXML v1.9 + SRT + Py3, endpoints REST y UI en Web Studio (23/23 tests pasando)
+- 2026-11-07 · **Optimización y Estabilidad** · Despacho asíncrono no bloqueante (`async_mode: true`), eventos SSE en tiempo real y detección no invasiva de proyecto activo con `GetCurrentProject()`, eliminando cuelgues de IPC y bloqueos del navegador.
 
 ## 🔗 Relacionado
 - [[Requerimientos]] · [[EP-01 Integración con DaVinci Resolve vía MCP|EP-01]] · [[Tablero de avance]]
