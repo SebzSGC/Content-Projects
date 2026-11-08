@@ -326,7 +326,18 @@ def build_editplan(
     )
     clip_dur = plan.total_duration()
 
-    # 1. Layouts: base split 40/60 + camera_full 2s on up to 2 strongest reactions
+    # 1. Resolver semantic zoom anchor guiado por IA (o fallback local)
+    semantic_zoom_ct: Optional[float] = None
+    if clip.zoom_word:
+        clean_target = _clean_token(clip.zoom_word)
+        for w in snapped_words:
+            if _clean_token(w.text) == clean_target:
+                ct = plan.master_to_clip_time(w.start)
+                if ct is not None:
+                    semantic_zoom_ct = ct
+                    break
+
+    # Layouts: base split 40/60 + camera_full 2s en las reacciones más fuertes
     layouts: List[LayoutEvent] = [LayoutEvent(t=0.0, kind="split", camera_ratio=preset.layout.camera_ratio)]
     peak_candidates = list(clip.reaction_peaks)
     if signals is not None and signals.reaction and not peak_candidates:
@@ -340,11 +351,24 @@ def build_editplan(
 
     cam_full_added = 0
     used_full_windows: List[Tuple[float, float]] = []
+
+    # Si la IA indicó foco en rostro para el clímax semántico, priorizar camera_full en ese momento
+    if clip.zoom_focus == "face" and semantic_zoom_ct is not None:
+        f_start = round(max(preset.title.duration_sec + 0.2, semantic_zoom_ct - 0.2), 3)
+        f_end = round(min(clip_dur - 0.1, f_start + preset.layout.camera_full_sec), 3)
+        if f_end - f_start >= 1.0:
+            layouts.append(LayoutEvent(t=f_start, kind="camera_full", until=f_end))
+            used_full_windows.append((f_start, f_end))
+            cam_full_added += 1
+
     for mp in peak_candidates:
         if cam_full_added >= preset.layout.camera_full_max_reactions:
             break
         ct = plan.master_to_clip_time(mp)
         if ct is None:
+            continue
+        # Si el clímax era enfocado en el gameplay, evitar tapar la pantalla con cámara completa
+        if clip.zoom_focus == "game" and semantic_zoom_ct is not None and abs(ct - semantic_zoom_ct) < 2.0:
             continue
         f_start = round(max(preset.title.duration_sec + 0.2, ct - 0.3), 3)
         f_end = round(min(clip_dur - 0.1, f_start + preset.layout.camera_full_sec), 3)
@@ -359,10 +383,15 @@ def build_editplan(
     plan.captions = build_hormozi_captions(snapped_words, plan, clip.emphasis_words, emoji_pairs, preset)
 
     impact_triggers: List[float] = []
+    # Prioridad 1: Clímax semántico exacto guiado por zoom_word
+    if semantic_zoom_ct is not None:
+        impact_triggers.append(max(0.0, semantic_zoom_ct - 0.08))
+    # Prioridad 2: Palabras de énfasis en subtítulos
     for g in plan.captions.groups:
         for cw in g.words:
             if cw.emphasis:
                 impact_triggers.append(max(0.0, cw.s - 0.08))
+    # Prioridad 3: Picos acústicos de reacción
     for mp in peak_candidates:
         ct = plan.master_to_clip_time(mp)
         if ct is not None:

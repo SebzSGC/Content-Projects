@@ -202,6 +202,8 @@ class CuratedClip(BaseModel):
     hashtags: List[str] = Field(default_factory=list)
     emphasis_words: List[str] = Field(default_factory=list)
     emojis: List[EmojiSuggestion] = Field(default_factory=list)
+    zoom_word: Optional[str] = None
+    zoom_focus: str = "face"
     llm_score: float = 0.0
     signal_score: float = 0.0
     final_score: float = 0.0

@@ -15,6 +15,7 @@ from clipscore.domain import (
     SilenceSpan,
     SyncResult,
     TranscriptWord,
+    Utterance,
 )
 from clipscore.framing import (
     OneEuroFilter,
@@ -145,6 +146,8 @@ def test_compact_timeline_and_phrase_id_resolution() -> None:
     assert 20.0 <= curated[0].duration <= 60.0
     assert curated[0].hashtags == ["gaming", "clutch"]
     assert curated[0].final_score > 60.0
+    assert curated[0].zoom_word == "increíble"  # Inferred via zero-token CPU fallback from emphasis
+    assert curated[0].zoom_focus == "face"
 
 
 def test_word_attack_snapping_and_parquet_roundtrip(tmp_path: Path) -> None:
@@ -283,3 +286,52 @@ def test_jump_cuts_scream_protection_and_compilers(tmp_path: Path) -> None:
     assert "eval=frame" in compiled.filtergraph
     assert "sidechaincompress" in compiled.filtergraph
     assert "loudnorm=I=-14.0" in compiled.filtergraph
+
+
+def test_semantic_zoom_guidance_and_layouts() -> None:
+    preset = load_preset("hormozi-gaming")
+    words = [
+        TranscriptWord(text="Vamos", start=10.0, end=10.4),
+        TranscriptWord(text="por", start=10.5, end=10.7),
+        TranscriptWord(text="la", start=10.8, end=10.9),
+        TranscriptWord(text="bomba", start=11.0, end=11.5),
+        TranscriptWord(text="amigo", start=11.6, end=12.0),
+    ]
+    utts = [Utterance(id="u0001", start=10.0, end=35.0, text="Vamos por la bomba amigo", words=words)]
+    clip_face = CuratedClip(
+        id="clip_face",
+        start_id="u0001",
+        end_id="u0001",
+        start=10.0,
+        end=35.0,
+        overlay_title="¡DESARMÓ LA BOMBA!",
+        post_title="NO PUEDE SER ESTO 💀",
+        zoom_word="bomba",
+        zoom_focus="face",
+        emphasis_words=["bomba"],
+        emojis=[EmojiSuggestion(word="bomba", emoji="1f4a5")],
+    )
+    plan_face = build_editplan("ses_test", clip_face, utts, signals=None, face=None, preset=preset)
+    # Debe existir un impact zoom tipo outBack en la posición de "bomba" (t=1.0 en tiempo de clip)
+    impact_kfs = [kf for kf in plan_face.camera_crop if kf.ease == "outBack"]
+    assert len(impact_kfs) >= 1
+    # "bomba" inicia a t=1.0 relativo al clip, impact zoom arranca a ~0.92s
+    assert abs(impact_kfs[0].t - (1.0 - 0.08 + preset.impact_zoom.in_ms / 1000.0)) < 0.15
+
+    # Ahora probamos con zoom_focus="game": debe mantener split para no oscurecer el juego
+    clip_game = CuratedClip(
+        id="clip_game",
+        start_id="u0001",
+        end_id="u0001",
+        start=10.0,
+        end=35.0,
+        overlay_title="HEADSHOT ÉPICO",
+        post_title="EL TIRO DEL SIGLO 🔥",
+        zoom_word="bomba",
+        zoom_focus="game",
+        emphasis_words=["bomba"],
+    )
+    plan_game = build_editplan("ses_test", clip_game, utts, signals=None, face=None, preset=preset)
+    # Ningún layout debe ser camera_full cuando el foco es el juego
+    assert not any(ev.kind == "camera_full" for ev in plan_game.layout)
+

@@ -244,6 +244,12 @@ def resolve_curated_clips(
         if not hook_text and span_utts:
             hook_text = span_utts[0].text[:80].strip()
 
+        raw_zoom_word = str(item.get("zoom_word", "")).strip()
+        raw_zoom_focus = str(item.get("zoom_focus", "face")).strip().lower()
+        if raw_zoom_focus not in ("face", "game", "split"):
+            raw_zoom_focus = "face"
+        resolved_zoom_word = raw_zoom_word or (emph_words[0] if emph_words else None)
+
         resolved.append(
             CuratedClip(
                 id=new_id("clip"),
@@ -257,6 +263,8 @@ def resolve_curated_clips(
                 hashtags=raw_hashtags,
                 emphasis_words=emph_words,
                 emojis=enriched_emojis,
+                zoom_word=resolved_zoom_word,
+                zoom_focus=raw_zoom_focus,
                 llm_score=llm_score,
                 signal_score=sig_score,
                 final_score=combined,

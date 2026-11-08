@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ..http import ProviderError
 
-CURATION_PROMPT_VERSION = "v2.0"
+CURATION_PROMPT_VERSION = "v2.1"
 
 
 class LlmEmojiItem(BaseModel):
@@ -26,13 +26,15 @@ class LlmClipProposal(BaseModel):
     start_id: str = Field(description="ID de la frase inicial, p.ej. 'u0012'")
     end_id: str = Field(description="ID de la frase final, p.ej. 'u0028'")
     hook: str = Field(default="", description="Frase inicial o gancho de los primeros 3 segundos")
-    overlay_title: str = Field(description="Título quemado en pantalla (3 a 7 palabras, ortografía impecable)")
-    post_title: str = Field(default="", description="Título de publicación en MAYÚSCULAS con emoji al final")
+    overlay_title: str = Field(description="Título quemado en pantalla (3 a 6 palabras, acción presente, ortografía impecable)")
+    post_title: str = Field(default="", description="Título de publicación en MAYÚSCULAS con gancho y 1 emoji al final")
     hashtags: List[str] = Field(default_factory=list, description="3 a 5 hashtags en minúsculas sin #")
     emphasis_words: List[str] = Field(default_factory=list, description="Palabras exactas clave para resaltar en verde")
     emojis: List[LlmEmojiItem] = Field(default_factory=list, description="Emojis sugeridos asociados a palabras de énfasis")
+    zoom_word: str = Field(default="", description="Palabra clave exacta del clímax o remate donde impacta el zoom principal")
+    zoom_focus: str = Field(default="face", description="Foco prioritario en el zoom: 'face' (reacción facial), 'game' (jugada en pantalla) o 'split'")
     score: int = Field(ge=0, le=100, description="Puntuación de viralidad de 0 a 100")
-    reason: str = Field(default="", description="Explicación ultra concisa (máx 10 palabras)")
+    reason: str = Field(default="", description="Explicación ultra concisa (máx 8 palabras)")
 
 
 class CurationEnvelope(BaseModel):
@@ -68,6 +70,8 @@ CURATION_JSON_SCHEMA: Dict[str, Any] = {
                             "additionalProperties": False,
                         },
                     },
+                    "zoom_word": {"type": "string"},
+                    "zoom_focus": {"type": "string", "enum": ["face", "game", "split"]},
                     "score": {"type": "integer"},
                     "reason": {"type": "string"},
                 },
@@ -91,20 +95,25 @@ Recibes la línea de tiempo compacta del VOD con:
 - Una línea por frase del streamer: `u0412 [1:02:03] texto`
 - Marcas de picos acústicos y de juego: `>>> PICO [1:02:05] (score=... mic=... juego=...)`
 
-REGLAS CRÍTICAS:
-1. Devuelve IDs de frase exactos (`start_id` y `end_id`, como `"u0004"` y `"u0015"`), NUNCA inventes tiempos en segundos.
-2. Cada clip debe contar una micro-historia autónoma con arco completo: preparación/situación → evento en el juego o giro → reacción/remate del streamer.
-3. Evita charla de relleno, agradecimientos de suscripciones o momentos que no se entienden solos.
-4. Para cada clip entrega de forma compacta:
-   - `start_id` y `end_id`: IDs de frase inicial y final.
-   - `hook`: gancho de 3 a 6 palabras.
-   - `overlay_title`: 3 a 7 palabras, tildes correctas, para mostrar en la unión cámara/juego.
-   - `post_title`: MAYÚSCULAS, primera persona, gancho + 1 emoji al final.
-   - `hashtags`: 3 etiquetas en minúscula sin `#`.
-   - `emphasis_words`: 2 a 4 palabras clave exactas dichas por el streamer donde habrá énfasis verde.
-   - `emojis`: hasta 2 pares `{{"word": "palabra_enfasis", "emoji": "1f631"}}` en código hex Unicode (`1f631`, `1f480`, `1f525`, `1f602`, `1f92f`).
-   - `score`: entero 0 a 100 (solo >60 pasan a render automático).
-   - `reason`: máx 8 palabras.
+DIRECTRICES DE CORTE Y SELECCIÓN:
+1. Devuelve IDs de frase exactos (`start_id` y `end_id`), NUNCA inventes tiempos en segundos.
+2. Cada clip debe tener un arco de 3 actos autónomo:
+   - Planteamiento: Situación rápida o desafío (primeros 3-5s).
+   - Clímax / Giro: Jugada insana, susto, error garrafal o revelación.
+   - Remate / Reacción: Risa explosiva, queja cómica o grito triunfal.
+3. Corte limpio sin relleno: Inicia directo en la acción y CORTA inmediatamente tras la reacción final. Prohibido incluir silencios posteriores, charla intrascendente o despedidas del chat.
+
+DIRECTRICES DE TÍTULOS Y GANCHO (ALTO CTR):
+- `overlay_title`: Quemado en la unión (3 a 6 palabras, presente activo, directo al grano, ortografía impecable). Ejemplos: "EL TIRO MÁS LOCO", "NO VIO VENIR LA BOMBA", "ME QUEDÉ A UN MILÍMETRO".
+- `post_title`: MAYÚSCULAS en 1ra persona con gancho de intriga/emoción + 1 emoji al final. Ejemplo: "¡NO ENTIENDO CÓMO SALÍ VIVO DE ESTA RONDA! 💀".
+- `hook`: Gancho de 3 a 6 palabras para retener en los primeros 3 segundos.
+
+DIRECCIÓN DE ZOOMS Y ÉNFASIS (TOKEN-FRUGAL):
+- `zoom_word`: Palabra exacta dicha en el clímax o remate donde impactará el punch-in zoom de cámara (ej. "muerto", "imposible", "dios").
+- `zoom_focus`: "face" si la gracia/tensión es la cara del streamer; "game" si la prioridad visual absoluta es la mirilla/jugada; "split" si ambas importan por igual.
+- `emphasis_words`: 2 a 4 palabras clave exactas para resaltar en verde neón en subtítulos.
+- `emojis`: hasta 2 pares `{{"word": "palabra", "emoji": "hex"}}` usando catálogo (`1f525`, `1f631`, `1f480`, `1f602`, `1f92f`, `1f3af`, `1f3c6`, `1f4a5`).
+- `score`: 0 a 100 (solo >=65 pasan a render). `reason`: máx 6 palabras.
 
 PARÁMETROS DE SESIÓN: Grabación="{title}" | Duración objetivo={min_len:.0f}s a {max_len:.0f}s | Máximo de clips={max_clips}."""
 

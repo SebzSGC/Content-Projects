@@ -5,7 +5,7 @@
         "role": "model",
         "parts": [
           {
-            "text": "{\"clips\": [{\"start_id\": \"u0002\", \"end_id\": \"u0008\", \"hook\": \"Mira cómo asoman los tres por medio sin humo ni nada.\", \"overlay_title\": \"CLUTCH 1v3 EN RONDA FINAL\", \"post_title\": \"ME DEJARON SOLO CONTRA TRES EN LA FINAL Y PASÓ ESTO 🔥\", \"hashtags\": [\"gaming\", \"clutch\", \"valorant\", \"clips\", \"streamer\"], \"emphasis_words\": [\"cabeza\", \"locura\", \"fuego\", \"CLUTCH\", \"HISTÓRICO\", \"CARAJO\"], \"emojis\": [{\"word\": \"locura\", \"emoji\": \"1f92f\"}, {\"word\": \"fuego\", \"emoji\": \"1f525\"}, {\"word\": \"CLUTCH\", \"emoji\": \"1f631\"}, {\"word\": \"HISTÓRICO\", \"emoji\": \"1f480\"}], \"score\": 89, \"reason\": \"Historia completa con preparación táctica, bajas rápidas, tensión silenciosa y reacción explosiva en el clutch.\"}]}"
+            "text": "{\"clips\": [{\"start_id\": \"u0002\", \"end_id\": \"u0008\", \"hook\": \"Mira cómo asoman los tres por medio sin humo ni nada.\", \"overlay_title\": \"CLUTCH 1v3 EN RONDA FINAL\", \"post_title\": \"ME DEJARON SOLO CONTRA TRES EN LA FINAL Y PASÓ ESTO 🔥\", \"hashtags\": [\"gaming\", \"clutch\", \"valorant\", \"clips\", \"streamer\"], \"emphasis_words\": [\"cabeza\", \"locura\", \"fuego\", \"CLUTCH\", \"HISTÓRICO\", \"CARAJO\"], \"emojis\": [{\"word\": \"locura\", \"emoji\": \"1f92f\"}, {\"word\": \"fuego\", \"emoji\": \"1f525\"}, {\"word\": \"CLUTCH\", \"emoji\": \"1f631\"}, {\"word\": \"HISTÓRICO\", \"emoji\": \"1f480\"}], \"zoom_word\": \"CLUTCH\", \"zoom_focus\": \"face\", \"score\": 89, \"reason\": \"Historia completa con preparación táctica y clutch explosivo.\"}]}"
           }
         ]
       },
