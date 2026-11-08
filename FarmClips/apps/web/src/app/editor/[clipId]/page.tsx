@@ -78,6 +78,52 @@ const DUCK_PRESETS = [
   { label: "Fuerte", db: -15, desc: "Máxima prioridad a tu voz" },
 ];
 
+function applyCameraCoverTransform(
+  videoEl: HTMLVideoElement,
+  wrapEl: HTMLDivElement,
+  cx: number,
+  cy: number,
+  zoom: number,
+  anchorY = 0.44
+) {
+  const boxW = wrapEl.clientWidth || 330;
+  const boxH = wrapEl.clientHeight || 235;
+  const vw = videoEl.videoWidth > 0 ? videoEl.videoWidth : 1920;
+  const vh = videoEl.videoHeight > 0 ? videoEl.videoHeight : 1080;
+
+  // Escala base para cubrir exactamente la caja (cover)
+  const baseScale = Math.max(boxW / vw, boxH / vh);
+  const effectiveZoom = Math.max(1.0, zoom);
+  const totalScale = baseScale * effectiveZoom;
+
+  const scaledW = vw * totalScale;
+  const scaledH = vh * totalScale;
+
+  // Desplazamiento de recorte para centrar (cx, cy) en (boxW * 0.5, boxH * anchorY)
+  let cropX = scaledW * cx - boxW * 0.5;
+  let cropY = scaledH * cy - boxH * anchorY;
+
+  // Clamp estricto idéntico a OpenCV compute_cover_affine_matrix:
+  // La imagen NUNCA puede salirse de la caja ni dejar bandas negras
+  const maxCropX = Math.max(0, scaledW - boxW);
+  const maxCropY = Math.max(0, scaledH - boxH);
+
+  cropX = Math.max(0, Math.min(cropX, maxCropX));
+  cropY = Math.max(0, Math.min(cropY, maxCropY));
+
+  // Aplicar posición y dimensiones directas al elemento de video
+  videoEl.style.position = "absolute";
+  videoEl.style.left = "0px";
+  videoEl.style.top = "0px";
+  videoEl.style.width = `${scaledW.toFixed(1)}px`;
+  videoEl.style.height = `${scaledH.toFixed(1)}px`;
+  videoEl.style.maxWidth = "none";
+  videoEl.style.maxHeight = "none";
+  videoEl.style.objectFit = "fill";
+  videoEl.style.transformOrigin = "0 0";
+  videoEl.style.transform = `translate3d(${-cropX.toFixed(1)}px, ${-cropY.toFixed(1)}px, 0)`;
+}
+
 export default function ClipEditorPage() {
   const params = useParams<{ clipId: string }>();
   const clipId = params.clipId;
@@ -412,10 +458,15 @@ export default function ClipEditorPage() {
         gameWrapRef.current.style.display = camPct === 100 ? "none" : "block";
       }
 
-      if (camVideoRef.current) {
-        const tx = (0.5 - crop.cx) * 100 * (crop.zoom - 0.15);
-        const ty = (0.44 - crop.cy) * 100 * (crop.zoom - 0.15);
-        camVideoRef.current.style.transform = `scale(${crop.zoom.toFixed(4)}) translate(${tx.toFixed(2)}%, ${ty.toFixed(2)}%)`;
+      if (camVideoRef.current && camWrapRef.current) {
+        applyCameraCoverTransform(
+          camVideoRef.current,
+          camWrapRef.current,
+          crop.cx,
+          crop.cy,
+          crop.zoom,
+          0.44
+        );
       }
 
       // 2. Render Subtitles & Title on Canvas with render-skip caching
@@ -575,6 +626,15 @@ export default function ClipEditorPage() {
     },
     [preset, isDraggingCam, isDraggingCaptions]
   );
+
+  // Recalculate camera cover bounds on window resize
+  useEffect(() => {
+    const onResize = () => {
+      renderFrameAt(clipTimeRef.current);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [renderFrameAt]);
 
   // Synchronize videos only when drift exceeds 40 ms or on forced seek
   const syncVideosToClipTime = useCallback((t: number, forceSeek: boolean) => {
@@ -804,19 +864,33 @@ export default function ClipEditorPage() {
 
   const handleCamPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isDraggingCam || !dragCamStartRef.current || !plan) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const dx = (e.clientX - dragCamStartRef.current.clientX) / Math.max(1, rect.width);
-    const dy = (e.clientY - dragCamStartRef.current.clientY) / Math.max(1, rect.height);
+    const wrapEl = camWrapRef.current;
+    const videoEl = camVideoRef.current;
+    if (!wrapEl || !videoEl) return;
 
-    // Natural drag
-    let newCx = dragCamStartRef.current.cx - dx / (dragCamStartRef.current.zoom * 1.2);
-    let newCy = dragCamStartRef.current.cy - dy / (dragCamStartRef.current.zoom * 1.2);
-    newCx = Math.max(0.05, Math.min(0.95, newCx));
-    newCy = Math.max(0.05, Math.min(0.95, newCy));
+    const boxW = wrapEl.clientWidth || 330;
+    const boxH = wrapEl.clientHeight || 235;
+    const vw = videoEl.videoWidth > 0 ? videoEl.videoWidth : 1920;
+    const vh = videoEl.videoHeight > 0 ? videoEl.videoHeight : 1080;
 
-    // Magnetic Center Guide (snap when within 2.5% of center X)
+    const baseScale = Math.max(boxW / vw, boxH / vh);
+    const totalScale = baseScale * Math.max(1.0, dragCamStartRef.current.zoom);
+    const scaledW = vw * totalScale;
+    const scaledH = vh * totalScale;
+
+    const dx = e.clientX - dragCamStartRef.current.clientX;
+    const dy = e.clientY - dragCamStartRef.current.clientY;
+
+    // Arrastre 1:1 de la imagen: mover el ratón hacia la derecha mueve la imagen a la derecha
+    let newCx = dragCamStartRef.current.cx - dx / scaledW;
+    let newCy = dragCamStartRef.current.cy - dy / scaledH;
+
+    newCx = Math.max(0.0, Math.min(1.0, newCx));
+    newCy = Math.max(0.0, Math.min(1.0, newCy));
+
+    // Guía magnética de centrado en X = 0.50
     let snapping = false;
-    if (Math.abs(newCx - 0.5) < 0.025) {
+    if (Math.abs(newCx - 0.5) < 0.02) {
       newCx = 0.5;
       snapping = true;
     }
@@ -1246,7 +1320,8 @@ export default function ClipEditorPage() {
                     crossOrigin="anonymous"
                     playsInline
                     preload="auto"
-                    className="h-full w-full origin-center object-cover pointer-events-none"
+                    onLoadedMetadata={() => renderFrameAt(clipTimeRef.current)}
+                    className="absolute pointer-events-none will-change-transform"
                     style={{ willChange: "transform", transform: "translateZ(0)" }}
                   />
 
