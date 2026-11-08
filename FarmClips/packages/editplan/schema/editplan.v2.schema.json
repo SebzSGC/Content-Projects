@@ -109,6 +109,20 @@
           },
           "title": "Groups",
           "type": "array"
+        },
+        "vertical_ratio": {
+          "anyOf": [
+            {
+              "maximum": 0.95,
+              "minimum": 0.05,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vertical Ratio"
         }
       },
       "title": "CaptionsPlan",

@@ -104,6 +104,7 @@ class CaptionsPlan(BaseModel):
 
     preset: str = "hormozi"
     groups: List[CaptionGroup] = Field(default_factory=list)
+    vertical_ratio: Optional[float] = Field(default=None, ge=0.05, le=0.95)
 
 
 class OverlayItem(BaseModel):

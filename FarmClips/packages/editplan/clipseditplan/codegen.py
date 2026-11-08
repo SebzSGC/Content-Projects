@@ -78,6 +78,7 @@ export interface CaptionGroup {
 export interface CaptionsPlan {
   preset: string;
   groups: CaptionGroup[];
+  vertical_ratio?: number | null;
 }
 
 export interface OverlayItem {
@@ -129,6 +130,21 @@ export function clipToMasterTime(plan: EditPlan, clipT: number): { rangeIndex: n
     acc += seg;
   }
   return { rangeIndex: 0, masterTime: plan.source.ranges[0]?.[0] ?? 0 };
+}
+
+export function masterToClipTime(plan: EditPlan, masterT: number): number {
+  let acc = 0;
+  for (let i = 0; i < plan.source.ranges.length; i++) {
+    const [a, b] = plan.source.ranges[i];
+    if (masterT < a) {
+      return acc;
+    }
+    if (masterT <= b) {
+      return acc + (masterT - a);
+    }
+    acc += (b - a);
+  }
+  return acc;
 }
 
 export function applyEase(u: number, ease?: EaseKind): number {

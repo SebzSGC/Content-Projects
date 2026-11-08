@@ -7,20 +7,28 @@ import {
   ArrowLeft,
   Camera,
   Check,
+  Crosshair,
   Download,
   Film,
+  Layers,
   Loader2,
   Maximize2,
+  Move,
   Pause,
   Play,
   Plus,
+  Redo2,
   Save,
   Scissors,
+  Sliders,
   Sparkles,
   Trash2,
   Type,
+  Undo2,
   Volume2,
   Zap,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import {
   API_PREFIX,
@@ -39,6 +47,7 @@ import {
   evaluateCameraCrop,
   evaluateLayout,
   getTotalClipDuration,
+  masterToClipTime,
   type CropKeyframe,
   type EaseKind,
   type EditPlan,
@@ -47,6 +56,27 @@ import {
 function dbToLinear(db: number): number {
   return Math.pow(10, db / 20);
 }
+
+function dbToVoicePct(db: number): number {
+  if (db <= 0) {
+    return Math.max(0, Math.min(100, Math.round((1 - db / -24) * 100)));
+  }
+  return Math.min(150, Math.round(100 + (db / 6) * 50));
+}
+
+function voicePctToDb(pct: number): number {
+  if (pct <= 100) {
+    return Number((-24 * (1 - pct / 100)).toFixed(1));
+  }
+  return Number((((pct - 100) / 50) * 6).toFixed(1));
+}
+
+const DUCK_PRESETS = [
+  { label: "Apagado", db: 0, desc: "Sin atenuar el juego" },
+  { label: "Suave", db: -5, desc: "Atenúa un poco al hablar" },
+  { label: "Normal", db: -9, desc: "Recomendado (YouTube/Twitch)" },
+  { label: "Fuerte", db: -15, desc: "Máxima prioridad a tu voz" },
+];
 
 export default function ClipEditorPage() {
   const params = useParams<{ clipId: string }>();
@@ -61,6 +91,10 @@ export default function ClipEditorPage() {
   const [emojiCategoryFilter, setEmojiCategoryFilter] = useState<string>("all");
   const [liveDuckPct, setLiveDuckPct] = useState<number>(0);
 
+  // Undo / Redo history stacks
+  const [undoStack, setUndoStack] = useState<EditPlan[]>([]);
+  const [redoStack, setRedoStack] = useState<EditPlan[]>([]);
+
   const [activeTab, setActiveTab] = useState<"captions" | "camera" | "cuts" | "json">("captions");
   const [previewSource, setPreviewSource] = useState<"live" | "rendered">("live");
 
@@ -73,6 +107,11 @@ export default function ClipEditorPage() {
   const [statusMsg, setStatusMsg] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
+  // WYSIWYG Interactive states
+  const [isDraggingCam, setIsDraggingCam] = useState(false);
+  const [isSnappingCenterX, setIsSnappingCenterX] = useState(false);
+  const [isDraggingCaptions, setIsDraggingCaptions] = useState(false);
+
   // Refs for 60fps zero-render preview + Web Audio API mixer
   const camVideoRef = useRef<HTMLVideoElement | null>(null);
   const gameVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -84,6 +123,7 @@ export default function ClipEditorPage() {
   const playheadBarRef = useRef<HTMLDivElement | null>(null);
   const wordWidthCacheRef = useRef<Map<string, number>>(new Map());
   const lastReactTimeSyncRef = useRef<number>(0);
+  const lastCanvasHashRef = useRef<string>("");
   const emojiCacheRef = useRef<Record<string, HTMLImageElement>>({});
   const clipTimeRef = useRef(0);
   const playingRef = useRef(false);
@@ -91,7 +131,23 @@ export default function ClipEditorPage() {
   const sessionRef = useRef<SessionSummary | null>(null);
   const syncRef = useRef<{ shift: number; scale: number }>({ shift: 0, scale: 1 });
 
-  // Web Audio API refs (real-time mic_gain_db, sidechain ducking, and boom.wav SFX)
+  // Pointer drag trackers
+  const dragCamStartRef = useRef<{
+    clientX: number;
+    clientY: number;
+    cx: number;
+    cy: number;
+    zoom: number;
+    initialPlan: EditPlan;
+  } | null>(null);
+
+  const dragCapStartRef = useRef<{
+    clientY: number;
+    initialRatio: number;
+    initialPlan: EditPlan;
+  } | null>(null);
+
+  // Web Audio API refs
   const audioCtxRef = useRef<AudioContext | null>(null);
   const micGainNodeRef = useRef<GainNode | null>(null);
   const gameGainNodeRef = useRef<GainNode | null>(null);
@@ -104,6 +160,78 @@ export default function ClipEditorPage() {
   planRef.current = plan;
   sessionRef.current = session;
   playingRef.current = playing;
+
+  // Plan mutation with optional history capture
+  const mutatePlan = useCallback(
+    (updater: (draft: EditPlan) => EditPlan, options?: { skipHistory?: boolean }) => {
+      setPlan((prev) => {
+        if (!prev) return prev;
+        const cloned = structuredClone(prev);
+        const updated = updater(cloned);
+        if (!options?.skipHistory) {
+          setUndoStack((st) => [...st.slice(-30), prev]);
+          setRedoStack([]);
+        }
+        setDirty(true);
+        return updated;
+      });
+    },
+    []
+  );
+
+  const handleUndo = useCallback(() => {
+    if (undoStack.length === 0 || !plan) return;
+    const previous = undoStack[undoStack.length - 1];
+    const newUndo = undoStack.slice(0, -1);
+    setRedoStack((r) => [...r, plan]);
+    setUndoStack(newUndo);
+    setPlan(previous);
+    setDirty(true);
+    setStatusMsg("Deshecho el último cambio.");
+  }, [undoStack, plan]);
+
+  const handleRedo = useCallback(() => {
+    if (redoStack.length === 0 || !plan) return;
+    const next = redoStack[redoStack.length - 1];
+    const newRedo = redoStack.slice(0, -1);
+    setUndoStack((u) => [...u, plan]);
+    setRedoStack(newRedo);
+    setPlan(next);
+    setDirty(true);
+    setStatusMsg("Rehecho el cambio.");
+  }, [redoStack, plan]);
+
+  // Global Keyboard Shortcuts (Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z, Space to play/pause)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isInput =
+        target &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+
+      if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) {
+        if (e.shiftKey) {
+          e.preventDefault();
+          handleRedo();
+        } else {
+          if (!isInput) {
+            e.preventDefault();
+            handleUndo();
+          }
+        }
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === "y" || e.key === "Y")) {
+        if (!isInput) {
+          e.preventDefault();
+          handleRedo();
+        }
+      } else if (e.code === "Space" && !isInput) {
+        e.preventDefault();
+        togglePlay();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [handleUndo, handleRedo]);
 
   const loadAll = useCallback(async () => {
     if (!clipId) return;
@@ -149,7 +277,9 @@ export default function ClipEditorPage() {
     if (typeof window === "undefined") return null;
     let ctx = audioCtxRef.current;
     if (!ctx) {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       ctx = new AudioCtx();
       audioCtxRef.current = ctx;
 
@@ -171,7 +301,6 @@ export default function ClipEditorPage() {
       gameGainNodeRef.current = gameGain;
       micAnalyserRef.current = analyser;
       analyserBufRef.current = new Float32Array(new ArrayBuffer(analyser.fftSize * 4));
-      // Store highpass input on micGain node reference helper
       (micGain as unknown as { _hpInput?: BiquadFilterNode })._hpInput = highpass;
     }
 
@@ -191,7 +320,7 @@ export default function ClipEditorPage() {
         src.connect(hp);
         mediaSourceMapRef.current.set(cv, src);
       } catch {
-        // Ignore if unsupported in headless test
+        // Ignorar si no soportado
       }
     }
     if (gv && gameGain && !mediaSourceMapRef.current.has(gv)) {
@@ -252,7 +381,7 @@ export default function ClipEditorPage() {
     }
   });
 
-  // Preload emoji PNGs whenever captions change
+  // Preload emoji PNGs
   useEffect(() => {
     if (!plan) return;
     for (const grp of plan.captions.groups) {
@@ -265,7 +394,7 @@ export default function ClipEditorPage() {
     }
   }, [plan]);
 
-  // Draw Canvas Overlay + Apply CSS Camera Crop/Layout at 60fps
+  // Fast 60fps render on Canvas + CSS transforms with smart caching
   const renderFrameAt = useCallback(
     (t: number) => {
       const p = planRef.current;
@@ -289,55 +418,24 @@ export default function ClipEditorPage() {
         camVideoRef.current.style.transform = `scale(${crop.zoom.toFixed(4)}) translate(${tx.toFixed(2)}%, ${ty.toFixed(2)}%)`;
       }
 
-      // 2. Render Hormozi Captions + Color Emojis + Seam Title on <canvas>
+      // 2. Render Subtitles & Title on Canvas with render-skip caching
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
 
-      const W = canvas.width; // 540
-      const H = canvas.height; // 960
-      ctx.clearRect(0, 0, W, H);
-
+      const W = canvas.width;
+      const H = canvas.height;
       const splitRatio = p.layout.find((l) => l.kind === "split")?.camera_ratio ?? 0.4;
       const seamY = H * splitRatio;
       const gameH = H - seamY;
+      const capRatio = p.captions.vertical_ratio ?? preset?.captions.gameplay_top_third_ratio ?? 0.28;
+      const capY = seamY + gameH * capRatio;
 
-      // 2a. Seam Title Overlay (first 3 seconds)
-      for (const ov of p.overlays) {
-        if (ov.kind === "title" && t >= ov.start && t <= ov.end && ov.text.trim()) {
-          ctx.save();
-          ctx.font = '800 24px "Montserrat ExtraBold", Inter, sans-serif';
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          const txt = ov.text.trim();
-          const titleKey = `title:24:${txt}`;
-          let titleW = wordWidthCacheRef.current.get(titleKey);
-          if (titleW === undefined) {
-            titleW = ctx.measureText(txt).width;
-            wordWidthCacheRef.current.set(titleKey, titleW);
-          }
-          const padX = 20;
-          const boxW = Math.min(W - 36, titleW + padX * 2);
-          const boxH = 44;
-          const bx = (W - boxW) / 2;
-          const by = seamY - boxH / 2;
+      const activeTitle = p.overlays.find(
+        (ov) => ov.kind === "title" && t >= ov.start && t <= ov.end && ov.text.trim()
+      );
 
-          ctx.shadowColor = "rgba(0,0,0,0.55)";
-          ctx.shadowBlur = 12;
-          ctx.fillStyle = "#FFFFFF";
-          ctx.beginPath();
-          ctx.roundRect(bx, by, boxW, boxH, 10);
-          ctx.fill();
-
-          ctx.shadowBlur = 0;
-          ctx.fillStyle = "#090A0F";
-          ctx.fillText(txt, W / 2, seamY + 1, boxW - 16);
-          ctx.restore();
-        }
-      }
-
-      // 2b. Active Caption Group
       const activeGroup = p.captions.groups.find((g) => {
         if (!g.words.length) return false;
         const gs = g.words[0].s;
@@ -345,11 +443,58 @@ export default function ClipEditorPage() {
         return t >= gs && t <= ge + 0.04;
       });
 
+      const activeWordIdx = activeGroup
+        ? activeGroup.words.findIndex((w) => t >= w.s && t < w.e)
+        : -1;
+      const hasEmoji = Boolean(activeGroup?.emoji && t >= (activeGroup?.emoji?.at ?? 0));
+
+      const renderHash = `${activeTitle?.text ?? ""}:${activeGroup ? p.captions.groups.indexOf(activeGroup) : -1}:${activeWordIdx}:${hasEmoji}:${Math.round(capY)}:${Math.round(seamY)}`;
+
+      // Skip redrawing if identical to previous frame
+      if (lastCanvasHashRef.current === renderHash && !isDraggingCam && !isDraggingCaptions) {
+        return;
+      }
+      lastCanvasHashRef.current = renderHash;
+
+      ctx.clearRect(0, 0, W, H);
+
+      // 2a. Seam Title Overlay
+      if (activeTitle) {
+        ctx.save();
+        ctx.font = '800 24px "Montserrat ExtraBold", Inter, sans-serif';
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const txt = activeTitle.text.trim();
+        const titleKey = `title:24:${txt}`;
+        let titleW = wordWidthCacheRef.current.get(titleKey);
+        if (titleW === undefined) {
+          titleW = ctx.measureText(txt).width;
+          wordWidthCacheRef.current.set(titleKey, titleW);
+        }
+        const padX = 20;
+        const boxW = Math.min(W - 36, titleW + padX * 2);
+        const boxH = 44;
+        const bx = (W - boxW) / 2;
+        const by = seamY - boxH / 2;
+
+        ctx.shadowColor = "rgba(0,0,0,0.55)";
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = "#FFFFFF";
+        ctx.beginPath();
+        ctx.roundRect(bx, by, boxW, boxH, 10);
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#090A0F";
+        ctx.fillText(txt, W / 2, seamY + 1, boxW - 16);
+        ctx.restore();
+      }
+
+      // 2b. Active Captions & Emojis
       if (activeGroup && activeGroup.words.length > 0) {
-        const capY = seamY + gameH * (preset?.captions.gameplay_top_third_ratio ?? 0.28);
         const baseFontPx = 39;
 
-        // Emoji PNG above active emphasis word
+        // Emoji PNG above active word
         if (activeGroup.emoji && t >= activeGroup.emoji.at) {
           const img = emojiCacheRef.current[activeGroup.emoji.id];
           if (img && img.complete && img.naturalWidth > 0) {
@@ -360,7 +505,7 @@ export default function ClipEditorPage() {
           }
         }
 
-        // Measure each word (cached by fontPx + word) to render multi-colored inline words centered cleanly
+        // Measure words
         ctx.save();
         const wordSpecs = activeGroup.words.map((w) => {
           const isActive = t >= w.s && t < w.e;
@@ -399,7 +544,8 @@ export default function ClipEditorPage() {
 
         const spaceW = 13;
         const totalW =
-          wordSpecs.reduce((acc, ws) => acc + ws.width, 0) + Math.max(0, wordSpecs.length - 1) * spaceW;
+          wordSpecs.reduce((acc, ws) => acc + ws.width, 0) +
+          Math.max(0, wordSpecs.length - 1) * spaceW;
         let cursorX = (W - totalW) / 2;
 
         for (const ws of wordSpecs) {
@@ -409,7 +555,6 @@ export default function ClipEditorPage() {
           ctx.lineJoin = "round";
           ctx.miterLimit = 2;
 
-          // Drop shadow + thick black stroke
           ctx.shadowColor = "rgba(0,0,0,0.85)";
           ctx.shadowOffsetX = 0;
           ctx.shadowOffsetY = 4;
@@ -428,10 +573,10 @@ export default function ClipEditorPage() {
         ctx.restore();
       }
     },
-    [preset]
+    [preset, isDraggingCam, isDraggingCaptions]
   );
 
-  // Sync <video> elements to virtual clipTime
+  // Synchronize videos only when drift exceeds 40 ms or on forced seek
   const syncVideosToClipTime = useCallback((t: number, forceSeek: boolean) => {
     const p = planRef.current;
     if (!p) return;
@@ -440,28 +585,33 @@ export default function ClipEditorPage() {
 
     const gv = gameVideoRef.current;
     const cv = camVideoRef.current;
-    if (gv && gv.readyState >= 1 && (forceSeek || Math.abs(gv.currentTime - masterTime) > 0.24)) {
-      gv.currentTime = masterTime;
+
+    if (cv && cv.readyState >= 1) {
+      if (forceSeek || Math.abs(cv.currentTime - camTime) > 0.04) {
+        cv.currentTime = camTime;
+      }
     }
-    if (cv && cv.readyState >= 1 && (forceSeek || Math.abs(cv.currentTime - camTime) > 0.24)) {
-      cv.currentTime = camTime;
+    if (gv && gv.readyState >= 1) {
+      if (forceSeek || Math.abs(gv.currentTime - masterTime) > 0.04) {
+        gv.currentTime = masterTime;
+      }
     }
   }, []);
 
-  // 60 fps requestAnimationFrame loop (Video Sync + Canvas + Web Audio Sidechain & SFX)
+  // 60 fps Animation Loop using Hardware Clock (cv.currentTime as Master)
   useEffect(() => {
-    let rafId = 0;
-    let lastTs = performance.now();
+    let animId = 0;
     let frameCount = 0;
+    let rvfcId: number | null = null;
 
-    const tick = (now: number) => {
-      const dt = Math.min(0.1, (now - lastTs) / 1000);
-      lastTs = now;
+    const tick = () => {
       frameCount += 1;
-
       const p = planRef.current;
+      const cv = camVideoRef.current;
+      const gv = gameVideoRef.current;
+
       if (p) {
-        // Real-time Web Audio gain & sidechain ducking update
+        // Real-time Web Audio sidechain ducking
         const micNode = micGainNodeRef.current;
         const gameNode = gameGainNodeRef.current;
         const analyser = micAnalyserRef.current;
@@ -490,45 +640,87 @@ export default function ClipEditorPage() {
         }
       }
 
-      if (p && playingRef.current) {
-        const prevT = clipTimeRef.current;
+      if (p && playingRef.current && cv && cv.readyState >= 2) {
+        // Read directly from hardware video clock
+        const camNow = cv.currentTime;
+        const masterNow = (camNow - syncRef.current.shift) / (syncRef.current.scale || 1);
         const total = getTotalClipDuration(p);
-        let nextT = prevT + dt;
-        if (nextT >= total) {
-          nextT = 0;
-          syncVideosToClipTime(0, true);
+        const currentClipT = masterToClipTime(p, masterNow);
+
+        // Check if clip loop completed
+        if (currentClipT >= total - 0.04 || cv.ended) {
+          seekTo(0);
         } else {
-          syncVideosToClipTime(nextT, false);
+          const prevT = clipTimeRef.current;
+          clipTimeRef.current = currentClipT;
+
+          // Check SFX cues
           for (const cue of p.audio.sfx) {
-            if (prevT < cue.t && nextT >= cue.t && nextT - prevT < 0.2) {
+            if (prevT < cue.t && currentClipT >= cue.t && currentClipT - prevT < 0.25) {
               fireSfx(cue.id, cue.gain_db);
             }
           }
-        }
-        clipTimeRef.current = nextT;
-        // Direct 60fps DOM updates without triggering full React Virtual DOM reconciliation on every frame
-        if (scrubberInputRef.current) {
-          scrubberInputRef.current.value = String(nextT);
-        }
-        if (timeLabelRef.current) {
-          timeLabelRef.current.textContent = `${nextT.toFixed(2)}s / ${total.toFixed(1)}s`;
-        }
-        if (playheadBarRef.current) {
-          playheadBarRef.current.style.left = `${(nextT / Math.max(0.1, total)) * 100}%`;
-        }
-        if (now - lastReactTimeSyncRef.current >= 120 || nextT === 0) {
-          lastReactTimeSyncRef.current = now;
-          setClipTime(nextT);
+
+          // Slave sync for gameplay video only if drift > 40 ms
+          if (gv && gv.readyState >= 1) {
+            const drift = Math.abs(gv.currentTime - masterNow);
+            if (drift > 0.04) {
+              gv.currentTime = masterNow;
+            }
+          }
+
+          // Direct DOM updates (no React render tree cost at 60 fps)
+          if (scrubberInputRef.current) {
+            scrubberInputRef.current.value = String(currentClipT);
+          }
+          if (timeLabelRef.current) {
+            timeLabelRef.current.textContent = `${currentClipT.toFixed(2)}s / ${total.toFixed(1)}s`;
+          }
+          if (playheadBarRef.current) {
+            playheadBarRef.current.style.left = `${(currentClipT / Math.max(0.1, total)) * 100}%`;
+          }
+
+          const now = performance.now();
+          if (now - lastReactTimeSyncRef.current >= 120) {
+            lastReactTimeSyncRef.current = now;
+            setClipTime(currentClipT);
+          }
         }
       }
 
       renderFrameAt(clipTimeRef.current);
-      rafId = requestAnimationFrame(tick);
+
+      // Support requestVideoFrameCallback if available on browser for perfect frame rate sync
+      if (
+        cv &&
+        "requestVideoFrameCallback" in cv &&
+        typeof (cv as HTMLVideoElement & { requestVideoFrameCallback: (cb: () => void) => number })
+          .requestVideoFrameCallback === "function"
+      ) {
+        rvfcId = (
+          cv as HTMLVideoElement & { requestVideoFrameCallback: (cb: () => void) => number }
+        ).requestVideoFrameCallback(tick);
+      } else {
+        animId = requestAnimationFrame(tick);
+      }
     };
 
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
-  }, [fireSfx, renderFrameAt, syncVideosToClipTime]);
+    animId = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(animId);
+      if (
+        rvfcId !== null &&
+        camVideoRef.current &&
+        "cancelVideoFrameCallback" in camVideoRef.current
+      ) {
+        (
+          camVideoRef.current as HTMLVideoElement & {
+            cancelVideoFrameCallback: (id: number) => void;
+          }
+        ).cancelVideoFrameCallback(rvfcId);
+      }
+    };
+  }, [fireSfx, renderFrameAt]);
 
   function togglePlay() {
     const next = !playing;
@@ -538,11 +730,11 @@ export default function ClipEditorPage() {
     if (next) {
       ensureWebAudio().catch(() => null);
       syncVideosToClipTime(clipTimeRef.current, true);
-      gv?.play().catch(() => null);
       cv?.play().catch(() => null);
+      gv?.play().catch(() => null);
     } else {
-      gv?.pause();
       cv?.pause();
+      gv?.pause();
       setClipTime(clipTimeRef.current);
     }
   }
@@ -552,20 +744,196 @@ export default function ClipEditorPage() {
     const clamped = Math.max(0, Math.min(total, newT));
     clipTimeRef.current = clamped;
     if (scrubberInputRef.current) scrubberInputRef.current.value = String(clamped);
-    if (timeLabelRef.current) timeLabelRef.current.textContent = `${clamped.toFixed(2)}s / ${total.toFixed(1)}s`;
-    if (playheadBarRef.current) playheadBarRef.current.style.left = `${(clamped / Math.max(0.1, total)) * 100}%`;
+    if (timeLabelRef.current)
+      timeLabelRef.current.textContent = `${clamped.toFixed(2)}s / ${total.toFixed(1)}s`;
+    if (playheadBarRef.current)
+      playheadBarRef.current.style.left = `${(clamped / Math.max(0.1, total)) * 100}%`;
     setClipTime(clamped);
     syncVideosToClipTime(clamped, true);
     renderFrameAt(clamped);
   }
 
-  function mutatePlan(updater: (draft: EditPlan) => EditPlan) {
-    setPlan((prev) => {
-      if (!prev) return prev;
-      const updated = updater(structuredClone(prev));
+  // Camera Crop manipulation at playhead
+  function applyCropAtPlayhead(
+    newCx: number,
+    newCy: number,
+    newZoom: number,
+    options?: { skipHistory?: boolean }
+  ) {
+    if (!plan) return;
+    const t = Number(clipTime.toFixed(2));
+    mutatePlan((d) => {
+      const idx = d.camera_crop.findIndex((kf) => Math.abs(kf.t - t) < 0.25);
+      if (idx >= 0) {
+        d.camera_crop[idx].cx = Number(newCx.toFixed(3));
+        d.camera_crop[idx].cy = Number(newCy.toFixed(3));
+        d.camera_crop[idx].zoom = Number(newZoom.toFixed(3));
+      } else {
+        d.camera_crop.push({
+          t,
+          cx: Number(newCx.toFixed(3)),
+          cy: Number(newCy.toFixed(3)),
+          zoom: Number(newZoom.toFixed(3)),
+          ease: "inOutSine",
+        });
+        d.camera_crop.sort((a, b) => a.t - b.t);
+      }
+      return d;
+    }, options);
+  }
+
+  // Pointer drag for Camera WYSIWYG
+  const handleCamPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!plan) return;
+    const cur = evaluateCameraCrop(plan.camera_crop, clipTime);
+    dragCamStartRef.current = {
+      clientX: e.clientX,
+      clientY: e.clientY,
+      cx: cur.cx,
+      cy: cur.cy,
+      zoom: cur.zoom,
+      initialPlan: structuredClone(plan),
+    };
+    setIsDraggingCam(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handleCamPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingCam || !dragCamStartRef.current || !plan) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const dx = (e.clientX - dragCamStartRef.current.clientX) / Math.max(1, rect.width);
+    const dy = (e.clientY - dragCamStartRef.current.clientY) / Math.max(1, rect.height);
+
+    // Natural drag
+    let newCx = dragCamStartRef.current.cx - dx / (dragCamStartRef.current.zoom * 1.2);
+    let newCy = dragCamStartRef.current.cy - dy / (dragCamStartRef.current.zoom * 1.2);
+    newCx = Math.max(0.05, Math.min(0.95, newCx));
+    newCy = Math.max(0.05, Math.min(0.95, newCy));
+
+    // Magnetic Center Guide (snap when within 2.5% of center X)
+    let snapping = false;
+    if (Math.abs(newCx - 0.5) < 0.025) {
+      newCx = 0.5;
+      snapping = true;
+    }
+    setIsSnappingCenterX(snapping);
+
+    applyCropAtPlayhead(newCx, newCy, dragCamStartRef.current.zoom, { skipHistory: true });
+    renderFrameAt(clipTime);
+  };
+
+  const handleCamPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isDraggingCam && dragCamStartRef.current && plan) {
+      setUndoStack((s) => [...s.slice(-30), dragCamStartRef.current!.initialPlan]);
+      setRedoStack([]);
       setDirty(true);
-      return updated;
+      dragCamStartRef.current = null;
+      setIsDraggingCam(false);
+      setIsSnappingCenterX(false);
+    }
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // Ignorar si el puntero se liberó
+    }
+  };
+
+  // Wheel zoom over camera panel
+  const handleCamWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (!plan) return;
+    const cur = evaluateCameraCrop(plan.camera_crop, clipTime);
+    const delta = -e.deltaY * 0.0015;
+    const nextZoom = Math.max(1.0, Math.min(2.5, Number((cur.zoom + delta).toFixed(3))));
+    applyCropAtPlayhead(cur.cx, cur.cy, nextZoom);
+  };
+
+  // Pointer drag for Subtitles Height Positioner
+  const handleCapPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!plan) return;
+    const curRatio =
+      plan.captions.vertical_ratio ?? preset?.captions.gameplay_top_third_ratio ?? 0.28;
+    dragCapStartRef.current = {
+      clientY: e.clientY,
+      initialRatio: curRatio,
+      initialPlan: structuredClone(plan),
+    };
+    setIsDraggingCaptions(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handleCapPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingCaptions || !dragCapStartRef.current || !plan) return;
+    const gameWrap = gameWrapRef.current;
+    if (!gameWrap) return;
+    const rect = gameWrap.getBoundingClientRect();
+    const relY = e.clientY - rect.top;
+    const nextRatio = Math.max(0.08, Math.min(0.92, relY / Math.max(1, rect.height)));
+    const rounded = Number(nextRatio.toFixed(3));
+
+    mutatePlan(
+      (d) => {
+        d.captions.vertical_ratio = rounded;
+        return d;
+      },
+      { skipHistory: true }
+    );
+    if (preset) {
+      preset.captions.gameplay_top_third_ratio = rounded;
+    }
+    renderFrameAt(clipTime);
+  };
+
+  const handleCapPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isDraggingCaptions && dragCapStartRef.current) {
+      setUndoStack((s) => [...s.slice(-30), dragCapStartRef.current!.initialPlan]);
+      setRedoStack([]);
+      setDirty(true);
+      dragCapStartRef.current = null;
+      setIsDraggingCaptions(false);
+    }
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // Ignorar si el puntero se liberó
+    }
+  };
+
+  // Layout Templates (1-Click Presets)
+  function applyLayoutTemplate(
+    template: "classic_gaming" | "gameplay_priority" | "reaction_full" | "gameplay_full"
+  ) {
+    if (!plan) return;
+    const t = Number(clipTime.toFixed(2));
+    const total = getTotalClipDuration(plan);
+
+    mutatePlan((d) => {
+      if (template === "classic_gaming") {
+        const splitEv = d.layout.find((l) => l.kind === "split");
+        if (splitEv) {
+          splitEv.camera_ratio = 0.4;
+        } else {
+          d.layout.unshift({ t: 0, kind: "split", camera_ratio: 0.4 });
+        }
+      } else if (template === "gameplay_priority") {
+        const splitEv = d.layout.find((l) => l.kind === "split");
+        if (splitEv) {
+          splitEv.camera_ratio = 0.25;
+        } else {
+          d.layout.unshift({ t: 0, kind: "split", camera_ratio: 0.25 });
+        }
+      } else if (template === "reaction_full") {
+        const until = Number(Math.min(total, t + 2.0).toFixed(2));
+        d.layout.push({ t, kind: "camera_full", until });
+        d.layout.sort((a, b) => a.t - b.t);
+      } else if (template === "gameplay_full") {
+        const until = Number(Math.min(total, t + 2.5).toFixed(2));
+        d.layout.push({ t, kind: "gameplay_full", until });
+        d.layout.sort((a, b) => a.t - b.t);
+      }
+      return d;
     });
+    setStatusMsg(`Plantilla aplicada con éxito.`);
   }
 
   async function handleSave(): Promise<EditPlan | null> {
@@ -652,27 +1020,18 @@ export default function ClipEditorPage() {
     });
   }
 
-  function addFullscreenReactionAtPlayhead() {
-    if (!plan) return;
-    const total = getTotalClipDuration(plan);
-    const t0 = Number(Math.max(0.1, Math.min(total - 1.2, clipTime)).toFixed(2));
-    const until = Number(Math.min(total, t0 + 2.0).toFixed(2));
-    mutatePlan((d) => {
-      d.layout.push({ t: t0, kind: "camera_full", until });
-      d.layout.sort((a, b) => a.t - b.t);
-      return d;
-    });
-  }
-
   if (!clip || !session || !plan) {
     return (
       <div className="flex items-center justify-center py-24 text-zinc-400">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Abriendo el editor de tu clip…
+        <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Abriendo el editor interactivo de tu clip…
       </div>
     );
   }
 
   const totalDur = getTotalClipDuration(plan);
+  const curCrop = evaluateCameraCrop(plan.camera_crop, clipTime);
+  const curCapRatio =
+    plan.captions.vertical_ratio ?? preset?.captions.gameplay_top_third_ratio ?? 0.28;
   const renderedUrl = clip.has_final
     ? `${API_PREFIX}/clips/${clip.id}/file?quality=final&t=${Math.floor(clip.updated_at)}`
     : clip.has_draft
@@ -681,7 +1040,7 @@ export default function ClipEditorPage() {
 
   return (
     <div className="space-y-5">
-      {/* Studio Header */}
+      {/* Studio Header: Save, Undo/Redo & Export */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-[#0E1017] px-5 py-3.5">
         <div className="flex items-center gap-3">
           <Link
@@ -703,7 +1062,7 @@ export default function ClipEditorPage() {
               )}
             </div>
             <p className="text-[11px] text-zinc-400">
-              Tus ajustes se ven al instante sin esperar a que se procese el video · Duración:{" "}
+              Edición visual interactiva en tiempo real · 60 fps · Duración:{" "}
               <strong>{totalDur.toFixed(1)} s</strong>
               {statusMsg ? ` · ${statusMsg}` : ""}
             </p>
@@ -711,6 +1070,28 @@ export default function ClipEditorPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Undo / Redo buttons */}
+          <div className="mr-1 flex items-center rounded-xl border border-zinc-800 bg-zinc-950 p-0.5">
+            <button
+              type="button"
+              onClick={handleUndo}
+              disabled={undoStack.length === 0}
+              title="Deshacer cambio (Ctrl+Z)"
+              className="rounded-lg p-2 text-zinc-300 hover:bg-zinc-800 hover:text-white disabled:opacity-25"
+            >
+              <Undo2 className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleRedo}
+              disabled={redoStack.length === 0}
+              title="Rehacer cambio (Ctrl+Y)"
+              className="rounded-lg p-2 text-zinc-300 hover:bg-zinc-800 hover:text-white disabled:opacity-25"
+            >
+              <Redo2 className="h-4 w-4" />
+            </button>
+          </div>
+
           <button
             type="button"
             onClick={handleSave}
@@ -754,7 +1135,10 @@ export default function ClipEditorPage() {
       {renderProgress !== null && (
         <div className="rounded-xl border border-[#FFD400]/30 bg-[#FFD400]/10 px-4 py-2.5 text-xs text-[#FFD400]">
           <div className="flex justify-between font-bold">
-            <span>Creando tu archivo de video ({renderingQuality === "draft" ? "prueba rápida" : "alta calidad 1080p"})…</span>
+            <span>
+              Creando tu archivo de video (
+              {renderingQuality === "draft" ? "prueba rápida" : "alta calidad 1080p"})…
+            </span>
             <span>{Math.round(renderProgress * 100)}%</span>
           </div>
           <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-zinc-900">
@@ -772,9 +1156,9 @@ export default function ClipEditorPage() {
         </div>
       )}
 
-      {/* Main Studio Grid: Left = 9:16 Live Preview, Right = Inspector Tabs */}
+      {/* Main Studio Grid: Left = 9:16 WYSIWYG Stage, Right = Inspector Tabs */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* Left Column: Vertical 9:16 Stage + Timeline Scrubber */}
+        {/* Left Column: Vertical 9:16 Interactive Stage */}
         <div className="flex flex-col items-center rounded-2xl border border-zinc-800 bg-[#0E1017] p-4 lg:col-span-5">
           <div className="mb-3 flex w-full items-center justify-between">
             <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-0.5 text-xs">
@@ -782,10 +1166,12 @@ export default function ClipEditorPage() {
                 type="button"
                 onClick={() => setPreviewSource("live")}
                 className={`rounded-md px-3 py-1 font-semibold transition ${
-                  previewSource === "live" ? "bg-[#FFD400] text-black" : "text-zinc-400 hover:text-white"
+                  previewSource === "live"
+                    ? "bg-[#FFD400] text-black"
+                    : "text-zinc-400 hover:text-white"
                 }`}
               >
-                Vista en vivo (instantánea)
+                Vista interactiva en vivo
               </button>
               {renderedUrl && (
                 <button
@@ -797,7 +1183,9 @@ export default function ClipEditorPage() {
                     setPreviewSource("rendered");
                   }}
                   className={`rounded-md px-3 py-1 font-semibold transition ${
-                    previewSource === "rendered" ? "bg-[#39FF14] text-black" : "text-zinc-400 hover:text-white"
+                    previewSource === "rendered"
+                      ? "bg-[#39FF14] text-black"
+                      : "text-zinc-400 hover:text-white"
                   }`}
                 >
                   Video exportado (MP4)
@@ -815,24 +1203,95 @@ export default function ClipEditorPage() {
             )}
           </div>
 
-          {/* 9:16 Viewport */}
-          <div className="relative aspect-[9/16] w-full max-w-[330px] overflow-hidden rounded-2xl border border-zinc-700/80 bg-black shadow-2xl">
+          {/* 9:16 Viewport with Interactive WYSIWYG Overlays */}
+          <div
+            className="group relative aspect-[9/16] w-full max-w-[330px] overflow-hidden rounded-2xl border border-zinc-700/80 bg-black shadow-2xl select-none"
+            style={{ willChange: "transform", transform: "translateZ(0)" }}
+          >
             {previewSource === "live" ? (
               <>
-                {/* Top 40% (or 100% on camera_full): Streamer Camera */}
-                <div ref={camWrapRef} className="relative h-[40%] w-full overflow-hidden bg-zinc-950">
+                {/* Top Section: Camera Streamer with Drag & Drop Crop */}
+                <div
+                  ref={camWrapRef}
+                  onPointerDown={handleCamPointerDown}
+                  onPointerMove={handleCamPointerMove}
+                  onPointerUp={handleCamPointerUp}
+                  onPointerCancel={handleCamPointerUp}
+                  onWheel={handleCamWheel}
+                  title="Arrastra para encuadrar tu rostro · Rueda del ratón para ajustar Zoom"
+                  className={`relative h-[40%] w-full overflow-hidden bg-zinc-950 touch-none ${
+                    isDraggingCam ? "cursor-grabbing" : "cursor-grab"
+                  }`}
+                  style={{ willChange: "transform", transform: "translateZ(0)" }}
+                >
                   <video
                     ref={camVideoRef}
                     src={`${API_PREFIX}/sessions/${session.id}/stream/camera`}
                     crossOrigin="anonymous"
                     playsInline
                     preload="auto"
-                    className="h-full w-full origin-center object-cover will-change-transform"
+                    className="h-full w-full origin-center object-cover pointer-events-none"
+                    style={{ willChange: "transform", transform: "translateZ(0)" }}
                   />
+
+                  {/* Visual Drag Hint & Zoom Floating Widget */}
+                  <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 rounded-md bg-black/75 px-2 py-0.5 text-[10px] font-bold text-zinc-200 border border-zinc-700/80 backdrop-blur-sm pointer-events-none transition opacity-75 group-hover:opacity-100">
+                    <Move className="h-3 w-3 text-[#FFD400]" />
+                    <span>Cámara</span>
+                  </div>
+
+                  <div className="absolute top-2 right-2 z-20 flex items-center gap-1 rounded-lg bg-black/80 px-1.5 py-0.5 text-[10px] border border-zinc-700/80 backdrop-blur-sm">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        applyCropAtPlayhead(
+                          curCrop.cx,
+                          curCrop.cy,
+                          Math.max(1.0, curCrop.zoom - 0.1)
+                        );
+                      }}
+                      title="Reducir zoom"
+                      className="p-1 text-zinc-300 hover:text-white"
+                    >
+                      <ZoomOut className="h-3 w-3" />
+                    </button>
+                    <span className="font-mono text-[10px] font-bold text-[#FFD400]">
+                      {curCrop.zoom.toFixed(2)}x
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        applyCropAtPlayhead(
+                          curCrop.cx,
+                          curCrop.cy,
+                          Math.min(2.5, curCrop.zoom + 0.1)
+                        );
+                      }}
+                      title="Aumentar zoom"
+                      className="p-1 text-zinc-300 hover:text-white"
+                    >
+                      <ZoomIn className="h-3 w-3" />
+                    </button>
+                  </div>
+
+                  {/* Magnetic Snapping Vertical Center Guide */}
+                  {isSnappingCenterX && (
+                    <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.9)] z-30">
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded bg-amber-500 px-1.5 py-0.5 text-[9px] font-black text-black">
+                        CENTRO
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Bottom 60%: Gameplay */}
-                <div ref={gameWrapRef} className="relative h-[60%] w-full overflow-hidden bg-black">
+                {/* Bottom Section: Gameplay with Subtitles Vertical Positioner */}
+                <div
+                  ref={gameWrapRef}
+                  className="relative h-[60%] w-full overflow-hidden bg-black"
+                  style={{ willChange: "transform", transform: "translateZ(0)" }}
+                >
                   <video
                     ref={gameVideoRef}
                     src={`${API_PREFIX}/sessions/${session.id}/stream/gameplay`}
@@ -840,17 +1299,42 @@ export default function ClipEditorPage() {
                     playsInline
                     muted
                     preload="auto"
-                    className="h-full w-full object-cover"
+                    className="h-full w-full object-cover pointer-events-none"
+                    style={{ willChange: "transform", transform: "translateZ(0)" }}
                   />
+
+                  {/* Interactive Subtitles Drag Handle */}
+                  <div
+                    onPointerDown={handleCapPointerDown}
+                    onPointerMove={handleCapPointerMove}
+                    onPointerUp={handleCapPointerUp}
+                    onPointerCancel={handleCapPointerUp}
+                    title="Arrastra verticalmente para mover la altura de los subtítulos y no tapar la mira del juego"
+                    className="absolute inset-x-0 z-20 flex flex-col items-center cursor-ns-resize touch-none transition"
+                    style={{ top: `${(curCapRatio * 100).toFixed(1)}%`, transform: "translateY(-50%)" }}
+                  >
+                    <div className="w-full border-t border-dashed border-[#FFD400]/40 shadow-sm" />
+                    <div
+                      className={`my-1 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold shadow-lg backdrop-blur-md transition ${
+                        isDraggingCaptions
+                          ? "bg-[#FFD400] text-black ring-2 ring-amber-300"
+                          : "bg-black/80 text-[#FFD400] border border-[#FFD400]/60 hover:bg-black/95"
+                      }`}
+                    >
+                      <Move className="h-2.5 w-2.5" />
+                      <span>Subtítulos ({Math.round(curCapRatio * 100)}%)</span>
+                    </div>
+                    <div className="w-full border-b border-dashed border-[#FFD400]/40 shadow-sm" />
+                  </div>
                 </div>
 
-                {/* 60fps Canvas for Hormozi Captions, Color Emoji PNGs, and Seam Title */}
+                {/* 60fps Canvas for Hormozi Captions, Emojis, and Seam Title */}
                 <canvas
                   ref={canvasRef}
                   width={540}
                   height={960}
                   onClick={togglePlay}
-                  className=" absolute inset-0 h-full w-full cursor-pointer"
+                  className="pointer-events-none absolute inset-0 h-full w-full"
                 />
               </>
             ) : (
@@ -860,16 +1344,21 @@ export default function ClipEditorPage() {
             )}
           </div>
 
-          {/* Scrubber & Event Markers (only for Live Preview) */}
+          {/* Scrubber & Timeline Controls */}
           {previewSource === "live" && (
             <div className="mt-4 w-full space-y-2">
               <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={togglePlay}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FFD400] text-black hover:bg-amber-300"
+                  title="Reproducir / Pausar (Barra espaciadora)"
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FFD400] text-black hover:bg-amber-300 shadow-md"
                 >
-                  {playing ? <Pause className="h-4 w-4 fill-black" /> : <Play className="h-4 w-4 fill-black" />}
+                  {playing ? (
+                    <Pause className="h-4 w-4 fill-black" />
+                  ) : (
+                    <Play className="h-4 w-4 fill-black" />
+                  )}
                 </button>
                 <input
                   ref={scrubberInputRef}
@@ -899,7 +1388,7 @@ export default function ClipEditorPage() {
                         key={i}
                         style={{ left: `${left}%`, width: `${width}%` }}
                         className="absolute inset-y-0 bg-purple-500/35"
-                        title={`camera_full (${ev.t}s - ${ev.until}s)`}
+                        title={`Cámara completa (${ev.t}s - ${ev.until}s)`}
                       />
                     );
                   })}
@@ -929,14 +1418,16 @@ export default function ClipEditorPage() {
           )}
         </div>
 
-        {/* Right Column: Declarative EditPlan v2 Inspector */}
+        {/* Right Column: Declarative EditPlan v2 Inspector & Layout Templates */}
         <div className="flex flex-col rounded-2xl border border-zinc-800 bg-[#0E1017] p-5 lg:col-span-7">
           <div className="mb-4 flex flex-wrap gap-1.5 border-b border-zinc-800 pb-3 text-xs font-bold">
             <button
               type="button"
               onClick={() => setActiveTab("captions")}
               className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 transition ${
-                activeTab === "captions" ? "bg-[#FFD400] text-black" : "bg-zinc-900 text-zinc-300 hover:text-white"
+                activeTab === "captions"
+                  ? "bg-[#FFD400] text-black"
+                  : "bg-zinc-900 text-zinc-300 hover:text-white"
               }`}
             >
               <Type className="h-3.5 w-3.5" /> Subtítulos y Emojis ({plan.captions.groups.length})
@@ -945,25 +1436,31 @@ export default function ClipEditorPage() {
               type="button"
               onClick={() => setActiveTab("camera")}
               className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 transition ${
-                activeTab === "camera" ? "bg-[#FFD400] text-black" : "bg-zinc-900 text-zinc-300 hover:text-white"
+                activeTab === "camera"
+                  ? "bg-[#FFD400] text-black"
+                  : "bg-zinc-900 text-zinc-300 hover:text-white"
               }`}
             >
-              <Camera className="h-3.5 w-3.5" /> Tu Cámara y Zooms
+              <Camera className="h-3.5 w-3.5" /> Disposición y Cámara
             </button>
             <button
               type="button"
               onClick={() => setActiveTab("cuts")}
               className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 transition ${
-                activeTab === "cuts" ? "bg-[#FFD400] text-black" : "bg-zinc-900 text-zinc-300 hover:text-white"
+                activeTab === "cuts"
+                  ? "bg-[#FFD400] text-black"
+                  : "bg-zinc-900 text-zinc-300 hover:text-white"
               }`}
             >
-              <Scissors className="h-3.5 w-3.5" /> Título, Ritmo y Sonido
+              <Scissors className="h-3.5 w-3.5" /> Mezclador de Sonido y Ritmo
             </button>
             <button
               type="button"
               onClick={() => setActiveTab("json")}
               className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 transition ${
-                activeTab === "json" ? "bg-[#FFD400] text-black" : "bg-zinc-900 text-zinc-300 hover:text-white"
+                activeTab === "json"
+                  ? "bg-[#FFD400] text-black"
+                  : "bg-zinc-900 text-zinc-300 hover:text-white"
               }`}
             >
               Datos avanzados
@@ -973,10 +1470,12 @@ export default function ClipEditorPage() {
           {/* TAB 1: CAPTIONS & EMOJIS */}
           {activeTab === "captions" && (
             <div className="max-h-[580px] space-y-2.5 overflow-y-auto pr-1">
-              <p className="mb-2 text-xs text-zinc-400">
-                Corrige cualquier palabra, haz clic en la estrella para resaltarla en verde cuando la digas o elige un
-                emoji para acompañar la frase.
-              </p>
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 text-xs text-zinc-400">
+                <span className="font-bold text-zinc-200">Consejo visual: </span>
+                Puedes arrastrar el tirador horizontal amarillo en el visor para subir o bajar los
+                subtítulos según el HUD de tu juego.
+              </div>
+
               {plan.captions.groups.map((grp, gIdx) => {
                 const gs = grp.words[0]?.s ?? 0;
                 const ge = grp.words[grp.words.length - 1]?.e ?? 0;
@@ -986,7 +1485,9 @@ export default function ClipEditorPage() {
                   <div
                     key={gIdx}
                     className={`rounded-xl border p-3 transition ${
-                      isCurrent ? "border-[#FFD400]/60 bg-[#FFD400]/5" : "border-zinc-800/90 bg-zinc-950/60"
+                      isCurrent
+                        ? "border-[#FFD400]/60 bg-[#FFD400]/5"
+                        : "border-zinc-800/90 bg-zinc-950/60"
                     }`}
                   >
                     <div className="mb-2 flex items-center justify-between text-[11px]">
@@ -1013,7 +1514,8 @@ export default function ClipEditorPage() {
                               className="h-4 w-4 object-contain"
                             />
                             <span>
-                              {emojiCatalog.find((x) => x.id === grp.emoji?.id)?.name ?? grp.emoji.id}
+                              {emojiCatalog.find((x) => x.id === grp.emoji?.id)?.name ??
+                                grp.emoji.id}
                             </span>
                           </>
                         ) : (
@@ -1063,7 +1565,9 @@ export default function ClipEditorPage() {
                         </div>
                         <div className="grid max-h-40 grid-cols-7 gap-1.5 overflow-y-auto sm:grid-cols-10">
                           {emojiCatalog
-                            .filter((em) => emojiCategoryFilter === "all" || em.category === emojiCategoryFilter)
+                            .filter(
+                              (em) => emojiCategoryFilter === "all" || em.category === emojiCategoryFilter
+                            )
                             .map((em) => (
                               <button
                                 key={em.id}
@@ -1123,7 +1627,9 @@ export default function ClipEditorPage() {
                             }
                             title="Resaltar esta palabra en verde"
                             className={`rounded px-1.5 py-0.5 text-[10px] font-bold transition ${
-                              w.emphasis ? "bg-[#39FF14] text-black" : "bg-zinc-800 text-zinc-400 hover:text-white"
+                              w.emphasis
+                                ? "bg-[#39FF14] text-black"
+                                : "bg-zinc-800 text-zinc-400 hover:text-white"
                             }`}
                           >
                             <Sparkles className="inline h-3 w-3" />
@@ -1137,34 +1643,84 @@ export default function ClipEditorPage() {
             </div>
           )}
 
-          {/* TAB 2: CAMERA CROP KEYFRAMES & FULLSCREEN REACTIONS */}
+          {/* TAB 2: CAMERA & LAYOUT TEMPLATES */}
           {activeTab === "camera" && (
             <div className="max-h-[580px] space-y-5 overflow-y-auto pr-1">
-              <p className="text-xs text-zinc-400">
-                Tu cámara ya sigue tu rostro automáticamente. Usa estos botones para destacar un momento gracioso o de
-                sorpresa en el segundo actual:
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={addImpactZoomAtPlayhead}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#39FF14]/15 px-3.5 py-2 text-xs font-bold text-[#39FF14] ring-1 ring-[#39FF14]/40 hover:bg-[#39FF14]/25"
-                >
-                  <Plus className="h-3.5 w-3.5" /> Acercar cámara aquí ({clipTime.toFixed(1)}s)
-                </button>
-                <button
-                  type="button"
-                  onClick={addFullscreenReactionAtPlayhead}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-purple-500/15 px-3.5 py-2 text-xs font-bold text-purple-300 ring-1 ring-purple-500/40 hover:bg-purple-500/25"
-                >
-                  <Maximize2 className="h-3.5 w-3.5" /> Poner tu cámara a pantalla completa 2s aquí
-                </button>
+              {/* Module 2: Quick Layout Templates */}
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-zinc-400">
+                  Plantillas Rápidas de Disposición (1 Clic)
+                </h3>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <button
+                    type="button"
+                    onClick={() => applyLayoutTemplate("classic_gaming")}
+                    className="flex flex-col items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-center transition hover:border-[#FFD400] hover:bg-zinc-900"
+                  >
+                    <Layers className="mb-1.5 h-5 w-5 text-[#FFD400]" />
+                    <span className="text-xs font-bold text-white">Clásico Gaming</span>
+                    <span className="text-[10px] text-zinc-400">40% Cámara / 60% Juego</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => applyLayoutTemplate("gameplay_priority")}
+                    className="flex flex-col items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-center transition hover:border-[#FFD400] hover:bg-zinc-900"
+                  >
+                    <Crosshair className="mb-1.5 h-5 w-5 text-emerald-400" />
+                    <span className="text-xs font-bold text-white">Gameplay Prioritario</span>
+                    <span className="text-[10px] text-zinc-400">25% Cámara / 75% Juego</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => applyLayoutTemplate("reaction_full")}
+                    className="flex flex-col items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-center transition hover:border-[#FFD400] hover:bg-zinc-900"
+                  >
+                    <Maximize2 className="mb-1.5 h-5 w-5 text-purple-400" />
+                    <span className="text-xs font-bold text-white">Reacción Total</span>
+                    <span className="text-[10px] text-zinc-400">100% Cámara (2s)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => applyLayoutTemplate("gameplay_full")}
+                    className="flex flex-col items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-center transition hover:border-[#FFD400] hover:bg-zinc-900"
+                  >
+                    <Film className="mb-1.5 h-5 w-5 text-blue-400" />
+                    <span className="text-xs font-bold text-white">Juego Completo</span>
+                    <span className="text-[10px] text-zinc-400">100% Gameplay</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Layout overrides */}
+              {/* Action buttons at playhead */}
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-zinc-400">
+                  Efectos de Reacción en el Segundo Actual ({clipTime.toFixed(1)}s)
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={addImpactZoomAtPlayhead}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#39FF14]/15 px-3.5 py-2 text-xs font-bold text-[#39FF14] ring-1 ring-[#39FF14]/40 hover:bg-[#39FF14]/25"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Acercar cámara aquí ({clipTime.toFixed(1)}s)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyLayoutTemplate("reaction_full")}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-purple-500/15 px-3.5 py-2 text-xs font-bold text-purple-300 ring-1 ring-purple-500/40 hover:bg-purple-500/25"
+                  >
+                    <Maximize2 className="h-3.5 w-3.5" /> Cámara completa 2s aquí
+                  </button>
+                </div>
+              </div>
+
+              {/* Active Layout overrides list */}
               <div className="space-y-2">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
-                  Disposición en pantalla (Cámara + Juego vs Cámara completa)
+                  Secuencia de Disposición ({plan.layout.length})
                 </h3>
                 {plan.layout.map((ev, idx) => (
                   <div
@@ -1172,7 +1728,13 @@ export default function ClipEditorPage() {
                     className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-xs"
                   >
                     <span className="text-zinc-200">
-                      <strong>{ev.kind === "camera_full" ? "Cámara a pantalla completa" : "Pantalla dividida (Cámara arriba / Juego abajo)"}</strong>{" "}
+                      <strong>
+                        {ev.kind === "camera_full"
+                          ? "Cámara a pantalla completa"
+                          : ev.kind === "gameplay_full"
+                            ? "Juego a pantalla completa"
+                            : `Pantalla dividida (${Math.round((ev.camera_ratio ?? 0.4) * 100)}% Cámara / ${Math.round((1 - (ev.camera_ratio ?? 0.4)) * 100)}% Juego)`}
+                      </strong>{" "}
                       · desde {ev.t.toFixed(1)}s
                       {ev.until != null ? ` hasta ${ev.until.toFixed(1)}s` : ""}
                     </span>
@@ -1194,11 +1756,16 @@ export default function ClipEditorPage() {
                 ))}
               </div>
 
-              {/* Camera Crop Keyframes */}
+              {/* Camera Crop Keyframes list */}
               <div className="space-y-2">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
-                  Puntos de movimiento y acercamiento ({plan.camera_crop.length})
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+                    Puntos de encuadre ({plan.camera_crop.length})
+                  </h3>
+                  <span className="text-[11px] text-zinc-500">
+                    Arrastra directamente en el visor para mover
+                  </span>
+                </div>
                 {plan.camera_crop.map((kf, idx) => (
                   <div
                     key={idx}
@@ -1211,40 +1778,12 @@ export default function ClipEditorPage() {
                     >
                       {kf.t.toFixed(2)}s
                     </button>
-                    <label className="col-span-3 flex items-center gap-1 text-[11px] text-zinc-400">
-                      Lado
-                      <input
-                        type="number"
-                        step="0.02"
-                        min="0.1"
-                        max="0.9"
-                        value={kf.cx}
-                        onChange={(e) =>
-                          mutatePlan((d) => {
-                            d.camera_crop[idx].cx = parseFloat(e.target.value) || 0.5;
-                            return d;
-                          })
-                        }
-                        className="w-14 rounded border border-zinc-800 bg-zinc-900 px-1.5 py-0.5 font-mono text-white"
-                      />
-                    </label>
-                    <label className="col-span-3 flex items-center gap-1 text-[11px] text-zinc-400">
-                      Zoom
-                      <input
-                        type="number"
-                        step="0.05"
-                        min="1.0"
-                        max="2.8"
-                        value={kf.zoom}
-                        onChange={(e) =>
-                          mutatePlan((d) => {
-                            d.camera_crop[idx].zoom = Math.max(1, parseFloat(e.target.value) || 1);
-                            return d;
-                          })
-                        }
-                        className="w-14 rounded border border-zinc-800 bg-zinc-900 px-1.5 py-0.5 font-mono text-white"
-                      />
-                    </label>
+                    <div className="col-span-3 text-[11px] text-zinc-300">
+                      Centro: <strong>{(kf.cx * 100).toFixed(0)}%</strong>
+                    </div>
+                    <div className="col-span-3 text-[11px] text-zinc-300">
+                      Zoom: <strong>{kf.zoom.toFixed(2)}x</strong>
+                    </div>
                     <select
                       value={kf.ease ?? "linear"}
                       onChange={(e) =>
@@ -1279,12 +1818,13 @@ export default function ClipEditorPage() {
             </div>
           )}
 
-          {/* TAB 3: OVERLAY TITLE, JUMP CUT RANGES & AUDIO */}
+          {/* TAB 3: SIMPLIFIED AUDIO MIXER, OVERLAY TITLE & JUMP CUTS */}
           {activeTab === "cuts" && (
             <div className="space-y-5">
+              {/* Overlay Title */}
               <div>
                 <label className="mb-1 block text-xs font-bold text-zinc-300">
-                  Título llamativo al inicio (se muestra los primeros 3 segundos para atrapar la atención)
+                  Título llamativo inicial (se muestra los primeros 3 segundos)
                 </label>
                 <input
                   type="text"
@@ -1304,89 +1844,120 @@ export default function ClipEditorPage() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-zinc-300">
-                    Tramos de la partida incluidos ({plan.source.ranges.length})
-                  </label>
-                  <span className="text-[11px] text-zinc-500">Quitamos las pausas largas para mantener el ritmo</span>
+              {/* Module 4: Intuitive Audio Controls */}
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Sliders className="h-4 w-4 text-[#FFD400]" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+                    Mezclador de Audio Intuitivo
+                  </h3>
                 </div>
-                {plan.source.ranges.map(([a, b], idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-xs"
-                  >
-                    <span className="font-mono text-zinc-300">
-                      Parte #{idx + 1}: del segundo <strong>{a.toFixed(1)}s</strong> al <strong>{b.toFixed(1)}s</strong> (
-                      {(b - a).toFixed(1)}s)
+
+                {/* Voice Volume Slider */}
+                <div>
+                  <div className="mb-1.5 flex justify-between text-xs">
+                    <span className="flex items-center gap-1 font-bold text-zinc-300">
+                      <Volume2 className="h-3.5 w-3.5 text-[#FFD400]" /> Volumen de tu Voz
                     </span>
-                    <Check className="h-3.5 w-3.5 text-[#39FF14]" />
+                    <span className="font-mono font-bold text-[#FFD400]">
+                      {dbToVoicePct(plan.audio.mic_gain_db)}%{" "}
+                      <span className="text-[10px] text-zinc-500 font-normal">
+                        ({plan.audio.mic_gain_db >= 0 ? "+" : ""}
+                        {plan.audio.mic_gain_db.toFixed(1)} dB)
+                      </span>
+                    </span>
                   </div>
-                ))}
+                  <input
+                    type="range"
+                    min={0}
+                    max={150}
+                    step={1}
+                    value={dbToVoicePct(plan.audio.mic_gain_db)}
+                    onChange={(e) => {
+                      const pct = parseInt(e.target.value, 10);
+                      const db = voicePctToDb(pct);
+                      mutatePlan((d) => {
+                        d.audio.mic_gain_db = db;
+                        return d;
+                      });
+                    }}
+                    className="h-2 w-full cursor-pointer accent-[#FFD400]"
+                  />
+                  <div className="mt-1 flex justify-between text-[10px] text-zinc-500">
+                    <span>Silencio (0%)</span>
+                    <span>Natural (100%)</span>
+                    <span>Potenciado (150%)</span>
+                  </div>
+                </div>
+
+                {/* Game Audio Ducking Selector */}
+                <div>
+                  <label className="mb-2 block text-xs font-bold text-zinc-300">
+                    Atenuación del Juego al Hablar
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {DUCK_PRESETS.map((presetItem) => {
+                      const isSelected =
+                        Math.abs(plan.audio.duck_game_db - presetItem.db) < 1.0;
+                      return (
+                        <button
+                          key={presetItem.db}
+                          type="button"
+                          onClick={() => {
+                            mutatePlan((d) => {
+                              d.audio.duck_game_db = presetItem.db;
+                              return d;
+                            });
+                          }}
+                          className={`flex flex-col rounded-xl border p-2.5 text-left transition ${
+                            isSelected
+                              ? "border-[#39FF14] bg-[#39FF14]/10 ring-1 ring-[#39FF14]/50"
+                              : "border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800/80"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span
+                              className={`text-xs font-bold ${
+                                isSelected ? "text-[#39FF14]" : "text-white"
+                              }`}
+                            >
+                              {presetItem.label}
+                            </span>
+                            {isSelected && <Check className="h-3.5 w-3.5 text-[#39FF14]" />}
+                          </div>
+                          <span className="text-[10px] text-zinc-400 mt-0.5">
+                            {presetItem.desc}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Live Ducking meter */}
+                <div className="pt-2 border-t border-zinc-800/80">
+                  <div className="flex items-center justify-between text-[11px] mb-1">
+                    <span className="text-zinc-400">
+                      Atenuación reactiva del juego en tiempo real:
+                    </span>
+                    <span className="font-mono font-bold text-[#FFD400]">
+                      {liveDuckPct}%
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-900">
+                    <div
+                      className="h-full bg-[#39FF14] transition-all duration-75"
+                      style={{ width: `${Math.min(100, liveDuckPct)}%` }}
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 border-t border-zinc-800 pt-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1 flex items-center gap-1.5 text-xs font-bold text-zinc-300">
-                    <Volume2 className="h-3.5 w-3.5 text-[#FFD400]" /> Volumen de tu micrófono (dB)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    value={plan.audio.mic_gain_db}
-                    onChange={(e) =>
-                      mutatePlan((d) => {
-                        d.audio.mic_gain_db = parseFloat(e.target.value) || 0;
-                        return d;
-                      })
-                    }
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 font-mono text-xs text-white"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 flex items-center gap-1.5 text-xs font-bold text-zinc-300">
-                    <Volume2 className="h-3.5 w-3.5 text-[#39FF14]" /> Bajar juego cuando hablas (dB)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    value={plan.audio.duck_game_db}
-                    onChange={(e) =>
-                      mutatePlan((d) => {
-                        d.audio.duck_game_db = parseFloat(e.target.value) || -9;
-                        return d;
-                      })
-                    }
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 font-mono text-xs text-white"
-                  />
-                </div>
-              </div>
-
-              {/* Web Audio API Real-Time Mixer Status & SFX Controls */}
+              {/* Sound Effects & Hits */}
               <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-950/70 p-3.5 text-xs">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-bold text-white">
-                    Equilibrio de voz y juego en vivo ·{" "}
-                    <span className="text-[#39FF14]">
-                      {session.prepared?.gameplay_clean_audio_stream != null
-                        ? "El juego baja solo cuando hablas"
-                        : "Voz realzada con limpieza de ruido"}
-                    </span>
-                  </span>
-                  <span className="font-mono text-[11px] text-zinc-400">
-                    Reducción actual: <strong className="text-[#FFD400]">{liveDuckPct}%</strong>
-                  </span>
-                </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-900">
-                  <div
-                    className="h-full bg-[#39FF14] transition-all duration-75"
-                    style={{ width: `${Math.min(100, liveDuckPct)}%` }}
-                  />
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800/80 pt-3">
                   <span className="font-bold text-zinc-300">
-                    Efectos de sonido para impactos ({plan.audio.sfx.length})
+                    Efectos de sonido ({plan.audio.sfx.length})
                   </span>
                   <div className="flex gap-2">
                     <button
@@ -1447,6 +2018,28 @@ export default function ClipEditorPage() {
                     ))}
                   </div>
                 )}
+              </div>
+
+              {/* Jump cut ranges */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-zinc-300">
+                    Tramos de partida incluidos ({plan.source.ranges.length})
+                  </label>
+                  <span className="text-[11px] text-zinc-500">Pausas largas eliminadas</span>
+                </div>
+                {plan.source.ranges.map(([a, b], idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-xs"
+                  >
+                    <span className="font-mono text-zinc-300">
+                      Parte #{idx + 1}: del segundo <strong>{a.toFixed(1)}s</strong> al{" "}
+                      <strong>{b.toFixed(1)}s</strong> ({(b - a).toFixed(1)}s)
+                    </span>
+                    <Check className="h-3.5 w-3.5 text-[#39FF14]" />
+                  </div>
+                ))}
               </div>
             </div>
           )}

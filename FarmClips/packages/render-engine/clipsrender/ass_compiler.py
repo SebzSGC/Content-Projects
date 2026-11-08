@@ -65,7 +65,8 @@ def compile_ass(plan: EditPlan, preset: StylePreset, render_w: int, render_h: in
 
     seam_y = int(round(render_h * base_cam_ratio))
     game_h = render_h - seam_y
-    caption_y = seam_y + int(round(game_h * c_spec.gameplay_top_third_ratio))
+    caption_ratio = plan.captions.vertical_ratio if getattr(plan.captions, "vertical_ratio", None) is not None else c_spec.gameplay_top_third_ratio
+    caption_y = seam_y + int(round(game_h * caption_ratio))
     center_x = render_w // 2
 
     header = f"""[Script Info]

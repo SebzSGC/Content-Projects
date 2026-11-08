@@ -1991,6 +1991,19 @@
             },
             "type": "array",
             "title": "Groups"
+          },
+          "vertical_ratio": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 0.95,
+                "minimum": 0.05
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vertical Ratio"
           }
         },
         "additionalProperties": false,

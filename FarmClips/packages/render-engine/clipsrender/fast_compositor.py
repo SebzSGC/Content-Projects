@@ -486,7 +486,8 @@ def render_fast_affine_sync(
             break
     cam_panel_h = _even(render_h * base_cam_ratio)
     game_panel_h = render_h - cam_panel_h
-    caption_y = cam_panel_h + int(round(game_panel_h * preset.captions.gameplay_top_third_ratio))
+    caption_ratio = plan.captions.vertical_ratio if getattr(plan.captions, "vertical_ratio", None) is not None else preset.captions.gameplay_top_third_ratio
+    caption_y = cam_panel_h + int(round(game_panel_h * caption_ratio))
     base_em_x = (render_w - em_px) // 2
     base_em_y = max(cam_panel_h + 8, caption_y - em_px - int(round(28 * scale_ratio)))
 

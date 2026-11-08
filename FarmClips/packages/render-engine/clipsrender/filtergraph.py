@@ -253,7 +253,8 @@ def compile_ffmpeg_plan(
     # 3. Color Emoji PNG overlays (libass does not render color bitmap/vector emojis reliably)
     if emoji_overlays:
         em_px = _even(max(36, preset.emojis.size_px * scale_ratio))
-        caption_y = cam_h + int(round(game_h * preset.captions.gameplay_top_third_ratio))
+        caption_ratio = plan.captions.vertical_ratio if getattr(plan.captions, "vertical_ratio", None) is not None else preset.captions.gameplay_top_third_ratio
+        caption_y = cam_h + int(round(game_h * caption_ratio))
         em_x = (render_w - em_px) // 2
         em_y = max(cam_h + 8, caption_y - em_px - int(round(28 * scale_ratio)))
         for idx_em, (inp_i, es, ee) in enumerate(emoji_overlays):
