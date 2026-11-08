@@ -13,9 +13,29 @@ etiquetas: [tipo/cambios, area/general]
 > [!abstract] En pocas palabras
 > Registro cronológico de las versiones de FarmClips, nuevas funcionalidades, optimizaciones de rendimiento y ajustes en la arquitectura del sistema.
 
+## [2.4.1] — 2026-11-07 (Versión actual)
+
+### 🖼️ Miniaturas visuales compuestas en tiempo real y eliminación de estados falsos de carga
+
+Esta actualización resuelve la visualización de los clips en la vista de detalle de sesión (`/sessions/[id]`). Anteriormente, los clips recién descubiertos por el pipeline que aún no habían sido exportados a video final mostraban un contenedor oscuro con un icono de carga giratorio y un texto de «Listo para editar en vivo» que provocaba la falsa sensación de bloqueo o carga infinita. Ahora cada clip muestra de inmediato una miniatura vertical 9:16 real y nítida de la jugada con botón directo al editor interactivo.
+
+#### Qué cambió
+- **Endpoint de miniaturas compuestas en caché (`GET /clips/{clip_id}/thumbnail`)**:
+  - Si el clip ya tiene un archivo MP4 renderizado (borrador o final), extrae un fotograma del video exportado.
+  - Si el video aún no está renderizado en disco, toma el momento exacto del clip (`start + 1.0s`) y compone automáticamente una miniatura vertical 9:16 (540×960) con cámara arriba (40%) y juego abajo (60%) sincronizados por sonido, o fotograma completo del juego si no hay cámara.
+  - Almacena el resultado en caché de disco (`data/cache/thumbnails/{clip_id}_{width}.jpg`) y cabeceras HTTP `X-Frame-Cache: HIT`, reduciendo el tiempo de respuesta a menos de 5 ms en visitas posteriores.
+- **Rediseño de tarjetas de clip en Web Studio (`/sessions/[id]`)**:
+  - Se eliminó por completo el spinner giratorio y el efecto de parpadeo (`animate-pulse`) en clips que no se encuentran en proceso de renderizado activo.
+  - La tarjeta ahora muestra la miniatura real del momento cumbre del clip con un degradado sutil, la insignia de duración en segundos y un botón flotante «Personalizar en vivo».
+  - La barra de progreso de renderizado y el spinner únicamente se activan cuando el usuario solicita activamente la creación del video vertical.
+
+> [!warning] ⚠️ Cambia para ti
+> - Ya no verás pantallas negras con círculos girando en tus clips nuevos: ahora verás de inmediato la imagen real del juego y de tu cámara para que reconozcas cada jugada al instante.
+> - Puedes hacer clic en «Personalizar en vivo» sobre la miniatura para abrir el clip en el editor.
+
 ---
 
-## [2.4.0] — 2026-11-07 (Versión actual)
+## [2.4.0] — 2026-11-07
 
 ### 🎬 Editor Web WYSIWYG: Reencuadre visual directo, plantillas de disposición en 1 clic y 60 fps sin jitter
 

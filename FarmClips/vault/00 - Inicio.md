@@ -6,7 +6,7 @@ audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
 actualizado: 2026-11-07
 etiquetas: [tipo/inicio]
-commit_codigo: b0c9d33
+commit_codigo: 75e2348
 ---
 
 # 🏠 FarmClips — Arquitectura Híbrida

@@ -45,8 +45,9 @@ etiquetas: [tipo/api, area/backend]
 | `GET` | `/clips/{clip_id}` | Obtiene los datos del clip, puntuaciones y EditPlan. | URL: `{clip_id}` |
 | `PUT` | `/clips/{clip_id}/editplan` | Guarda modificaciones manuales del EditPlan (estado `EDITED`). | JSON: objeto `EditPlan` completo |
 | `POST`| `/clips/{clip_id}/render` | Solicita renderizado manual de un clip en borrador o final. | JSON: `quality: "draft"\|"final"` |
+| `GET` | `/clips/{clip_id}/thumbnail` | Obtiene o genera una miniatura vertical 9:16 compuesta en caché (gameplay + cámara). | `?width=540` |
+| `GET` | `/clips/{clip_id}/file` | Descarga o reproduce el render MP4 (`final` o `draft`) del clip. | `?quality=draft\|final&download=bool` |
 | `GET` | `/clips/{clip_id}/stream/{video}` | Servidor de streaming con soporte de rangos HTTP 206. | `{video}`: `"gameplay"` o `"camera"` |
-| `GET` | `/clips/{clip_id}/preview.mp4` | Descarga o reproduce el render MP4 del clip. | `?quality=draft\|final` |
 
 ---
 
