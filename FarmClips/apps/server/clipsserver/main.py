@@ -19,11 +19,6 @@ def main(argv=None) -> int:
     p_cg = sub.add_parser("codegen", help="Exporta JSON Schema de EditPlan v2, OpenAPI y tipos TypeScript")
     p_cg.add_argument("--web-dir", type=Path, default=Path("apps/web"))
 
-    sub.add_parser(
-        "resolve-mcp",
-        help="Inicia el servidor MCP (JSON-RPC 2.0 por stdio) para integrar DaVinci Resolve localmente",
-    )
-
     args = parser.parse_args(argv)
 
     if args.cmd == "serve":
@@ -38,12 +33,6 @@ def main(argv=None) -> int:
             reload=False,
         )
         return 0
-
-    if args.cmd == "resolve-mcp":
-        from clipsrender.resolve_mcp import ResolveMcpServer
-
-        server = ResolveMcpServer()
-        return server.run_stdio_forever()
 
     if args.cmd == "codegen":
         from clipseditplan import export_json_schema, generate_typescript

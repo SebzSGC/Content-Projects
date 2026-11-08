@@ -83,21 +83,6 @@ class RenderClipBody(BaseModel):
     async_mode: bool = False
 
 
-class ResolveExportClipBody(BaseModel):
-    open_in_resolve: bool = True
-    trigger_render: bool = False
-    project_name: Optional[str] = None
-    async_mode: bool = False
-
-
-class ResolveExportSessionBody(BaseModel):
-    top_k: Optional[int] = Field(default=None, ge=1, le=50)
-    open_in_resolve: bool = True
-    trigger_render: bool = False
-    project_name: Optional[str] = None
-    async_mode: bool = False
-
-
 class CleanupBody(BaseModel):
     ttl_days: Optional[float] = None
     include_inputs: bool = False
@@ -125,12 +110,6 @@ class UpdateSettingsBody(BaseModel):
     openai_api_key: Optional[str] = None
     webhook_url: Optional[str] = None
     temp_ttl_days: Optional[float] = Field(default=None, ge=0.0, le=3650.0)
-    editor_backend: Optional[Literal["local", "resolve_mcp", "both"]] = None
-    resolve_mcp_mode: Optional[Literal["auto", "mcp_stdio", "mcp_http", "direct_script", "bundle_only"]] = None
-    resolve_mcp_command: Optional[str] = None
-    resolve_mcp_url: Optional[str] = None
-    resolve_project_prefix: Optional[str] = None
-    resolve_auto_export: Optional[bool] = None
     drive_mode: Optional[Literal["local", "oauth", "service_account", "disabled"]] = None
     drive_client_id: Optional[str] = None
     drive_client_secret: Optional[str] = None
@@ -506,18 +485,6 @@ def create_app(
         if body.temp_ttl_days is not None:
             env_updates["CLIPS_TEMP_TTL_DAYS"] = str(float(body.temp_ttl_days))
 
-        if body.editor_backend is not None:
-            env_updates["CLIPS_EDITOR_BACKEND"] = body.editor_backend.strip().lower()
-        if body.resolve_mcp_mode is not None:
-            env_updates["CLIPS_RESOLVE_MCP_MODE"] = body.resolve_mcp_mode.strip().lower()
-        if body.resolve_mcp_command is not None:
-            env_updates["CLIPS_RESOLVE_MCP_COMMAND"] = body.resolve_mcp_command.strip()
-        if body.resolve_mcp_url is not None:
-            env_updates["CLIPS_RESOLVE_MCP_URL"] = body.resolve_mcp_url.strip()
-        if body.resolve_project_prefix is not None and body.resolve_project_prefix.strip():
-            env_updates["CLIPS_RESOLVE_PROJECT_PREFIX"] = body.resolve_project_prefix.strip()
-        if body.resolve_auto_export is not None:
-            env_updates["CLIPS_RESOLVE_AUTO_EXPORT"] = "true" if body.resolve_auto_export else "false"
 
         if body.drive_mode is not None:
             env_updates["CLIPS_DRIVE_MODE"] = body.drive_mode.strip().lower()
@@ -574,8 +541,6 @@ def create_app(
             llm_model=cfg.llm_model,
             max_budget_usd=cfg.max_budget_usd,
             drive_mode=cfg.drive_mode,
-            editor_backend=cfg.editor_backend,
-            resolve_mcp_mode=cfg.resolve_mcp_mode,
         )
         return cfg.to_masked_dict()
 
@@ -1216,127 +1181,6 @@ def create_app(
             filename=f"{clip_id}_{quality}.mp4" if download else None,
             headers={"Accept-Ranges": "bytes", "Cache-Control": "public, max-age=3600"},
         )
-
-    # --- DaVinci Resolve MCP Integration API -------------------------------
-
-    @app.get("/resolve/status")
-    def resolve_mcp_status(refresh: bool = False) -> Dict[str, Any]:
-        return orch.get_resolve_status(force_refresh=refresh)
-
-    @app.post("/clips/{clip_id}/resolve")
-    async def export_clip_resolve_endpoint(
-        clip_id: str,
-        body: Optional[ResolveExportClipBody] = None,
-    ) -> Dict[str, Any]:
-        req = body or ResolveExportClipBody()
-        crow = orch.db.get_clip(clip_id)
-        if not crow:
-            raise HTTPException(404, f"Clip {clip_id} no encontrado")
-
-        if req.async_mode:
-            asyncio.create_task(
-                orch.export_clip_to_resolve(
-                    clip_id=clip_id,
-                    open_in_resolve=req.open_in_resolve,
-                    trigger_render=req.trigger_render,
-                    project_name=req.project_name,
-                )
-            )
-            return {
-                "ok": True,
-                "status": "queued",
-                "clip_id": clip_id,
-                "message": "Preparando paquete y conectando con DaVinci Resolve en segundo plano…",
-                "project_name": req.project_name or "FarmClips",
-                "timeline_name": f"clip_{int(crow.get('rank_order') or 1):02d}_9x16",
-                "connected_to_resolve": False,
-            }
-
-        try:
-            return await orch.export_clip_to_resolve(
-                clip_id=clip_id,
-                open_in_resolve=req.open_in_resolve,
-                trigger_render=req.trigger_render,
-                project_name=req.project_name,
-            )
-        except KeyError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        except RuntimeError as exc:
-            raise HTTPException(400, str(exc)) from exc
-
-    @app.post("/sessions/{session_id}/resolve")
-    async def export_session_resolve_endpoint(
-        session_id: str,
-        body: Optional[ResolveExportSessionBody] = None,
-    ) -> Dict[str, Any]:
-        req = body or ResolveExportSessionBody()
-        srow = orch.db.get_session(session_id)
-        if not srow:
-            raise HTTPException(404, f"Sesión {session_id} no encontrada")
-
-        if req.async_mode:
-            asyncio.create_task(
-                orch.export_session_to_resolve(
-                    session_id=session_id,
-                    top_k=req.top_k,
-                    open_in_resolve=req.open_in_resolve,
-                    trigger_render=req.trigger_render,
-                    project_name=req.project_name,
-                )
-            )
-            return {
-                "ok": True,
-                "status": "queued",
-                "session_id": session_id,
-                "message": "Exportando clips de la sesión a DaVinci Resolve en segundo plano…",
-                "project_name": req.project_name or "FarmClips",
-                "exported_clips_count": 0,
-            }
-
-        try:
-            return await orch.export_session_to_resolve(
-                session_id=session_id,
-                top_k=req.top_k,
-                open_in_resolve=req.open_in_resolve,
-                trigger_render=req.trigger_render,
-                project_name=req.project_name,
-            )
-        except KeyError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        except RuntimeError as exc:
-            raise HTTPException(400, str(exc)) from exc
-
-    @app.get("/clips/{clip_id}/resolve/download/{artifact}")
-    def download_resolve_artifact(
-        clip_id: str,
-        artifact: Literal["fcpxml", "srt", "ass", "script", "mcp_plan"],
-    ) -> FileResponse:
-        crow = orch.db.get_clip(clip_id)
-        if not crow:
-            raise HTTPException(404, "Clip no encontrado")
-        rdir = orch.session_dir(crow["session_id"]) / "clips" / clip_id / "resolve"
-        if not rdir.is_dir():
-            raise HTTPException(404, "El paquete de DaVinci Resolve aún no se ha generado para este clip.")
-
-        if artifact == "fcpxml":
-            target = next(rdir.glob("*.fcpxml"), None)
-            media_type = "application/xml"
-        elif artifact == "srt":
-            target = next(rdir.glob("*.srt"), None)
-            media_type = "text/plain; charset=utf-8"
-        elif artifact == "ass":
-            target = next(rdir.glob("*.ass"), None)
-            media_type = "text/plain; charset=utf-8"
-        elif artifact == "script":
-            target = rdir / "resolve_build_timeline.py"
-            media_type = "text/x-python; charset=utf-8"
-        else:
-            target = rdir / "resolve_mcp_plan.json"
-            media_type = "application/json"
-
-        if target is None or not target.is_file():
-            raise HTTPException(404, f"Artefacto '{artifact}' no encontrado.")
-        return FileResponse(target, media_type=media_type, filename=target.name)
 
     # --- Server-Sent Events (SSE) ------------------------------------------
 

@@ -235,9 +235,6 @@ export interface ServerSseEvent {
   stt_primary?: string;
   llm_primary?: string;
   llm_model?: string;
-  connected_to_resolve?: boolean;
-  timeline_name?: string;
-  project_name?: string;
 }
 
 export interface ApiKeyStatus {
@@ -262,12 +259,6 @@ export interface AppSettings {
   auto_render_top_k: number;
   auto_render_min_score: number;
   default_keyterms: string[];
-  editor_backend?: "local" | "resolve_mcp" | "both";
-  resolve_mcp_mode?: "auto" | "mcp_stdio" | "mcp_http" | "direct_script" | "bundle_only";
-  resolve_mcp_command?: string;
-  resolve_mcp_url?: string;
-  resolve_project_prefix?: string;
-  resolve_auto_export?: boolean;
   drive_mode?: "local" | "oauth" | "service_account" | "disabled";
   drive_local_dir?: string;
   drive_root_folder_id?: string;
@@ -309,68 +300,12 @@ export interface UpdateSettingsPayload {
   openai_api_key?: string;
   webhook_url?: string;
   temp_ttl_days?: number;
-  editor_backend?: "local" | "resolve_mcp" | "both";
-  resolve_mcp_mode?: "auto" | "mcp_stdio" | "mcp_http" | "direct_script" | "bundle_only";
-  resolve_mcp_command?: string;
-  resolve_mcp_url?: string;
-  resolve_project_prefix?: string;
-  resolve_auto_export?: boolean;
   drive_mode?: "local" | "oauth" | "service_account" | "disabled";
   drive_client_id?: string;
   drive_client_secret?: string;
   drive_root_folder_id?: string;
   drive_local_dir?: string;
   drive_poll_sec?: number;
-}
-
-export interface ResolveStatusResponse {
-  installed: boolean;
-  resolve_binary_path: string | null;
-  scripting_modules_dir: string | null;
-  fusionscript_lib_path: string | null;
-  process_running: boolean;
-  scripting_connected: boolean;
-  product_info: string;
-  editor_backend: "local" | "resolve_mcp" | "both" | string;
-  mcp_mode: "auto" | "mcp_stdio" | "mcp_http" | "direct_script" | "bundle_only" | string;
-  mcp_command: string;
-  mcp_url: string;
-  mcp_server_ready: boolean;
-  available_tools: string[];
-  instructions: string[];
-}
-
-export interface ResolveClipExportResponse {
-  ok: boolean;
-  status?: string;
-  clip_id: string;
-  session_id?: string;
-  project_name: string;
-  timeline_name: string;
-  bundle_dir?: string;
-  fcpxml_path?: string;
-  srt_path?: string;
-  ass_path?: string;
-  script_path?: string;
-  mcp_plan_path?: string;
-  mode_used?: string;
-  connected_to_resolve: boolean;
-  message: string;
-  segments_count?: number;
-  captions_count?: number;
-  sfx_count?: number;
-  markers_count?: number;
-  tool_calls?: { tool: string; arguments: Record<string, unknown> }[];
-}
-
-export interface ResolveSessionExportResponse {
-  ok: boolean;
-  status?: string;
-  session_id: string;
-  project_name: string;
-  exported_count?: number;
-  clips?: ResolveClipExportResponse[];
-  message?: string;
 }
 
 export interface TestConnectionResult {
@@ -807,43 +742,6 @@ export const renderClip = (clipId: string, quality: "draft" | "final", upload_to
     method: "POST",
     body: JSON.stringify({ quality, upload_to_drive }),
   });
-
-export const fetchResolveStatus = (forceRefresh = false) =>
-  apiJson<ResolveStatusResponse>(`/resolve/status${forceRefresh ? "?refresh=true" : ""}`);
-
-export const exportClipToResolve = (
-  clipId: string,
-  options?: { open_in_resolve?: boolean; trigger_render?: boolean; project_name?: string; async_mode?: boolean }
-) =>
-  apiJson<ResolveClipExportResponse>(`/clips/${encodeURIComponent(clipId)}/resolve`, {
-    method: "POST",
-    body: JSON.stringify({
-      open_in_resolve: options?.open_in_resolve ?? true,
-      trigger_render: options?.trigger_render ?? false,
-      project_name: options?.project_name,
-      async_mode: options?.async_mode ?? true,
-    }),
-  });
-
-export const exportSessionToResolve = (
-  sessionId: string,
-  options?: { top_k?: number; open_in_resolve?: boolean; trigger_render?: boolean; project_name?: string; async_mode?: boolean }
-) =>
-  apiJson<ResolveSessionExportResponse>(`/sessions/${encodeURIComponent(sessionId)}/resolve`, {
-    method: "POST",
-    body: JSON.stringify({
-      top_k: options?.top_k,
-      open_in_resolve: options?.open_in_resolve ?? true,
-      trigger_render: options?.trigger_render ?? false,
-      project_name: options?.project_name,
-      async_mode: options?.async_mode ?? true,
-    }),
-  });
-
-export const resolveArtifactUrl = (
-  clipId: string,
-  artifact: "fcpxml" | "srt" | "ass" | "script" | "mcp_plan"
-) => `${API_PREFIX}/clips/${encodeURIComponent(clipId)}/resolve/download/${artifact}`;
 
 type SseListener = {
   sessionId?: string;

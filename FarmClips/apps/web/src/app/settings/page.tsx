@@ -25,14 +25,12 @@ import {
   type AppSettings,
   type BudgetSummary,
   type DriveStatus,
-  type ResolveStatusResponse,
   type TestConnectionResult,
   completeDriveAuthCallback,
   disconnectDriveAuth,
   fetchBudget,
   fetchDriveAuthUrl,
   fetchDriveStatus,
-  fetchResolveStatus,
   getSettings,
   saveSettings,
   testSettingsConnection,
@@ -65,10 +63,8 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [budget, setBudget] = useState<BudgetSummary | null>(null);
   const [driveStatus, setDriveStatus] = useState<DriveStatus | null>(null);
-  const [resolveStatus, setResolveStatus] = useState<ResolveStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingDrive, setLoadingDrive] = useState(false);
-  const [loadingResolve, setLoadingResolve] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
@@ -88,14 +84,6 @@ export default function SettingsPage() {
   const [maxBudgetUsd, setMaxBudgetUsd] = useState<number>(9.0);
   const [webhookUrl, setWebhookUrl] = useState<string>("");
   const [tempTtlDays, setTempTtlDays] = useState<number>(7.0);
-
-  // DaVinci Resolve MCP & Editor Backend state
-  const [editorBackend, setEditorBackend] = useState<"local" | "resolve_mcp" | "both">("local");
-  const [resolveMcpMode, setResolveMcpMode] = useState<"auto" | "mcp_stdio" | "mcp_http" | "direct_script" | "bundle_only">("auto");
-  const [resolveMcpCommand, setResolveMcpCommand] = useState("");
-  const [resolveMcpUrl, setResolveMcpUrl] = useState("");
-  const [resolveProjectPrefix, setResolveProjectPrefix] = useState("FarmClips");
-  const [resolveAutoExport, setResolveAutoExport] = useState(false);
 
   // Google Drive OAuth 2.0 & Watcher state
   const [driveMode, setDriveMode] = useState<"local" | "oauth" | "service_account" | "disabled">("local");
@@ -147,12 +135,6 @@ export default function SettingsPage() {
     setMaxBudgetUsd(s.max_budget_usd);
     setWebhookUrl(s.webhook_url || "");
     setTempTtlDays(s.temp_ttl_days ?? 7.0);
-    setEditorBackend(s.editor_backend || "local");
-    setResolveMcpMode(s.resolve_mcp_mode || "auto");
-    setResolveMcpCommand(s.resolve_mcp_command || "");
-    setResolveMcpUrl(s.resolve_mcp_url || "");
-    setResolveProjectPrefix(s.resolve_project_prefix || "FarmClips");
-    setResolveAutoExport(Boolean(s.resolve_auto_export));
     setDriveMode(s.drive_mode || "local");
     setDriveClientId(s.drive_client_id || "");
     setDriveRootFolderId(s.drive_root_folder_id || "");
@@ -175,17 +157,11 @@ export default function SettingsPage() {
 
       // 2. Cargar diagnósticos externos en paralelo sin bloquear la pantalla
       setLoadingDrive(true);
-      setLoadingResolve(true);
 
       fetchDriveStatus()
         .then((d) => setDriveStatus(d))
         .catch(() => null)
         .finally(() => setLoadingDrive(false));
-
-      fetchResolveStatus()
-        .then((r) => setResolveStatus(r))
-        .catch(() => null)
-        .finally(() => setLoadingResolve(false));
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo cargar la configuración del servidor.");
       setLoading(false);
@@ -225,12 +201,6 @@ export default function SettingsPage() {
         max_budget_usd: Number(maxBudgetUsd) || 9.0,
         webhook_url: webhookUrl.trim(),
         temp_ttl_days: Number(tempTtlDays) >= 0 ? Number(tempTtlDays) : 7.0,
-        editor_backend: editorBackend,
-        resolve_mcp_mode: resolveMcpMode,
-        resolve_mcp_command: resolveMcpCommand.trim(),
-        resolve_mcp_url: resolveMcpUrl.trim(),
-        resolve_project_prefix: resolveProjectPrefix.trim() || "FarmClips",
-        resolve_auto_export: resolveAutoExport,
         drive_mode: driveMode,
         drive_client_id: driveClientId.trim(),
         drive_client_secret: driveClientSecret.trim() || undefined,
@@ -255,7 +225,6 @@ export default function SettingsPage() {
 
       // Refrescar diagnósticos externos en segundo plano
       fetchDriveStatus().then((d) => setDriveStatus(d)).catch(() => null);
-      fetchResolveStatus(true).then((r) => setResolveStatus(r)).catch(() => null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error al guardar la configuración";
       setError(msg);
@@ -448,8 +417,7 @@ export default function SettingsPage() {
             Ajustes de tu Estudio
           </h1>
           <p className="mt-1 text-sm text-slate-400">
-            Elige qué servicios usar para crear tus clips, define tu límite de gasto y conecta Google Drive o DaVinci
-            Resolve.
+            Elige qué servicios usar para crear tus clips, define tu límite de gasto y conecta Google Drive.
             {settings?.env_path && (
               <InfoTip label="Guardado inmediato">
                 Tus cambios se aplican al instante sin necesidad de reiniciar la aplicación.
@@ -968,148 +936,7 @@ export default function SettingsPage() {
             </div>
           </GlassCard>
 
-          {/* 4. MOTOR DE EDICIÓN DE VIDEO Y DAVINCI RESOLVE (MCP LOCAL) */}
-          <GlassCard as="section" className="p-6 sm:p-7">
-            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
-              <div className="flex items-center gap-3.5">
-                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-400/15 text-violet-300">
-                  <Cpu className="h-5 w-5" />
-                </span>
-                <div>
-                  <h2 className="text-lg font-extrabold text-slate-50">
-                    4. ¿Dónde quieres editar tus videos? (Estudio Web o DaVinci Resolve)
-                  </h2>
-                  <p className="text-xs text-slate-400">
-                    Puedes dejar que FarmClips cree los videos listos en tu PC, enviarlos directo a DaVinci Resolve con
-                    todas las pistas separadas, o hacer ambas cosas.
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {loadingResolve && !resolveStatus ? (
-                  <Badge tone="neutral">
-                    <SoftSpinner className="h-3 w-3" /> Verificando DaVinci Resolve...
-                  </Badge>
-                ) : resolveStatus?.scripting_connected ? (
-                  <Badge tone="success">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> DaVinci Resolve conectado
-                  </Badge>
-                ) : resolveStatus?.installed ? (
-                  <Badge tone="info">DaVinci Resolve instalado en tu PC</Badge>
-                ) : (
-                  <Badge tone="neutral">Modo actual: {editorBackend}</Badge>
-                )}
-              </div>
-            </div>
-
-            <div className="grid gap-5 md:grid-cols-3">
-              <div>
-                <label className="mb-1.5 block text-xs font-bold text-slate-300">
-                  ¿Cómo quieres producir tus clips?
-                </label>
-                <select
-                  value={editorBackend}
-                  onChange={(e) => setEditorBackend(e.target.value as "local" | "resolve_mcp" | "both")}
-                  className={inputBase}
-                >
-                  <option value="local">En esta app — Crear MP4 listos y editar en el navegador</option>
-                  <option value="resolve_mcp">En DaVinci Resolve — Enviar línea de tiempo por pistas</option>
-                  <option value="both">Ambos — Crear MP4 rápido y también preparar proyecto en Resolve</option>
-                </select>
-                <p className="mt-1 text-[11px] text-slate-400">
-                  Puedes cambiar esta opción cuando quieras según tu flujo de trabajo.
-                </p>
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-xs font-bold text-slate-300">
-                  Forma de conexión con DaVinci Resolve
-                </label>
-                <select
-                  value={resolveMcpMode}
-                  onChange={(e) =>
-                    setResolveMcpMode(
-                      e.target.value as "auto" | "mcp_stdio" | "mcp_http" | "direct_script" | "bundle_only"
-                    )
-                  }
-                  className={inputBase}
-                >
-                  <option value="auto">Automática — Detecta Resolve abierto o guarda el paquete (Recomendado)</option>
-                  <option value="mcp_stdio">Puente MCP integrado</option>
-                  <option value="mcp_http">Servidor MCP por red local</option>
-                  <option value="direct_script">Conexión directa con DaVinci Resolve</option>
-                  <option value="bundle_only">Solo descargar archivos para importar a mano</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-xs font-bold text-slate-300">
-                  Nombre base para tus proyectos en Resolve
-                </label>
-                <input
-                  type="text"
-                  value={resolveProjectPrefix}
-                  onChange={(e) => setResolveProjectPrefix(e.target.value)}
-                  placeholder="FarmClips"
-                  className={`${inputBase} font-mono text-xs`}
-                />
-                <p className="mt-1 text-[11px] text-slate-400">
-                  Ej.: <code>FarmClips - Partida Ranked</code>.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-5 grid gap-5 md:grid-cols-2">
-              <div>
-                <label className="mb-1.5 block text-xs font-bold text-slate-300">
-                  Comando personalizado (opcional, déjalo vacío para usar el integrado)
-                </label>
-                <input
-                  type="text"
-                  value={resolveMcpCommand}
-                  onChange={(e) => setResolveMcpCommand(e.target.value)}
-                  placeholder="Automático (no necesitas escribir nada)"
-                  className={`${inputBase} font-mono text-xs`}
-                />
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-xs font-bold text-slate-300">
-                  Dirección web opcional (solo si usas un servidor externo)
-                </label>
-                <input
-                  type="text"
-                  value={resolveMcpUrl}
-                  onChange={(e) => setResolveMcpUrl(e.target.value)}
-                  placeholder="http://127.0.0.1:8795/mcp (opcional)"
-                  className={`${inputBase} font-mono text-xs`}
-                />
-              </div>
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-xs text-slate-300">
-              <label className="flex items-center gap-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={resolveAutoExport}
-                  onChange={(e) => setResolveAutoExport(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-amber-400"
-                />
-                <span>
-                  Enviar automáticamente los mejores clips a DaVinci Resolve apenas termine de analizarse cada sesión
-                </span>
-              </label>
-              {resolveStatus && (
-                <span className="text-[11px] text-slate-400">
-                  {resolveStatus.process_running
-                    ? "DaVinci Resolve está abierto ahora mismo"
-                    : "Si DaVinci Resolve está cerrado, dejaremos los archivos listos para importar"}
-                </span>
-              )}
-            </div>
-          </GlassCard>
-
-          {/* 5. SECCIÓN CONEXIÓN DIRECTA A GOOGLE DRIVE (OAUTH 2.0 / SERVICIO / LOCAL) */}
+          {/* 4. SECCIÓN CONEXIÓN DIRECTA A GOOGLE DRIVE (OAUTH 2.0 / SERVICIO / LOCAL) */}
           <GlassCard as="section" className="p-6 sm:p-7">
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
               <div className="flex items-center gap-3.5">
@@ -1118,7 +945,7 @@ export default function SettingsPage() {
                 </span>
                 <div>
                   <h2 className="text-lg font-extrabold text-slate-50">
-                    5. Conexión con Google Drive
+                    4. Conexión con Google Drive
                   </h2>
                   <p className="text-xs text-slate-400">
                     Conecta tu cuenta de Google para explorar tus carpetas y elegir tus videos en un clic, o usa una

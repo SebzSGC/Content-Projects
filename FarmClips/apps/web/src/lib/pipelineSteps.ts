@@ -8,7 +8,7 @@ export const PIPELINE_STEPS: PipelineStep[] = [
   { key: "transcribe", label: "Escuchar", hint: "Convierte lo que dices en texto y detecta dónde sube la emoción" },
   { key: "curate", label: "Elegir momentos", hint: "Selecciona las jugadas más entretenidas y con mejor historia" },
   { key: "frame", label: "Encuadrar", hint: "Centra tu cámara en formato vertical y recorta las pausas largas" },
-  { key: "render", label: "Crear video", hint: "Genera el Short vertical con subtítulos animados o lo envía a DaVinci Resolve" },
+  { key: "render", label: "Crear video", hint: "Genera el Short vertical 9:16 con subtítulos animados y audio mezclado" },
   { key: "deliver", label: "Listo", hint: "Tus clips están terminados y listos para revisar o publicar" },
 ];
 

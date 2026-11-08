@@ -28,7 +28,7 @@ from clipsmedia.drive import (
     RemoteFileEntry,
 )
 from clipsproviders.notifications import send_delivery_webhook
-from clipsrender import RenderQuality, ResolveMcpBridge, detect_resolve_environment
+from clipsrender import RenderQuality
 from clipsstyles import load_preset, resolve_game_keyterms
 
 from ..config import ServerSettings
@@ -79,25 +79,15 @@ class Orchestrator:
         )
         self._require_two_drive_polls = require_two_drive_polls
         self.drive: Optional[DriveConnector] = self._init_drive(require_two_drive_polls)
-        self.resolve_bridge: ResolveMcpBridge = self._init_resolve_bridge()
 
         self._running_sessions: Dict[str, asyncio.Task] = {}
         self._drive_watcher_task: Optional[asyncio.Task] = None
 
-    def _init_resolve_bridge(self) -> ResolveMcpBridge:
-        return ResolveMcpBridge(
-            mode=self.settings.resolve_mcp_mode,  # type: ignore[arg-type]
-            mcp_command=self.settings.resolve_mcp_command,
-            mcp_url=self.settings.resolve_mcp_url,
-            project_prefix=self.settings.resolve_project_prefix,
-        )
-
     def reload_settings(self, new_settings: ServerSettings) -> None:
-        """Hot-reload in-memory ServerSettings across Orchestrator, ApiPool, DriveConnector and ResolveMcpBridge."""
+        """Hot-reload in-memory ServerSettings across Orchestrator, ApiPool, DriveConnector."""
         self.settings = new_settings
         self.api_pool.reload_settings(new_settings)
         self.drive = self._init_drive(self._require_two_drive_polls)
-        self.resolve_bridge = self._init_resolve_bridge()
 
     def _init_drive(self, require_two_polls: bool) -> Optional[DriveConnector]:
         mode = self.settings.drive_mode
@@ -677,131 +667,15 @@ class Orchestrator:
 
         self.events.publish("clip_updated", session_id=sid, clip_id=clip.id, state="PLANNED")
 
-        # Step 7: Automatic 1080p render / DaVinci Resolve MCP export for top-K (> min_score)
+        # Step 7: Automatic 1080p render for top-K (> min_score)
         if should_auto_render:
             self.db.update_session(sid, state=SessionState.RENDERING.value)
-            if self.settings.editor_backend in ("resolve_mcp", "both") or self.settings.resolve_auto_export:
-                await self.export_clip_to_resolve(
-                    clip_id=clip.id,
-                    open_in_resolve=True,
-                    trigger_render=False,
-                )
-            if self.settings.editor_backend in ("local", "both"):
-                await self.render_and_deliver_clip(
-                    clip_id=clip.id,
-                    quality="final",
-                    priority=clip.final_score,
-                    upload_to_drive=True,
-                )
-
-    def get_resolve_status(self, force_refresh: bool = False) -> Dict[str, Any]:
-        return detect_resolve_environment(
-            editor_backend=self.settings.editor_backend,
-            mcp_mode=self.settings.resolve_mcp_mode,
-            mcp_command=self.settings.resolve_mcp_command,
-            mcp_url=self.settings.resolve_mcp_url,
-            force_refresh=force_refresh,
-        )
-
-    async def export_clip_to_resolve(
-        self,
-        clip_id: str,
-        open_in_resolve: bool = True,
-        trigger_render: bool = False,
-        project_name: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        clip_row = self.db.get_clip(clip_id)
-        if clip_row is None:
-            raise KeyError(f"Clip {clip_id} no existe")
-        sid = clip_row["session_id"]
-        ses_row = self.db.get_session(sid)
-        if ses_row is None or not ses_row.get("prepared_json"):
-            raise RuntimeError("La sesión aún no está preparada para exportar a DaVinci Resolve.")
-        if not clip_row.get("editplan_json"):
-            raise RuntimeError("El clip aún no tiene EditPlan generado.")
-
-        prep = PreparedMedia.model_validate_json(ses_row["prepared_json"])
-        plan = EditPlan.model_validate_json(clip_row["editplan_json"])
-        preset = load_preset(plan.output.style or ses_row.get("style_preset") or self.settings.style_preset)
-
-        resolve_dir = self.session_dir(sid) / "clips" / clip_id / "resolve"
-
-        def _on_prog(frac: float, msg: str) -> None:
-            self.events.publish(
-                "resolve_mcp_progress",
-                session_id=sid,
-                clip_id=clip_id,
-                progress=round(frac, 3),
-                message=msg,
+            await self.render_and_deliver_clip(
+                clip_id=clip.id,
+                quality="final",
+                priority=clip.final_score,
+                upload_to_drive=True,
             )
-
-        res = await self.resolve_bridge.export_clip_to_resolve(
-            plan=plan,
-            preset=preset,
-            gameplay_path=Path(prep.gameplay.path),
-            camera_path=Path(prep.camera.path),
-            sync=prep.sync,
-            out_dir=resolve_dir,
-            session_id=sid,
-            session_title=str(ses_row.get("title") or ses_row.get("recording_name") or sid),
-            clip_rank=int(clip_row.get("rank_order") or 1),
-            clip_reason=str(clip_row.get("reason") or ""),
-            open_in_resolve=open_in_resolve,
-            trigger_render=trigger_render,
-            project_name_override=project_name,
-            on_progress=_on_prog,
-        )
-
-        self.events.publish(
-            "clip_resolve_exported",
-            session_id=sid,
-            clip_id=clip_id,
-            project_name=res["project_name"],
-            timeline_name=res["timeline_name"],
-            connected_to_resolve=res["connected_to_resolve"],
-            mode_used=res["mode_used"],
-        )
-        return res
-
-    async def export_session_to_resolve(
-        self,
-        session_id: str,
-        top_k: Optional[int] = None,
-        open_in_resolve: bool = True,
-        trigger_render: bool = False,
-        project_name: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        ses_row = self.db.get_session(session_id)
-        if ses_row is None:
-            raise KeyError(f"Sesión {session_id} no existe")
-        clips = self.db.list_clips(session_id)
-        if top_k is not None and top_k > 0:
-            clips = clips[:top_k]
-
-        exported: List[Dict[str, Any]] = []
-        for c in clips:
-            if not c.get("editplan_json"):
-                continue
-            item = await self.export_clip_to_resolve(
-                clip_id=c["id"],
-                open_in_resolve=open_in_resolve,
-                trigger_render=trigger_render,
-                project_name=project_name,
-            )
-            exported.append(item)
-
-        proj_name = (
-            exported[0]["project_name"]
-            if exported
-            else (project_name or f"{self.settings.resolve_project_prefix} - {ses_row.get('title') or session_id}")
-        )
-        return {
-            "ok": True,
-            "session_id": session_id,
-            "project_name": proj_name,
-            "exported_count": len(exported),
-            "clips": exported,
-        }
 
     async def save_clip_editplan(self, clip_id: str, plan: EditPlan) -> EditPlan:
         row = self.db.get_clip(clip_id)

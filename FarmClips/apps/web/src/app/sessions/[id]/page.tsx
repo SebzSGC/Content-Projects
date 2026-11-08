@@ -7,7 +7,6 @@ import { Activity, ArrowLeft, CheckCircle2, Download, Flame, RefreshCw, Scissors
 import {
   API_PREFIX,
   cancelSession,
-  exportSessionToResolve,
   fetchSessionClips,
   fetchSessionDetail,
   fetchSessionSignals,
@@ -15,7 +14,6 @@ import {
   updateManualSync,
   useServerEvents,
   type ClipItem,
-  type ResolveSessionExportResponse,
   type SessionSummary,
   type SignalSeries,
 } from "@/lib/api/client";
@@ -57,8 +55,6 @@ export default function SessionDetailPage() {
   const [renderProgress, setRenderProgress] = useState<Record<string, number>>({});
   const [manualShift, setManualShift] = useState<string>("0.00");
   const [savingSync, setSavingSync] = useState(false);
-  const [exportingResolve, setExportingResolve] = useState(false);
-  const [resolveSessionResult, setResolveSessionResult] = useState<ResolveSessionExportResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
@@ -89,13 +85,6 @@ export default function SessionDetailPage() {
     if (ev.type === "render_progress" && ev.clip_id && typeof ev.progress === "number") {
       setRenderProgress((prev) => ({ ...prev, [ev.clip_id!]: ev.progress! }));
     }
-    if (ev.type === "resolve_mcp_progress" && ev.message) {
-      setLiveStatus(ev.message);
-    }
-    if (ev.type === "clip_resolve_exported") {
-      setExportingResolve(false);
-      reload();
-    }
     if (ev.type === "session_state" || ev.type === "clip_updated") {
       reload();
     }
@@ -114,25 +103,6 @@ export default function SessionDetailPage() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSavingSync(false);
-    }
-  }
-
-  async function handleExportSessionToResolve() {
-    if (!sessionId || exportingResolve) return;
-    setExportingResolve(true);
-    setError(null);
-    setLiveStatus("Conectando con DaVinci Resolve y preparando clips…");
-    try {
-      const res = await exportSessionToResolve(sessionId, { open_in_resolve: true, async_mode: true });
-      setResolveSessionResult(res);
-      if (res.status === "queued") {
-        if (res.message) setLiveStatus(res.message);
-      } else {
-        setExportingResolve(false);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      setExportingResolve(false);
     }
   }
 
@@ -163,7 +133,7 @@ export default function SessionDetailPage() {
   const detail = isRunning
     ? liveStatus || PIPELINE_STEPS[steps.current].hint
     : delivered
-      ? "Puedes personalizarlos en el editor rápido, descargarlos o enviarlos a DaVinci Resolve."
+      ? "Puedes personalizarlos en el editor rápido o descargarlos en alta calidad."
       : "";
 
   return (
@@ -198,17 +168,6 @@ export default function SessionDetailPage() {
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            {clips.length > 0 && !isRunning && (
-              <button
-                type="button"
-                onClick={handleExportSessionToResolve}
-                disabled={exportingResolve}
-                className={btnSecondary}
-              >
-                {exportingResolve ? <SoftSpinner className="h-4 w-4" /> : <Sparkles className="h-4 w-4 text-sky-400" />}
-                Abrir todos en DaVinci Resolve
-              </button>
-            )}
             {isRunning ? (
               <button
                 type="button"
@@ -232,14 +191,6 @@ export default function SessionDetailPage() {
         </div>
 
         <StepProgress steps={PIPELINE_STEPS} statuses={steps.statuses} fill={steps.fill} current={steps.current} />
-
-        {resolveSessionResult && (
-          <div className="rounded-2xl border border-sky-400/30 bg-sky-500/10 px-4 py-3 text-xs text-sky-100">
-            <span className="font-bold text-sky-300">Listo en DaVinci Resolve:</span> Se enviaron{" "}
-            <strong>{resolveSessionResult.exported_count}</strong> clips listos para editar en el proyecto{" "}
-            <strong className="font-mono text-white">{resolveSessionResult.project_name}</strong>.
-          </div>
-        )}
         {error && <p className="rounded-2xl bg-rose-500/10 px-4 py-2.5 text-sm font-semibold text-rose-200">{error}</p>}
         {session.error && (
           <p className="rounded-2xl bg-rose-500/10 px-4 py-2.5 text-sm font-semibold text-rose-200">Qué ocurrió: {session.error}</p>
