@@ -87,6 +87,7 @@ class ResolveExportClipBody(BaseModel):
     open_in_resolve: bool = True
     trigger_render: bool = False
     project_name: Optional[str] = None
+    async_mode: bool = False
 
 
 class ResolveExportSessionBody(BaseModel):
@@ -94,6 +95,7 @@ class ResolveExportSessionBody(BaseModel):
     open_in_resolve: bool = True
     trigger_render: bool = False
     project_name: Optional[str] = None
+    async_mode: bool = False
 
 
 class CleanupBody(BaseModel):
@@ -1227,6 +1229,29 @@ def create_app(
         body: Optional[ResolveExportClipBody] = None,
     ) -> Dict[str, Any]:
         req = body or ResolveExportClipBody()
+        crow = orch.db.get_clip(clip_id)
+        if not crow:
+            raise HTTPException(404, f"Clip {clip_id} no encontrado")
+
+        if req.async_mode:
+            asyncio.create_task(
+                orch.export_clip_to_resolve(
+                    clip_id=clip_id,
+                    open_in_resolve=req.open_in_resolve,
+                    trigger_render=req.trigger_render,
+                    project_name=req.project_name,
+                )
+            )
+            return {
+                "ok": True,
+                "status": "queued",
+                "clip_id": clip_id,
+                "message": "Preparando paquete y conectando con DaVinci Resolve en segundo plano…",
+                "project_name": req.project_name or "FarmClips",
+                "timeline_name": f"clip_{int(crow.get('rank_order') or 1):02d}_9x16",
+                "connected_to_resolve": False,
+            }
+
         try:
             return await orch.export_clip_to_resolve(
                 clip_id=clip_id,
@@ -1245,6 +1270,29 @@ def create_app(
         body: Optional[ResolveExportSessionBody] = None,
     ) -> Dict[str, Any]:
         req = body or ResolveExportSessionBody()
+        srow = orch.db.get_session(session_id)
+        if not srow:
+            raise HTTPException(404, f"Sesión {session_id} no encontrada")
+
+        if req.async_mode:
+            asyncio.create_task(
+                orch.export_session_to_resolve(
+                    session_id=session_id,
+                    top_k=req.top_k,
+                    open_in_resolve=req.open_in_resolve,
+                    trigger_render=req.trigger_render,
+                    project_name=req.project_name,
+                )
+            )
+            return {
+                "ok": True,
+                "status": "queued",
+                "session_id": session_id,
+                "message": "Exportando clips de la sesión a DaVinci Resolve en segundo plano…",
+                "project_name": req.project_name or "FarmClips",
+                "exported_clips_count": 0,
+            }
+
         try:
             return await orch.export_session_to_resolve(
                 session_id=session_id,

@@ -89,6 +89,13 @@ export default function SessionDetailPage() {
     if (ev.type === "render_progress" && ev.clip_id && typeof ev.progress === "number") {
       setRenderProgress((prev) => ({ ...prev, [ev.clip_id!]: ev.progress! }));
     }
+    if (ev.type === "resolve_mcp_progress" && ev.message) {
+      setLiveStatus(ev.message);
+    }
+    if (ev.type === "clip_resolve_exported") {
+      setExportingResolve(false);
+      reload();
+    }
     if (ev.type === "session_state" || ev.type === "clip_updated") {
       reload();
     }
@@ -111,15 +118,20 @@ export default function SessionDetailPage() {
   }
 
   async function handleExportSessionToResolve() {
-    if (!sessionId) return;
+    if (!sessionId || exportingResolve) return;
     setExportingResolve(true);
     setError(null);
+    setLiveStatus("Conectando con DaVinci Resolve y preparando clips…");
     try {
-      const res = await exportSessionToResolve(sessionId, { open_in_resolve: true });
+      const res = await exportSessionToResolve(sessionId, { open_in_resolve: true, async_mode: true });
       setResolveSessionResult(res);
+      if (res.status === "queued") {
+        if (res.message) setLiveStatus(res.message);
+      } else {
+        setExportingResolve(false);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-    } finally {
       setExportingResolve(false);
     }
   }

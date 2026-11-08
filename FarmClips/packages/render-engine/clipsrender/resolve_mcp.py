@@ -10,12 +10,14 @@ installation (Free or Studio) via:
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import html
 import json
 import os
 import platform
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 from urllib.request import Request, urlopen
@@ -175,8 +177,31 @@ def _is_resolve_process_running() -> bool:
         return False
 
 
-def _try_connect_resolve_scripting() -> Tuple[Optional[Any], Optional[str], Optional[str]]:
-    """Attempt to import `DaVinciResolveScript` and connect to a running local Resolve instance."""
+_RESOLVE_CONN_CACHE: Dict[str, Any] = {
+    "obj": None,
+    "mod_dir": None,
+    "product": None,
+    "checked_at": 0.0,
+}
+
+
+def _try_connect_resolve_scripting(force_refresh: bool = False) -> Tuple[Optional[Any], Optional[str], Optional[str]]:
+    """Attempt to import `DaVinciResolveScript` and connect to a running local Resolve instance with TTL cache and strict timeout."""
+    now = time.time()
+    if not force_refresh and (now - _RESOLVE_CONN_CACHE["checked_at"]) < 3.0:
+        return (
+            _RESOLVE_CONN_CACHE["obj"],
+            _RESOLVE_CONN_CACHE["mod_dir"],
+            _RESOLVE_CONN_CACHE["product"],
+        )
+
+    # 1. Fast process check: if Resolve.exe is not running, return immediately without touching IPC
+    if not _is_resolve_process_running():
+        _RESOLVE_CONN_CACHE["obj"] = None
+        _RESOLVE_CONN_CACHE["product"] = None
+        _RESOLVE_CONN_CACHE["checked_at"] = now
+        return (None, _RESOLVE_CONN_CACHE["mod_dir"], None)
+
     paths = _default_resolve_paths()
     mod_dir = os.environ.get("RESOLVE_SCRIPT_API", "").strip()
     lib_path = os.environ.get("RESOLVE_SCRIPT_LIB", "").strip()
@@ -206,31 +231,44 @@ def _try_connect_resolve_scripting() -> Tuple[Optional[Any], Optional[str], Opti
     if resolved_lib is not None:
         os.environ.setdefault("RESOLVE_SCRIPT_LIB", str(resolved_lib))
 
-    try:
-        import DaVinciResolveScript as dvr_script  # type: ignore[import-not-found]
+    _RESOLVE_CONN_CACHE["mod_dir"] = str(resolved_mod_dir) if resolved_mod_dir else None
 
-        resolve_obj = dvr_script.scriptapp("Resolve")
-        if resolve_obj is not None:
-            product = "DaVinci Resolve"
-            try:
-                pm = resolve_obj.GetProductName()
-                ver = resolve_obj.GetVersionString()
-                if pm:
-                    product = f"{pm} {ver or ''}".strip()
-            except Exception:
-                pass
-            return (
-                resolve_obj,
-                str(resolved_mod_dir) if resolved_mod_dir else None,
-                product,
-            )
-    except Exception:
-        pass
+    # 2. Strict timeout on scriptapp("Resolve") to prevent hanging if DaVinci Resolve is busy or modal
+    def _call_scriptapp() -> Tuple[Optional[Any], Optional[str]]:
+        try:
+            import DaVinciResolveScript as dvr_script  # type: ignore[import-not-found]
+            robj = dvr_script.scriptapp("Resolve")
+            prod = None
+            if robj is not None:
+                prod = "DaVinci Resolve"
+                try:
+                    pname = robj.GetProductName()
+                    pver = robj.GetVersionString()
+                    if pname:
+                        prod = f"{pname} {pver or ''}".strip()
+                except Exception:
+                    pass
+            return robj, prod
+        except Exception:
+            return None, None
+
+    resolve_obj: Optional[Any] = None
+    product: Optional[str] = None
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            fut = pool.submit(_call_scriptapp)
+            resolve_obj, product = fut.result(timeout=1.6)
+    except (concurrent.futures.TimeoutError, Exception):
+        resolve_obj, product = None, None
+
+    _RESOLVE_CONN_CACHE["obj"] = resolve_obj
+    _RESOLVE_CONN_CACHE["product"] = product
+    _RESOLVE_CONN_CACHE["checked_at"] = now
 
     return (
-        None,
-        str(resolved_mod_dir) if resolved_mod_dir else None,
-        None,
+        resolve_obj,
+        _RESOLVE_CONN_CACHE["mod_dir"],
+        product,
     )
 
 
@@ -651,20 +689,44 @@ def build_in_resolve():
         )
 
     pm = resolve.GetProjectManager()
-    proj_name = SPEC["project_name"]
-    project = pm.LoadProject(proj_name)
+    project = None
+    try:
+        curr = pm.GetCurrentProject()
+        if curr is not None and getattr(curr, "GetName", None) and curr.GetName():
+            project = curr
+    except Exception:
+        pass
     if project is None:
-        project = pm.CreateProject(proj_name)
-    if project is None:
-        project = pm.GetCurrentProject()
+        proj_name = SPEC["project_name"]
+        project = pm.LoadProject(proj_name) or pm.CreateProject(proj_name) or pm.GetCurrentProject()
 
-    project.SetSetting("timelineResolutionWidth", str(SPEC["width"]))
-    project.SetSetting("timelineResolutionHeight", str(SPEC["height"]))
-    project.SetSetting("timelineFrameRate", str(SPEC["fps"]))
+    if project is None:
+        raise RuntimeError("No se pudo obtener un proyecto activo ni crearlo en DaVinci Resolve.")
+
+    try:
+        project.SetSetting("timelineResolutionWidth", str(SPEC["width"]))
+        project.SetSetting("timelineResolutionHeight", str(SPEC["height"]))
+        project.SetSetting("timelineFrameRate", str(SPEC["fps"]))
+    except Exception:
+        pass
 
     media_pool = project.GetMediaPool()
     root_folder = media_pool.GetRootFolder()
-    media_pool.SetCurrentFolder(root_folder)
+    target_folder = root_folder
+    try:
+        subfolders = root_folder.GetSubFolderList() or []
+        for sf in subfolders:
+            if hasattr(sf, "GetName") and sf.GetName() == "FarmClips":
+                target_folder = sf
+                break
+        else:
+            target_folder = media_pool.AddSubFolder(root_folder, "FarmClips") or root_folder
+    except Exception:
+        target_folder = root_folder
+    try:
+        media_pool.SetCurrentFolder(target_folder)
+    except Exception:
+        pass
 
     media_files = [SPEC["gameplay_path"], SPEC["camera_path"]] + list(SPEC["sfx_paths"].values())
     if Path(SPEC["srt_path"]).is_file():
@@ -818,17 +880,41 @@ class ResolveMcpServer:
             if resolve_obj is not None:
                 try:
                     pm = resolve_obj.GetProjectManager()
-                    proj = pm.LoadProject(proj_name) or pm.CreateProject(proj_name) or pm.GetCurrentProject()
-                    if proj is not None:
-                        proj.SetSetting("timelineResolutionWidth", str(w))
-                        proj.SetSetting("timelineResolutionHeight", str(h))
-                        proj.SetSetting("timelineFrameRate", str(fps))
+                    proj = None
+                    active_user_project = False
+                    try:
+                        current = pm.GetCurrentProject()
+                        if current is not None and getattr(current, "GetName", None):
+                            curr_name = current.GetName()
+                            if curr_name:
+                                proj = current
+                                proj_name = curr_name
+                                active_user_project = True
+                    except Exception:
+                        pass
+
+                    if proj is None:
+                        proj = pm.LoadProject(proj_name) or pm.CreateProject(proj_name) or pm.GetCurrentProject()
+
+                    if proj is not None and not active_user_project:
+                        try:
+                            proj.SetSetting("timelineResolutionWidth", str(w))
+                            proj.SetSetting("timelineResolutionHeight", str(h))
+                            proj.SetSetting("timelineFrameRate", str(fps))
+                        except Exception:
+                            pass
                     return {
                         "ok": True,
                         "connected": True,
+                        "active_user_project": active_user_project,
                         "product": product,
                         "project_name": proj_name,
                         "resolution": f"{w}x{h}@{fps}fps",
+                        "message": (
+                            f"Usando proyecto activo '{proj_name}' abierto en DaVinci Resolve."
+                            if active_user_project
+                            else f"Proyecto '{proj_name}' listo en DaVinci Resolve."
+                        ),
                     }
                 except Exception as exc:
                     return {
@@ -855,6 +941,22 @@ class ResolveMcpServer:
                     proj = pm.GetCurrentProject()
                     if proj is not None:
                         mp = proj.GetMediaPool()
+                        root_folder = mp.GetRootFolder()
+                        target_folder = root_folder
+                        try:
+                            subfolders = root_folder.GetSubFolderList() or []
+                            for sf in subfolders:
+                                if hasattr(sf, "GetName") and sf.GetName() == "FarmClips":
+                                    target_folder = sf
+                                    break
+                            else:
+                                target_folder = mp.AddSubFolder(root_folder, "FarmClips") or root_folder
+                        except Exception:
+                            target_folder = root_folder
+                        try:
+                            mp.SetCurrentFolder(target_folder)
+                        except Exception:
+                            pass
                         items = mp.ImportMedia(media_paths) or []
                         imported_count = len(items)
                 except Exception:
@@ -868,31 +970,70 @@ class ResolveMcpServer:
             }
 
         if name == "resolve_build_vertical_timeline":
-            script_path = arguments.get("script_path")
             fcpxml_path = str(arguments.get("fcpxml_path") or "")
             tl_name = str(arguments.get("timeline_name") or "Clip_9x16")
             proj_name = str(arguments.get("project_name") or "FarmClips")
+            markers = list(arguments.get("markers") or [])
             resolve_obj, _, _ = _try_connect_resolve_scripting()
-            if resolve_obj is not None and script_path and Path(str(script_path)).is_file():
+
+            timeline_created = False
+            if resolve_obj is not None:
                 try:
-                    proc = subprocess.run(
-                        [sys.executable, str(script_path)],
-                        capture_output=True,
-                        text=True,
-                        timeout=30.0,
-                    )
-                    if proc.returncode == 0 and proc.stdout.strip():
-                        parsed = json.loads(proc.stdout.strip().splitlines()[-1])
-                        return {"ok": True, "connected": True, **parsed}
+                    pm = resolve_obj.GetProjectManager()
+                    proj = pm.GetCurrentProject()
+                    if proj is not None:
+                        mp = proj.GetMediaPool()
+                        tl = None
+                        if fcpxml_path and Path(fcpxml_path).is_file():
+                            try:
+                                tl = mp.ImportTimelineFromFile(
+                                    fcpxml_path,
+                                    {
+                                        "timelineName": tl_name,
+                                        "importSourceClips": False,
+                                    },
+                                )
+                            except Exception:
+                                tl = None
+
+                        if tl is None:
+                            try:
+                                tl = mp.CreateEmptyTimeline(tl_name)
+                            except Exception:
+                                tl = None
+
+                        if tl is not None:
+                            timeline_created = True
+                            try:
+                                proj.SetCurrentTimeline(tl)
+                            except Exception:
+                                pass
+                            for mk in markers:
+                                try:
+                                    tl.AddMarker(
+                                        int(mk["frame_id"]),
+                                        str(mk["color"]),
+                                        str(mk["name"]),
+                                        str(mk["note"]),
+                                        int(mk.get("duration_frames", 1)),
+                                    )
+                                except Exception:
+                                    pass
                 except Exception:
                     pass
+
             return {
                 "ok": True,
-                "connected": False,
+                "connected": resolve_obj is not None,
+                "timeline_created": timeline_created,
                 "project_name": proj_name,
                 "timeline_name": tl_name,
                 "fcpxml_path": fcpxml_path,
-                "message": "Timeline vertical 9:16 compilada en paquete local (.fcpxml + .srt + resolve_build_timeline.py).",
+                "message": (
+                    f"Timeline vertical '{tl_name}' creada en vivo en DaVinci Resolve."
+                    if timeline_created
+                    else f"Timeline compilada en paquete local (.fcpxml + .srt + script Py3)."
+                ),
             }
 
         if name == "resolve_add_timeline_markers":

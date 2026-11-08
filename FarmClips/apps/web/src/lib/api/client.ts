@@ -235,6 +235,9 @@ export interface ServerSseEvent {
   stt_primary?: string;
   llm_primary?: string;
   llm_model?: string;
+  connected_to_resolve?: boolean;
+  timeline_name?: string;
+  project_name?: string;
 }
 
 export interface ApiKeyStatus {
@@ -339,32 +342,35 @@ export interface ResolveStatusResponse {
 
 export interface ResolveClipExportResponse {
   ok: boolean;
+  status?: string;
   clip_id: string;
-  session_id: string;
+  session_id?: string;
   project_name: string;
   timeline_name: string;
-  bundle_dir: string;
-  fcpxml_path: string;
-  srt_path: string;
-  ass_path: string;
-  script_path: string;
-  mcp_plan_path: string;
-  mode_used: string;
+  bundle_dir?: string;
+  fcpxml_path?: string;
+  srt_path?: string;
+  ass_path?: string;
+  script_path?: string;
+  mcp_plan_path?: string;
+  mode_used?: string;
   connected_to_resolve: boolean;
   message: string;
-  segments_count: number;
-  captions_count: number;
-  sfx_count: number;
-  markers_count: number;
-  tool_calls: { tool: string; arguments: Record<string, unknown> }[];
+  segments_count?: number;
+  captions_count?: number;
+  sfx_count?: number;
+  markers_count?: number;
+  tool_calls?: { tool: string; arguments: Record<string, unknown> }[];
 }
 
 export interface ResolveSessionExportResponse {
   ok: boolean;
+  status?: string;
   session_id: string;
   project_name: string;
-  exported_count: number;
-  clips: ResolveClipExportResponse[];
+  exported_count?: number;
+  clips?: ResolveClipExportResponse[];
+  message?: string;
 }
 
 export interface TestConnectionResult {
@@ -806,7 +812,7 @@ export const fetchResolveStatus = () => apiJson<ResolveStatusResponse>("/resolve
 
 export const exportClipToResolve = (
   clipId: string,
-  options?: { open_in_resolve?: boolean; trigger_render?: boolean; project_name?: string }
+  options?: { open_in_resolve?: boolean; trigger_render?: boolean; project_name?: string; async_mode?: boolean }
 ) =>
   apiJson<ResolveClipExportResponse>(`/clips/${encodeURIComponent(clipId)}/resolve`, {
     method: "POST",
@@ -814,12 +820,13 @@ export const exportClipToResolve = (
       open_in_resolve: options?.open_in_resolve ?? true,
       trigger_render: options?.trigger_render ?? false,
       project_name: options?.project_name,
+      async_mode: options?.async_mode ?? true,
     }),
   });
 
 export const exportSessionToResolve = (
   sessionId: string,
-  options?: { top_k?: number; open_in_resolve?: boolean; trigger_render?: boolean; project_name?: string }
+  options?: { top_k?: number; open_in_resolve?: boolean; trigger_render?: boolean; project_name?: string; async_mode?: boolean }
 ) =>
   apiJson<ResolveSessionExportResponse>(`/sessions/${encodeURIComponent(sessionId)}/resolve`, {
     method: "POST",
@@ -828,6 +835,7 @@ export const exportSessionToResolve = (
       open_in_resolve: options?.open_in_resolve ?? true,
       trigger_render: options?.trigger_render ?? false,
       project_name: options?.project_name,
+      async_mode: options?.async_mode ?? true,
     }),
   });
 

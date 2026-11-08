@@ -2740,6 +2740,11 @@
               }
             ],
             "title": "Project Name"
+          },
+          "async_mode": {
+            "type": "boolean",
+            "title": "Async Mode",
+            "default": false
           }
         },
         "type": "object",
@@ -2780,6 +2785,11 @@
               }
             ],
             "title": "Project Name"
+          },
+          "async_mode": {
+            "type": "boolean",
+            "title": "Async Mode",
+            "default": false
           }
         },
         "type": "object",

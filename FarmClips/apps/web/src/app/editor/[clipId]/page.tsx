@@ -249,6 +249,20 @@ export default function ClipEditorPage() {
         setRenderProgress(ev.progress);
         if (ev.message) setStatusMsg(ev.message);
       }
+      if (ev.type === "resolve_mcp_progress") {
+        if (ev.message) setStatusMsg(ev.message);
+      }
+      if (ev.type === "clip_resolve_exported") {
+        setExportingResolve(false);
+        setStatusMsg(
+          ev.connected_to_resolve
+            ? `Timeline "${ev.timeline_name || "Clip"}" abierta en tu proyecto activo de DaVinci Resolve.`
+            : `Paquete DaVinci Resolve listo para "${ev.timeline_name || "Clip"}". Archivos disponibles abajo.`
+        );
+        fetchClipDetail(clipId)
+          .then((d) => setClip(d.clip))
+          .catch(() => null);
+      }
       if (ev.type === "clip_updated") {
         fetchClipDetail(clipId)
           .then((d) => setClip(d.clip))
@@ -622,21 +636,25 @@ export default function ClipEditorPage() {
   }
 
   async function handleExportToResolve() {
-    if (!plan || !clipId) return;
+    if (!plan || !clipId || exportingResolve) return;
     setError(null);
     setExportingResolve(true);
-    setStatusMsg("Preparando tu clip para abrirlo en DaVinci Resolve…");
+    setStatusMsg("Conectando con DaVinci Resolve y preparando archivos…");
     try {
       if (dirty) {
         await saveClipEditPlan(clipId, plan);
         setDirty(false);
       }
-      const res = await exportClipToResolve(clipId, { open_in_resolve: true });
+      const res = await exportClipToResolve(clipId, { open_in_resolve: true, async_mode: true });
       setResolveResult(res);
-      setStatusMsg(res.message);
+      if (res.status === "queued") {
+        if (res.message) setStatusMsg(res.message);
+      } else {
+        setStatusMsg(res.message);
+        setExportingResolve(false);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-    } finally {
       setExportingResolve(false);
     }
   }
