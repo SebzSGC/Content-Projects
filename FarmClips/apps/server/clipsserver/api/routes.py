@@ -1182,6 +1182,130 @@ def create_app(
             headers={"Accept-Ranges": "bytes", "Cache-Control": "public, max-age=3600"},
         )
 
+    @app.get("/clips/{clip_id}/thumbnail")
+    def get_clip_thumbnail(
+        clip_id: str,
+        width: int = Query(default=540, ge=240, le=1080),
+    ) -> Response:
+        crow = orch.db.get_clip(clip_id)
+        if not crow:
+            raise HTTPException(404, "Clip no encontrado")
+
+        thumbnails_dir = cfg.data_dir / "cache" / "thumbnails"
+        thumbnails_dir.mkdir(parents=True, exist_ok=True)
+        cached_jpg = thumbnails_dir / f"{clip_id}_{width}.jpg"
+
+        if cached_jpg.is_file() and cached_jpg.stat().st_size > 100:
+            return Response(
+                cached_jpg.read_bytes(),
+                media_type="image/jpeg",
+                headers={"Cache-Control": "public, max-age=3600", "X-Frame-Cache": "HIT"},
+            )
+
+        # 1. Si existe video renderizado (final o draft), extraer frame directamente del MP4
+        rendered_mp4 = crow.get("final_mp4_path") or crow.get("draft_mp4_path")
+        if rendered_mp4 and Path(rendered_mp4).is_file():
+            try:
+                extract_frame(rendered_mp4, 1.0, cached_jpg, width=width)
+                return Response(
+                    cached_jpg.read_bytes(),
+                    media_type="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=3600", "X-Frame-Cache": "MISS"},
+                )
+            except Exception:
+                pass  # Fallback a composición de fuentes originales
+
+        # 2. Generar composición vertical 9:16 desde las fuentes originales de la sesión
+        srow = orch.db.get_session(crow["session_id"])
+        if not srow:
+            raise HTTPException(404, "Sesión asociada no encontrada")
+
+        gameplay_path = srow.get("gameplay_path")
+        if not gameplay_path or not Path(gameplay_path).is_file():
+            raise HTTPException(404, "Archivo de gameplay no encontrado")
+
+        camera_path = srow.get("camera_path")
+        has_camera = bool(camera_path and Path(camera_path).is_file())
+
+        start_sec = float(crow.get("start_sec") or 0.0)
+        end_sec = float(crow.get("end_sec") or (start_sec + 30.0))
+        t_game = max(0.0, min(start_sec + 1.0, end_sec - 0.2))
+
+        sync_info = json.loads(srow.get("sync_json") or "{}") if srow.get("sync_json") else {}
+        shift_sec = float(sync_info.get("shift_sec", 0.0)) if isinstance(sync_info, dict) else 0.0
+        t_cam = max(0.0, t_game - shift_sec)
+
+        import cv2
+        import numpy as np
+
+        target_h = int(round(width * 16 / 9))
+        canvas = np.zeros((target_h, width, 3), dtype=np.uint8)
+
+        temp_dir = thumbnails_dir / f"tmp_{clip_id}_{width}"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        tmp_game = temp_dir / "game.jpg"
+        tmp_cam = temp_dir / "cam.jpg"
+
+        try:
+            extract_frame(gameplay_path, t_game, tmp_game, width=width)
+            img_game = cv2.imread(str(tmp_game)) if tmp_game.is_file() else None
+
+            img_cam = None
+            if has_camera:
+                try:
+                    extract_frame(camera_path, t_cam, tmp_cam, width=width)
+                    img_cam = cv2.imread(str(tmp_cam)) if tmp_cam.is_file() else None
+                except Exception:
+                    img_cam = None
+
+            if img_game is not None and img_cam is not None:
+                # Composición 40% cámara arriba / 60% gameplay abajo (estilo Hormozi gaming clásico)
+                cam_target_h = int(round(target_h * 0.40))
+                game_target_h = target_h - cam_target_h
+
+                # Cover crop cámara
+                ch, cw = img_cam.shape[:2]
+                s_cam = max(width / max(1, cw), cam_target_h / max(1, ch))
+                rw_c, rh_c = max(width, int(round(cw * s_cam))), max(cam_target_h, int(round(ch * s_cam)))
+                res_cam = cv2.resize(img_cam, (rw_c, rh_c), interpolation=cv2.INTER_AREA)
+                cx_off = max(0, (rw_c - width) // 2)
+                cy_off = max(0, (rh_c - cam_target_h) // 2)
+                canvas[0:cam_target_h, 0:width] = res_cam[cy_off : cy_off + cam_target_h, cx_off : cx_off + width]
+
+                # Cover crop gameplay
+                gh, gw = img_game.shape[:2]
+                s_game = max(width / max(1, gw), game_target_h / max(1, gh))
+                rw_g, rh_g = max(width, int(round(gw * s_game))), max(game_target_h, int(round(gh * s_game)))
+                res_game = cv2.resize(img_game, (rw_g, rh_g), interpolation=cv2.INTER_AREA)
+                gx_off = max(0, (rw_g - width) // 2)
+                gy_off = max(0, (rh_g - game_target_h) // 2)
+                canvas[cam_target_h:target_h, 0:width] = res_game[gy_off : gy_off + game_target_h, gx_off : gx_off + width]
+
+                # Separador sutil
+                cv2.line(canvas, (0, cam_target_h), (width, cam_target_h), (25, 25, 25), 2)
+
+            elif img_game is not None:
+                # Sólo gameplay: cover crop centrado vertical
+                gh, gw = img_game.shape[:2]
+                s_game = max(width / max(1, gw), target_h / max(1, gh))
+                rw_g, rh_g = max(width, int(round(gw * s_game))), max(target_h, int(round(gh * s_game)))
+                res_game = cv2.resize(img_game, (rw_g, rh_g), interpolation=cv2.INTER_AREA)
+                gx_off = max(0, (rw_g - width) // 2)
+                gy_off = max(0, (rh_g - target_h) // 2)
+                canvas[:, :] = res_game[gy_off : gy_off + target_h, gx_off : gx_off + width]
+            else:
+                raise RuntimeError("No se pudieron decodificar fotogramas de la sesión")
+
+            cv2.imwrite(str(cached_jpg), canvas, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+        return Response(
+            cached_jpg.read_bytes(),
+            media_type="image/jpeg",
+            headers={"Cache-Control": "public, max-age=3600", "X-Frame-Cache": "MISS"},
+        )
+
     # --- Server-Sent Events (SSE) ------------------------------------------
 
     @app.get("/events")

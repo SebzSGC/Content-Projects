@@ -1032,6 +1032,36 @@ async def test_token_optimizations_and_performance_improvements(tmp_path: Path) 
         assert r_list.status_code == 200
         assert any(s["id"] == sid and s["clips_count"] == 0 for s in r_list.json())
 
+        # 5. Vertical Thumbnail Generator (MISS -> HIT)
+        cid = "clip_thumb_test"
+        orch.db.upsert_clip(
+            clip_id=cid,
+            session_id=sid,
+            rank_order=1,
+            start_sec=1.0,
+            end_sec=5.0,
+            overlay_title="Test Overlay",
+            post_title="Post Title",
+            hashtags=["gaming"],
+            reason="Prueba thumbnail",
+            llm_score=80.0,
+            signal_score=0.8,
+            final_score=80.0,
+            curated_json="{}",
+            editplan_json="{}",
+            state="CURATED",
+        )
+        r_th1 = client.get(f"/clips/{cid}/thumbnail", params={"width": 360})
+        assert r_th1.status_code == 200
+        assert r_th1.headers.get("X-Frame-Cache") == "MISS"
+        assert r_th1.headers.get("content-type") == "image/jpeg"
+        assert len(r_th1.content) > 500
+
+        r_th2 = client.get(f"/clips/{cid}/thumbnail", params={"width": 360})
+        assert r_th2.status_code == 200
+        assert r_th2.headers.get("X-Frame-Cache") == "HIT"
+
+
 
 
 

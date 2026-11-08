@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Activity, ArrowLeft, CheckCircle2, Download, Flame, RefreshCw, Scissors, Sparkles, StopCircle, Wrench } from "lucide-react";
+import { Activity, ArrowLeft, CheckCircle2, Download, Flame, Play, RefreshCw, Scissors, Sparkles, StopCircle, Wrench } from "lucide-react";
 import {
   API_PREFIX,
   cancelSession,
@@ -293,19 +293,58 @@ export default function SessionDetailPage() {
 
               return (
                 <GlassCard key={clip.id} as="article" interactive className="flex flex-col overflow-hidden">
-                  <div className="relative aspect-[9/16] max-h-[440px] w-full bg-slate-950">
+                  <div className="group relative aspect-[9/16] max-h-[440px] w-full overflow-hidden rounded-t-xl bg-slate-950">
                     {videoUrl ? (
                       <video src={videoUrl} controls preload="metadata" className="h-full w-full object-contain" />
                     ) : (
-                      <div className="flex h-full flex-col items-center justify-center gap-4 bg-slate-800/40 p-8 text-center animate-pulse motion-reduce:animate-none">
-                        <SoftSpinner className="h-8 w-8" />
-                        <span className="text-sm font-bold text-slate-300">
-                          {typeof prog === "number" ? "Creando video vertical…" : "Listo para editar en vivo"}
-                        </span>
-                        {typeof prog === "number" && (
-                          <div className="w-full max-w-[12rem] space-y-1.5">
-                            <ProgressBar value={prog} />
-                            <span className="text-xs font-bold text-amber-300">{Math.round(prog * 100)}%</span>
+                      <div className="relative h-full w-full">
+                        {/* Miniatura visual real del clip */}
+                        <img
+                          src={`${API_PREFIX}/clips/${clip.id}/thumbnail?t=${Math.floor(clip.updated_at)}`}
+                          alt={clip.post_title}
+                          loading="lazy"
+                          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          onError={(e) => {
+                            // Fallback al fotograma de gameplay de la sesión si la miniatura compuesta estuviera cargando
+                            if (session) {
+                              (e.currentTarget as HTMLImageElement).src = `${API_PREFIX}/sessions/${session.id}/frame?source=gameplay&t=${clip.start}&width=540`;
+                            }
+                          }}
+                        />
+
+                        {/* Degradado para contraste de textos */}
+                        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/20 to-black/40" />
+
+                        {typeof prog === "number" ? (
+                          /* Renderizado activo en segundo plano */
+                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/85 p-6 text-center backdrop-blur-sm">
+                            <SoftSpinner className="h-8 w-8 text-amber-400" />
+                            <span className="text-sm font-bold text-slate-100">Creando video vertical…</span>
+                            <div className="w-full max-w-[12rem] space-y-1.5">
+                              <ProgressBar value={prog} />
+                              <span className="text-xs font-bold text-amber-300">{Math.round(prog * 100)}%</span>
+                            </div>
+                          </div>
+                        ) : (
+                          /* Botón interactivo central para saltar directo a edición */
+                          <div className="absolute inset-0 flex items-center justify-center p-4">
+                            <Link
+                              href={`/editor/${clip.id}`}
+                              className="flex items-center gap-2 rounded-full border border-amber-400/40 bg-slate-950/85 px-4 py-2 text-xs font-black text-amber-400 shadow-2xl backdrop-blur-md transition-all duration-200 hover:scale-110 hover:border-amber-400 hover:bg-amber-400 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            >
+                              <Scissors className="h-4 w-4" />
+                              <span>Personalizar en vivo</span>
+                            </Link>
+                          </div>
+                        )}
+
+                        {/* Badge de duración y vista previa en el pie de la imagen */}
+                        {typeof prog !== "number" && (
+                          <div className="pointer-events-none absolute bottom-3 left-3 right-3 flex items-center justify-between text-[11px] font-bold text-slate-300">
+                            <span className="rounded bg-black/60 px-2 py-0.5 backdrop-blur-sm">Borrador listo</span>
+                            <span className="rounded bg-black/60 px-2 py-0.5 backdrop-blur-sm">
+                              {Math.round(clip.end - clip.start)} s
+                            </span>
                           </div>
                         )}
                       </div>
