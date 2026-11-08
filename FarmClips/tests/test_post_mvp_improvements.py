@@ -618,9 +618,11 @@ def test_analytics_summary_breakdown_and_logs_endpoints(tmp_path: Path) -> None:
         assert abs(dg["used_usd"] - 0.57) < 1e-6
 
         # New calls after calibration are subtracted from the real balance
+        cal_ts = float(cal.json()["summary"]["free_tier"]["models"][1]["credit"]["calibrated_at"] or time.time())
         orch.db.record_api_call(
             session_id=ses["id"], task_hash="hash_stt_after", provider="deepgram", model="nova-3", kind="stt",
             raw_response_path=raw_dummy, units_billed=600.0, cost_usd=0.056, latency_ms=4000,
+            created_at=cal_ts + 1.0,
         )
         dg2 = {m["id"]: m for m in client.get("/analytics/summary").json()["free_tier"]["models"]}["nova-3"]["credit"]
         assert abs(dg2["remaining_usd"] - 199.374) < 1e-4
@@ -1029,6 +1031,8 @@ async def test_token_optimizations_and_performance_improvements(tmp_path: Path) 
         r_list = client.get("/sessions")
         assert r_list.status_code == 200
         assert any(s["id"] == sid and s["clips_count"] == 0 for s in r_list.json())
+
+
 
 
 

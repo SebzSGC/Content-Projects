@@ -84,7 +84,7 @@ class Orchestrator:
         self._drive_watcher_task: Optional[asyncio.Task] = None
 
     def reload_settings(self, new_settings: ServerSettings) -> None:
-        """Hot-reload in-memory ServerSettings across Orchestrator, ApiPool and DriveConnector."""
+        """Hot-reload in-memory ServerSettings across Orchestrator, ApiPool, DriveConnector."""
         self.settings = new_settings
         self.api_pool.reload_settings(new_settings)
         self.drive = self._init_drive(self._require_two_drive_polls)
@@ -349,7 +349,7 @@ class Orchestrator:
 
         try:
             # 1. PREPARAR (CPU Pool): Opus chunks, 16kHz WAVs, audio xcorr sync
-            self.events.publish("stage_progress", session_id=session_id, stage="prepare", progress=0.05, message="Extrayendo pistas Opus/WAV y sincronizando cámara y juego…")
+            self.events.publish("stage_progress", session_id=session_id, stage="prepare", progress=0.05, message="Alineando el audio de tu cámara con el del juego…")
             parsed_sync = json.loads(row["sync_json"]) if row.get("sync_json") else None
             manual_sync_dict = parsed_sync if (parsed_sync and parsed_sync.get("method") == "manual") else None
             if row.get("prepared_json") and (not Path(gp_path).is_file() or not Path(cam_path).is_file()):
@@ -393,7 +393,7 @@ class Orchestrator:
                 sync_json=prep.sync.model_dump_json(),
                 prepared_json=prep.model_dump_json(),
             )
-            self._set_state(session_id, SessionState.PREPARED, message=f"Medios listos ({len(prep.chunks)} tramos Opus)")
+            self._set_state(session_id, SessionState.PREPARED, message="Audio y video sincronizados")
 
             # 2a & 2b IN PARALLEL: Transcribe Opus chunks (API Pool) + Compute Signals in Parquet (CPU Pool)
             async def _transcribe_all() -> List[Utterance]:
@@ -467,7 +467,7 @@ class Orchestrator:
                     str(sig_out),
                 )
 
-            self.events.publish("stage_progress", session_id=session_id, stage="transcribe_signals", progress=0.25, message="Transcribiendo por API y analizando señales en paralelo…")
+            self.events.publish("stage_progress", session_id=session_id, stage="transcribe_signals", progress=0.25, message="Escuchando lo que dices y detectando los momentos de mayor emoción…")
             utterances, signals_parquet = await asyncio.gather(_transcribe_all(), _compute_signals())
             signals = SignalSeries.from_parquet(signals_parquet)
             self.events.publish(
@@ -475,10 +475,10 @@ class Orchestrator:
                 session_id=session_id,
                 **self.db.budget_summary(self.settings.max_budget_usd),
             )
-            self._set_state(session_id, SessionState.TRANSCRIBED, message=f"{len(utterances)} frases transcritas")
+            self._set_state(session_id, SessionState.TRANSCRIBED, message=f"{len(utterances)} frases detectadas")
 
             # 3 & 4. TIMELINE + CURAR CON LLM (API Pool)
-            self.events.publish("stage_progress", session_id=session_id, stage="curate", progress=0.55, message="El LLM elige las mejores historias por ID de frase…")
+            self.events.publish("stage_progress", session_id=session_id, stage="curate", progress=0.55, message="Eligiendo las mejores jugadas y momentos divertidos…")
             windows = build_timeline_windows_if_needed(utterances, signals)
             window_proposals = await asyncio.gather(
                 *(
@@ -534,7 +534,7 @@ class Orchestrator:
                 )
             self.db.delete_stale_session_clips(session_id, [c.id for c in curated_clips])
 
-            self._set_state(session_id, SessionState.CURATED, message=f"{len(curated_clips)} clips curados")
+            self._set_state(session_id, SessionState.CURATED, message=f"{len(curated_clips)} momentos seleccionados")
 
             # Identify top-5 clips > 60/100 for automatic 1080p render & Drive delivery
             auto_render_ids = {
@@ -545,7 +545,7 @@ class Orchestrator:
             top_ordered = [c.id for c in curated_clips if c.id in auto_render_ids][: self.settings.auto_render_top_k]
             auto_render_set = set(top_ordered)
 
-            self._set_state(session_id, SessionState.PLANNING, message="Tracking facial por clip y compilación de EditPlans…")
+            self._set_state(session_id, SessionState.PLANNING, message="Centrando tu cámara y preparando los subtítulos de cada clip…")
 
             # 5, 6, 7. INDEPENDENT PER-CLIP PIPELINE IN PARALLEL (TaskGroup)
             utts_dicts = [u.model_dump(mode="json") for u in utterances]
@@ -570,7 +570,7 @@ class Orchestrator:
                         )
                     )
 
-            self._set_state(session_id, SessionState.DELIVERED, message="Sesión completada y clips entregados")
+            self._set_state(session_id, SessionState.DELIVERED, message="¡Listo! Tus clips ya están disponibles")
             if self.settings.webhook_url:
                 try:
                     wh_res = await send_delivery_webhook(
@@ -667,7 +667,7 @@ class Orchestrator:
 
         self.events.publish("clip_updated", session_id=sid, clip_id=clip.id, state="PLANNED")
 
-        # Step 7: Automatic 1080p render for top-5 (> 60/100) + upload to Salidas/
+        # Step 7: Automatic 1080p render for top-K (> min_score)
         if should_auto_render:
             self.db.update_session(sid, state=SessionState.RENDERING.value)
             await self.render_and_deliver_clip(

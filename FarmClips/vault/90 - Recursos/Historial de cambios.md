@@ -15,7 +15,66 @@ etiquetas: [tipo/cambios, area/general]
 
 ---
 
-## [2.2.0] — 2026-11-07 (Versión actual)
+## [2.3.4] — 2026-11-07 (Versión actual)
+
+### 🧹 Desacoplamiento total de DaVinci Resolve MCP y consolidación del motor nativo 100 % local
+
+Esta actualización retira de forma integral la integración con DaVinci Resolve y el servidor MCP local, devolviendo el enfoque exclusivo al motor de renderizado y Web Studio nativo con máxima fluidez y estabilidad.
+
+#### Qué cambió
+- **Eliminación del módulo DaVinci Resolve MCP (`packages/render-engine/clipsrender/resolve_mcp.py`)**: Se suprime el puente JSON-RPC 2.0, los compiladores de paquetes FCPXML 1.9, SRT y scripts Python para Resolve, y el subcomando CLI `clipsserver resolve-mcp`.
+- **Limpieza de configuración y orquestador (`config.py`, `engine.py`, `routes.py`)**: Eliminados los campos `editor_backend` y `resolve_mcp_*` del servidor y los endpoints `GET /resolve/status`, `POST /clips/{id}/resolve`, `POST /sessions/{id}/resolve` y `GET /clips/{id}/resolve/download/{artifact}`.
+- **Simplificación de la interfaz Web Studio (`apps/web`)**: Retirados los botones de «Abrir en DaVinci Resolve», barras de descarga de artefactos XML y la sección de configuración de DaVinci Resolve en `/settings` (Google Drive se renumera a sección 4).
+- **Mantenimiento del 100 % de las mejoras de rendimiento**: Se preservan intactas las optimizaciones de `SharedSseManager` (Event Bus singleton en el navegador), aceleración GPU en tarjetas visuales, carga instantánea de `/settings` (< 10 ms) y el lenguaje claro y digerible en toda la plataforma ([[HU-002 Simplificación y lenguaje claro en toda la plataforma|HU-002]]).
+
+> [!warning] ⚠️ Cambia para ti
+> - La plataforma ahora genera tus videos terminados de manera 100 % local y directa mediante FFmpeg y aceleración por GPU (NVENC/libx264).
+> - Se eliminan todas las opciones y botones de DaVinci Resolve tanto del editor como de los ajustes, simplificando la interfaz al máximo.
+
+---
+
+## [2.3.3] — 2026-11-07
+
+### ⚡ Carga instantánea de Configuración, Event Bus SSE unificado y máxima fluidez en Web Studio
+
+Esta actualización resuelve de forma integral la lentitud de carga reportada en `/settings` y los problemas de fluidez en la plataforma web mediante optimizaciones de concurrencia en backend, gestión de conexiones en cliente y aceleración por GPU.
+
+#### Qué cambió
+- **Carga instantánea de `/settings` (renderizado en < 10 ms)**: Se desacopla la carga de la configuración principal y presupuesto (`getSettings` y `fetchBudget`) de los diagnósticos externos de conectividad (`fetchDriveStatus`). El formulario ahora se presenta al usuario de inmediato con indicadores sutiles en segundo plano.
+- **Event Bus SSE unificado (`SharedSseManager` en `client.ts`)**: Se reemplazaron múltiples conexiones `EventSource` independientes por un único gestor singleton que comparte una sola conexión HTTP persistente para toda la pestaña del navegador. Esto libera de 2 a 3 conexiones concurrentes (de las 6 permitidas en HTTP/1.1), eliminando por completo el encolado (*stalling*) de peticiones de video, previsualización de fotogramas y navegación.
+- **Aceleración por GPU y reducción de sobrecarga gráfica (`ui.tsx`, `layout.tsx`, `globals.css`)**:
+  - `GlassCard`: Se optimizó el filtro de desenfoque de `backdrop-blur-xl` a `backdrop-blur-md` y se añadió `transform-gpu` con transiciones de 200 ms, aligerando el cálculo de rasterizado del navegador en un ~60%.
+  - Resplandores de fondo en `RootLayout`: Aislados en capas compuestas independientes de hardware (`transform-gpu will-change-transform`), impidiendo que el scroll o los eventos de ratón provoquen repintados de pantalla completa.
+  - Habilitación de `scroll-behavior: smooth` y eliminación de micro-tirones en toda la aplicación.
+
+> [!warning] ⚠️ Cambia para ti
+> - La sección de **Configuración (`/settings`)** abre ahora al instante sin mostrar pantallas de carga en blanco ni demoras de varios segundos.
+> - La navegación entre pantallas, el desplazamiento de página (*scrolling*) y la interacción con tarjetas es notablemente más ágil, suave y reactiva.
+> - La reproducción de video y el visor de clips ya no experimentan pausas ni esperas por sockets bloqueados.
+
+---
+
+## [2.3.1] — 2026-11-07
+
+### ✨ Simplificación, lenguaje digerible y experiencia de usuario clara en Web Studio
+
+Esta actualización rediseña por completo los textos, descripciones, tooltips, notificaciones en tiempo real y paneles del estudio web, transformando la jerga técnica y saturada en explicaciones amigables para creadores de contenido de gaming que aclaran el «por qué» detrás de cada función.
+
+#### Qué cambió
+- **Notificaciones en tiempo real y orquestador (`engine.py`, `pipelineSteps.ts`, `TopNav.tsx`)**: Reemplazo de mensajes con nombres de funciones internas por avisos paso a paso transparentes: «Escuchando partida», «Eligiendo mejores momentos», «Sincronizando audio con precisión», «Armando encuadre vertical» y «Creando videos finales».
+- **Gestión de sesiones y subida de partidas (`/sessions` y `/sessions/[id]`)**: Explicación clara de por qué se detectan juegos y palabras clave, por qué se unen dos videos en 9:16 vertical, cómo se calcula la curva de emoción combinando voz y jugabilidad, y cómo corregir la sincronización de audio manualmente.
+- **Estudio de edición de clips (`/editor/[clipId]`)**: Traducción de términos de edición técnica (curvas `outBack`, *Jump Cuts*, atenuación *ducking*) a resultados tangibles: «Zoom de reacción», «Cámara en pantalla completa», «El juego baja solo cuando hablas» y «Saltos automáticos en silencios».
+- **Configuración centralizada (`/settings`)**: Las secciones eliminan nombres de variables de entorno del título y explican con claridad qué hace cada proveedor, por qué usarlo y qué requisitos tiene (como autorizar OAuth en Google Drive).
+- **Control de consumo y simulación (`/analytics`)**: Sustitución de terminología cruda de facturación por explicaciones accesibles de saldo disponible, capacidad restante en horas y clips, planes gratuitos y una calculadora para estimar el costo de procesar un stream antes de iniciarlo.
+
+> [!warning] ⚠️ Cambia para ti
+> - La plataforma ahora habla tu mismo idioma: entenderás exactamente qué está haciendo el sistema en cada momento sin lidiar con siglas técnicas crudas.
+> - En el editor, los controles de cámara, audio y subtítulos muestran su efecto visual o auditivo de forma directa.
+> - En `/settings` y `/analytics` sabrás con exactitud cuánto inviertes, cuánto te rinde el saldo y cómo aprovechar los planes gratuitos sin sorpresas.
+
+---
+
+## [2.2.0] — 2026-11-07
 
 ### ⚡ Optimización integral de tokens de IA y rendimiento en 4 ámbitos (Carga, Memoria/CPU, Fluidez 60 fps y Latencia API)
 

@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Activity, ArrowLeft, CheckCircle2, Download, Flame, RefreshCw, Scissors, StopCircle, Wrench } from "lucide-react";
+import { Activity, ArrowLeft, CheckCircle2, Download, Flame, RefreshCw, Scissors, Sparkles, StopCircle, Wrench } from "lucide-react";
 import {
   API_PREFIX,
   cancelSession,
@@ -32,7 +32,7 @@ import {
   inputBase,
 } from "@/components/ui";
 
-const SYNC_LABEL: Record<string, string> = { audio_xcorr: "por audio (FFT)", manual: "manual", zero: "sin desfase" };
+const SYNC_LABEL: Record<string, string> = { audio_xcorr: "Automática por sonido", manual: "Ajustada a mano", zero: "Sin desfase" };
 
 function polyline(values: number[]): string {
   return values
@@ -127,10 +127,14 @@ export default function SessionDetailPage() {
 
   let headline = friendlyState(session.state);
   if (isRunning) headline = `${PIPELINE_STEPS[steps.current].label}…`;
-  else if (delivered) headline = `${clips.length} ${clips.length === 1 ? "clip listo" : "clips listos"}`;
+  else if (delivered) headline = `${clips.length} ${clips.length === 1 ? "clip listo para ti" : "clips listos para ti"}`;
   else if (session.state === "FAILED") headline = "El proceso se detuvo";
   else if (session.state === "CANCELLED") headline = "Sesión cancelada";
-  const detail = isRunning ? liveStatus || PIPELINE_STEPS[steps.current].hint : delivered ? "Ábrelos en el editor o descárgalos." : "";
+  const detail = isRunning
+    ? liveStatus || PIPELINE_STEPS[steps.current].hint
+    : delivered
+      ? "Puedes personalizarlos en el editor rápido o descargarlos en alta calidad."
+      : "";
 
   return (
     <div className="space-y-8">
@@ -138,7 +142,7 @@ export default function SessionDetailPage() {
         href="/sessions"
         className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold text-slate-400 transition-all duration-300 hover:bg-white/5 hover:text-slate-100"
       >
-        <ArrowLeft className="h-4 w-4" /> Sesiones
+        <ArrowLeft className="h-4 w-4" /> Volver a tus sesiones
       </Link>
 
       {/* Hero: status, 7-step track and actions --------------------------- */}
@@ -149,10 +153,10 @@ export default function SessionDetailPage() {
               {session.detected_game && (
                 <Badge tone="info">
                   {session.detected_game.toUpperCase()}
-                  <span className="font-semibold opacity-80">· {session.keyterms_count ?? 0} palabras clave</span>
+                  <span className="font-semibold opacity-80">· Vocabulario del juego activo</span>
                 </Badge>
               )}
-              {session.prepared && <Badge>{Math.round(session.prepared.gameplay.duration / 60)} min</Badge>}
+              {session.prepared && <Badge>{Math.round(session.prepared.gameplay.duration / 60)} min de partida</Badge>}
             </div>
             <h1 className="truncate text-2xl font-black tracking-tight text-slate-50 sm:text-3xl">{session.title}</h1>
             <div className="flex items-start gap-3">
@@ -170,15 +174,16 @@ export default function SessionDetailPage() {
                 onClick={() => cancelSession(session.id).then(reload)}
                 className="inline-flex items-center justify-center gap-2 rounded-full border border-rose-400/30 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-200 transition-all duration-300 ease-in-out hover:border-rose-400/50 hover:bg-rose-500/20 cursor-pointer"
               >
-                <StopCircle className="h-4 w-4" /> Cancelar
+                <StopCircle className="h-4 w-4" /> Detener
               </button>
             ) : (
               <span className="flex items-center gap-1">
                 <button type="button" onClick={() => rerunSession(session.id).then(reload)} className={btnPrimary}>
-                  <RefreshCw className="h-4 w-4" /> Volver a procesar
+                  <RefreshCw className="h-4 w-4" /> Reprocesar gratis
                 </button>
-                <InfoTip label="Sobre volver a procesar" align="end">
-                  Usa la caché SQLite: las llamadas a la API que ya se hicieron no se vuelven a cobrar.
+                <InfoTip label="¿Por qué es gratis?" align="end">
+                  Como ya escuchamos y analizamos esta grabación una vez, guardamos los resultados en tu equipo para que
+                  puedas volver a generar los clips sin gastar saldo.
                 </InfoTip>
               </span>
             )}
@@ -186,26 +191,30 @@ export default function SessionDetailPage() {
         </div>
 
         <StepProgress steps={PIPELINE_STEPS} statuses={steps.statuses} fill={steps.fill} current={steps.current} />
-
         {error && <p className="rounded-2xl bg-rose-500/10 px-4 py-2.5 text-sm font-semibold text-rose-200">{error}</p>}
         {session.error && (
-          <p className="rounded-2xl bg-rose-500/10 px-4 py-2.5 text-sm font-semibold text-rose-200">Error del proceso: {session.error}</p>
+          <p className="rounded-2xl bg-rose-500/10 px-4 py-2.5 text-sm font-semibold text-rose-200">Qué ocurrió: {session.error}</p>
         )}
       </GlassCard>
 
       {/* Excitement curve ------------------------------------------------- */}
       <GlassCard as="section" className="space-y-4 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="flex items-center gap-2 text-lg font-extrabold text-slate-50">
-            <Activity className="h-5 w-5 text-amber-300" /> Curva de emoción
-            <InfoTip>
-              Combina la energía acústica de tu micrófono, el movimiento del juego y la actividad del HUD / killfeed (2 fps),
-              calculadas en CPU y guardadas en Parquet. Las franjas doradas son los tramos que eligió la IA.
-            </InfoTip>
-          </h2>
+          <div>
+            <h2 className="flex items-center gap-2 text-lg font-extrabold text-slate-50">
+              <Activity className="h-5 w-5 text-amber-300" /> Mapa de emoción de tu partida
+              <InfoTip>
+                Unimos la intensidad de tu voz con la acción en pantalla para detectar dónde ocurrieron las mejores
+                jugadas y reacciones. Las franjas doradas son los clips seleccionados.
+              </InfoTip>
+            </h2>
+            <p className="text-xs text-slate-400">
+              Las zonas resaltadas en dorado muestran por qué elegimos cada clip justo cuando subió la energía.
+            </p>
+          </div>
           {signals && (
             <span className="text-sm text-slate-400">
-              {signals.peaks.length} picos · {Math.round(signals.duration / 60)} min
+              {signals.peaks.length} momentos intensos · {Math.round(signals.duration / 60)} min
             </span>
           )}
         </div>
@@ -226,13 +235,13 @@ export default function SessionDetailPage() {
             </svg>
             <div className="flex flex-wrap items-center gap-5 text-xs font-semibold text-slate-400">
               <span className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-amber-400" /> Emoción total
+                <span className="h-2 w-2 rounded-full bg-amber-400" /> Emoción general
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-violet-400" /> Tu reacción
+                <span className="h-2 w-2 rounded-full bg-violet-400" /> Tu voz y reacciones
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-sky-400" /> Acción en el juego
+                <span className="h-2 w-2 rounded-full bg-sky-400" /> Acción en la partida
               </span>
             </div>
           </>
@@ -240,10 +249,10 @@ export default function SessionDetailPage() {
           <div className="flex h-36 items-center justify-center gap-3 rounded-2xl bg-slate-950/40 text-sm text-slate-400">
             {isRunning ? (
               <>
-                <SoftSpinner className="h-4 w-4" /> Analizando el audio y el video…
+                <SoftSpinner className="h-4 w-4" /> Buscando los momentos más intensos de la partida…
               </>
             ) : (
-              "Sin señales para esta sesión."
+              "Aún no hay mapa de emoción para esta sesión."
             )}
           </div>
         )}
@@ -251,19 +260,24 @@ export default function SessionDetailPage() {
 
       {/* Clips ------------------------------------------------------------ */}
       <section className="space-y-5">
-        <h2 className="flex items-center gap-2 text-xl font-black text-slate-50">
-          <Flame className="h-5 w-5 text-amber-300" /> Clips ({clips.length})
-        </h2>
+        <div>
+          <h2 className="flex items-center gap-2 text-xl font-black text-slate-50">
+            <Flame className="h-5 w-5 text-amber-300" /> Mejores momentos seleccionados ({clips.length})
+          </h2>
+          <p className="text-sm text-slate-400">
+            Ordenados del más viral al más tranquilo, con la explicación de por qué funcionan para Shorts.
+          </p>
+        </div>
 
         {clips.length === 0 ? (
           <GlassCard className="flex flex-col items-center gap-3 p-12 text-center text-sm text-slate-400">
             {isRunning ? (
               <>
                 <SoftSpinner className="h-6 w-6" />
-                Buscando los mejores momentos…
+                Seleccionando las mejores jugadas y reacciones…
               </>
             ) : (
-              "No se encontraron clips en esta sesión."
+              "No se encontraron momentos destacados en esta grabación."
             )}
           </GlassCard>
         ) : (
@@ -286,7 +300,7 @@ export default function SessionDetailPage() {
                       <div className="flex h-full flex-col items-center justify-center gap-4 bg-slate-800/40 p-8 text-center animate-pulse motion-reduce:animate-none">
                         <SoftSpinner className="h-8 w-8" />
                         <span className="text-sm font-bold text-slate-300">
-                          {typeof prog === "number" ? "Renderizando" : "En preparación"}
+                          {typeof prog === "number" ? "Creando video vertical…" : "Listo para editar en vivo"}
                         </span>
                         {typeof prog === "number" && (
                           <div className="w-full max-w-[12rem] space-y-1.5">
@@ -299,11 +313,11 @@ export default function SessionDetailPage() {
 
                     <div className="pointer-events-none absolute top-3 left-3 flex items-center gap-1.5">
                       <span className="rounded-full bg-amber-400 px-3 py-1 text-xs font-black text-slate-950 shadow-lg shadow-amber-500/30">
-                        #{clip.rank_order} · {score}
+                        Top #{clip.rank_order} · {score} pts
                       </span>
                       {clip.drive_salidas && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/90 px-2.5 py-1 text-[11px] font-bold text-slate-950">
-                          <CheckCircle2 className="h-3 w-3" /> Entregado
+                          <CheckCircle2 className="h-3 w-3" /> Listo
                         </span>
                       )}
                     </div>
@@ -311,10 +325,12 @@ export default function SessionDetailPage() {
 
                   <div className="flex flex-1 flex-col gap-3 p-5">
                     <p className="text-xs font-bold text-slate-400">
-                      En pantalla: <span className="text-slate-200">{clip.overlay_title}</span>
+                      Título en el video: <span className="text-slate-200">{clip.overlay_title}</span>
                     </p>
                     <h3 className="text-base font-extrabold leading-snug text-slate-50">{clip.post_title}</h3>
-                    <p className="line-clamp-2 text-sm leading-relaxed text-slate-400">{clip.reason}</p>
+                    <p className="line-clamp-2 text-sm leading-relaxed text-slate-400">
+                      <strong className="text-slate-300">Por qué destaca:</strong> {clip.reason}
+                    </p>
                     <div className="flex flex-wrap gap-1.5">
                       {clip.hashtags.map((tag) => (
                         <span key={tag} className="rounded-full bg-white/5 px-2.5 py-0.5 text-xs font-semibold text-slate-400">
@@ -325,25 +341,22 @@ export default function SessionDetailPage() {
 
                     <div className="mt-auto flex items-center gap-2 pt-2">
                       <Link href={`/editor/${clip.id}`} className={`${btnPrimary} flex-1`}>
-                        <Scissors className="h-4 w-4" /> Abrir editor
+                        <Scissors className="h-4 w-4" /> Personalizar clip
                       </Link>
                       {clip.has_final && (
                         <a
                           href={`${API_PREFIX}/clips/${clip.id}/file?quality=final&download=true`}
                           className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-200 transition-all duration-300 hover:scale-105 hover:bg-white/10"
-                          title="Descargar MP4 1080p"
-                          aria-label="Descargar MP4 1080p"
+                          title="Descargar video MP4"
+                          aria-label="Descargar video MP4"
                         >
                           <Download className="h-4 w-4" />
                         </a>
                       )}
-                      <InfoTip label="Detalles del clip" align="end">
-                        Tramo original: {clip.start.toFixed(1)} s – {clip.end.toFixed(1)} s
-                        {clip.curated ? ` (frases ${clip.curated.start_id}..${clip.curated.end_id})` : ""}
+                      <InfoTip label="¿Cómo se calculó su nota?" align="end">
+                        Ocurre del segundo {clip.start.toFixed(1)} al {clip.end.toFixed(1)}.
                         <br />
-                        Puntaje: IA {clip.llm_score.toFixed(0)} · Señales {(clip.signal_score * 100).toFixed(0)} · Final {score}
-                        <br />
-                        Estado: {clip.state}
+                        Historia: {clip.llm_score.toFixed(0)}/100 · Emoción en vivo: {(clip.signal_score * 100).toFixed(0)}/100 · Nota final: {score}/100.
                       </InfoTip>
                     </div>
                   </div>
@@ -356,47 +369,46 @@ export default function SessionDetailPage() {
 
       {/* Technical details --------------------------------------------------- */}
       <GlassCard as="section" className="p-6">
-        <Disclosure icon={<Wrench className="h-5 w-5" />} title="Detalles técnicos" subtitle="Sincronización, medios y ajuste manual">
+        <Disclosure icon={<Wrench className="h-5 w-5" />} title="Sincronización de cámara y datos del archivo" subtitle="Úsalo si notas que tu voz va adelantada o atrasada respecto al juego">
           <div className="space-y-6">
             <DetailList
               items={[
-                ["Sesión", session.id],
-                ["Estado interno", session.state],
-                ["Sincronía", session.sync ? SYNC_LABEL[session.sync.method] ?? session.sync.method : "Calculando…"],
-                ["Desfase (shift_sec)", session.sync ? `${session.sync.shift_sec.toFixed(3)} s` : "—"],
-                ["Confianza FFT", session.sync ? `${Math.round(session.sync.confidence * 100)} %` : "—"],
+                ["Código de sesión", session.id],
+                ["Cómo se alineó el audio", session.sync ? SYNC_LABEL[session.sync.method] ?? session.sync.method : "Calculando…"],
+                ["Ajuste de tiempo aplicado", session.sync ? `${session.sync.shift_sec.toFixed(2)} segundos` : "—"],
+                ["Precisión de la alineación", session.sync ? `${Math.round(session.sync.confidence * 100)} %` : "—"],
                 [
-                  "Pista limpia del juego",
+                  "Mezcla de sonido",
                   session.prepared
                     ? session.prepared.gameplay_clean_audio_stream != null
-                      ? `Pista #${session.prepared.gameplay_clean_audio_stream} (sidechain activo)`
-                      : "Mezcla única (EQ de voz)"
+                      ? "Baja el volumen del juego automáticamente cuando hablas"
+                      : "Realza tu voz sobre el sonido del juego"
                     : "—",
                 ],
                 [
-                  "Juego",
+                  "Calidad del video del juego",
                   session.prepared
-                    ? `${session.prepared.gameplay.width}×${session.prepared.gameplay.height} · ${session.prepared.gameplay.fps} fps · ${Math.round(session.prepared.gameplay.duration)} s`
+                    ? `${session.prepared.gameplay.width}×${session.prepared.gameplay.height} a ${session.prepared.gameplay.fps} fps`
                     : "—",
                 ],
                 [
-                  "Cámara",
+                  "Calidad de tu cámara",
                   session.prepared
-                    ? `${session.prepared.camera.width}×${session.prepared.camera.height} · ${session.prepared.camera.fps} fps · ${Math.round(session.prepared.camera.duration)} s`
+                    ? `${session.prepared.camera.width}×${session.prepared.camera.height} a ${session.prepared.camera.fps} fps`
                     : "—",
                 ],
-                ["Audio enviado a STT", session.prepared ? `Opus mono 16 kHz · ${session.prepared.chunks.length} tramos` : "—"],
-                ["Video del juego", session.gameplay_path ?? "—"],
-                ["Video de la cámara", session.camera_path ?? "—"],
-                ["Preset", session.style_preset],
+                ["Estilo visual", session.style_preset],
               ]}
             />
 
             <form onSubmit={handleSaveSync} className="flex flex-wrap items-end gap-3 border-t border-white/5 pt-5">
               <label className="space-y-1.5">
                 <span className="flex items-center gap-1 text-xs font-bold text-slate-400">
-                  Ajuste manual del desfase (s)
-                  <InfoTip>Corrige la sincronía cámara ↔ juego si notas los labios desfasados. Aplicarlo vuelve a procesar la sesión.</InfoTip>
+                  Corregir desfase de la cámara (en segundos)
+                  <InfoTip>
+                    Si ves que tus labios se mueven antes o después de que suene el disparo, cambia este número y vuelve
+                    a aplicar.
+                  </InfoTip>
                 </span>
                 <input
                   type="number"
@@ -408,7 +420,7 @@ export default function SessionDetailPage() {
               </label>
               <button type="submit" disabled={savingSync} className={btnSecondary}>
                 {savingSync ? <SoftSpinner className="h-4 w-4" /> : null}
-                Aplicar y reprocesar
+                Guardar ajuste y actualizar clips
               </button>
             </form>
           </div>

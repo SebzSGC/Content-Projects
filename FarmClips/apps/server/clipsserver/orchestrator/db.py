@@ -330,6 +330,7 @@ class OrchestratorDB:
         output_tokens: int = 0,
         cost_usd: float = 0.0,
         latency_ms: int = 0,
+        created_at: Optional[float] = None,
     ) -> str:
         cid = new_id("call")
         with self._lock:
@@ -351,7 +352,7 @@ class OrchestratorDB:
                     output_tokens,
                     cost_usd,
                     latency_ms,
-                    time.time(),
+                    time.time() if created_at is None else float(created_at),
                 ),
             )
             self._conn.commit()

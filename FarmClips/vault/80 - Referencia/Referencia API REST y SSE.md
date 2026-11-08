@@ -79,6 +79,7 @@ etiquetas: [tipo/api, area/backend]
 
 ## 🔗 Relacionado
 - [[FastAPI y Orquestador]]
+- [[Motor de Renderizado y Subtítulos]]
 - [[Variables de Entorno]]
 - [[Comandos CLI y Scripts]]
 - [[Monitoreo y Presupuesto]]

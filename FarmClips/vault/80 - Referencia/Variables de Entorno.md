@@ -94,5 +94,6 @@ etiquetas: [tipo/guia, area/configuracion]
 
 ## 🔗 Relacionado
 - [[Referencia API REST y SSE]]
+- [[Motor de Renderizado y Subtítulos]]
 - [[Cómo configurar Proveedores de IA]]
 - [[Despliegue y Ejecución]]

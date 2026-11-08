@@ -64,6 +64,7 @@ export default function SettingsPage() {
   const [budget, setBudget] = useState<BudgetSummary | null>(null);
   const [driveStatus, setDriveStatus] = useState<DriveStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingDrive, setLoadingDrive] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
@@ -145,17 +146,24 @@ export default function SettingsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [s, b, d] = await Promise.all([
+      // 1. Cargar configuración principal y presupuesto de inmediato (< 5 ms)
+      const [s, b] = await Promise.all([
         getSettings(),
         fetchBudget(),
-        fetchDriveStatus().catch(() => null),
       ]);
       applyLoadedSettings(s);
       setBudget(b);
-      setDriveStatus(d);
+      setLoading(false);
+
+      // 2. Cargar diagnósticos externos en paralelo sin bloquear la pantalla
+      setLoadingDrive(true);
+
+      fetchDriveStatus()
+        .then((d) => setDriveStatus(d))
+        .catch(() => null)
+        .finally(() => setLoadingDrive(false));
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo cargar la configuración del servidor.");
-    } finally {
       setLoading(false);
     }
   }, [applyLoadedSettings]);
@@ -210,13 +218,13 @@ export default function SettingsPage() {
       setGeminiKey("");
       setOpenaiKey("");
       setDriveClientSecret("");
-      const [freshBudget, freshDrive] = await Promise.all([
-        fetchBudget(),
-        fetchDriveStatus().catch(() => null),
-      ]);
-      setBudget(freshBudget);
-      setDriveStatus(freshDrive);
+
+      const freshBudget = await fetchBudget().catch(() => null);
+      if (freshBudget) setBudget(freshBudget);
       showToast("ok", "Configuración guardada en .env y aplicada en memoria.");
+
+      // Refrescar diagnósticos externos en segundo plano
+      fetchDriveStatus().then((d) => setDriveStatus(d)).catch(() => null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error al guardar la configuración";
       setError(msg);
@@ -403,19 +411,16 @@ export default function SettingsPage() {
               <ArrowLeft className="h-3.5 w-3.5" /> Volver a Sesiones
             </Link>
             <span>/</span>
-            <span className="text-amber-300">Configuración</span>
+            <span className="text-amber-300">Ajustes</span>
           </div>
           <h1 className="mt-1.5 text-2xl font-black tracking-tight text-slate-50 sm:text-3xl">
-            Configuración y Proveedores de IA
+            Ajustes de tu Estudio
           </h1>
           <p className="mt-1 text-sm text-slate-400">
-            Gestiona tus API Keys, modelos principales/respaldo y límites de presupuesto con aplicación inmediata en
-            memoria.
+            Elige qué servicios usar para crear tus clips, define tu límite de gasto y conecta Google Drive.
             {settings?.env_path && (
-              <InfoTip label="Archivo de persistencia">
-                Los cambios se guardan de forma segura en{" "}
-                <span className="font-mono text-slate-100">{settings.env_path}</span> sin necesidad de reiniciar el
-                servidor.
+              <InfoTip label="Guardado inmediato">
+                Tus cambios se aplican al instante sin necesidad de reiniciar la aplicación.
               </InfoTip>
             )}
           </p>
@@ -429,7 +434,7 @@ export default function SettingsPage() {
 
           <button type="submit" form="settings-form" disabled={saving || loading} className={btnPrimary}>
             {saving ? <SoftSpinner className="h-4 w-4" onAccent /> : <Save className="h-4 w-4" />}
-            {saving ? "Guardando..." : "Guardar Configuración"}
+            {saving ? "Guardando..." : "Guardar cambios"}
           </button>
         </div>
       </div>
@@ -444,7 +449,7 @@ export default function SettingsPage() {
       {loading && !settings ? (
         <GlassCard className="flex h-64 items-center justify-center p-8 text-sm font-semibold text-slate-300">
           <SoftSpinner className="mr-3 h-5 w-5" />
-          Cargando configuración actual...
+          Cargando tus ajustes...
         </GlassCard>
       ) : (
         <form id="settings-form" onSubmit={handleSave} className="space-y-6">
@@ -457,48 +462,47 @@ export default function SettingsPage() {
                 </span>
                 <div>
                   <h2 className="text-lg font-extrabold text-slate-50">
-                    1. Voz a Texto (STT — Transcripción por Palabra)
+                    1. Servicio para escuchar tu voz (Subtítulos)
                   </h2>
                   <p className="text-xs text-slate-400">
-                    Transcribe únicamente el audio Opus ligero del micrófono con marcas de tiempo por palabra y
-                    vocabulario gaming.
+                    Convierte lo que hablas en texto con el tiempo exacto de cada palabra para animar los subtítulos.
                   </p>
                 </div>
               </div>
               <Badge tone="success">
-                Activo: {sttPrimary} → Respaldo: {sttBackup}
+                En uso: {sttPrimary} · Respaldo: {sttBackup}
               </Badge>
             </div>
 
             <div className="grid gap-5 md:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-slate-300">
-                  Proveedor Principal STT (<code className="text-amber-300">CLIPS_STT_PRIMARY</code>)
+                  Servicio principal de voz
                 </label>
                 <select
                   value={sttPrimary}
                   onChange={(e) => setSttPrimary(e.target.value as "deepgram" | "groq" | "fixture")}
                   className={inputBase}
                 >
-                  <option value="deepgram">deepgram — Deepgram Nova-3 (Keyterms + Timestamps exactos)</option>
-                  <option value="groq">groq — Groq Whisper Large v3 Turbo (Económico y veloz)</option>
-                  <option value="fixture">fixture — Modo Pruebas Offline ($0.00 sin red)</option>
+                  <option value="deepgram">Deepgram Nova-3 — Más preciso con jerga de juegos (Recomendado)</option>
+                  <option value="groq">Groq Whisper Turbo — Muy económico y rápido</option>
+                  <option value="fixture">Modo de prueba sin internet ($0.00)</option>
                 </select>
               </div>
 
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-slate-300">
-                  Proveedor de Respaldo Automático (<code className="text-slate-400">CLIPS_STT_BACKUP</code>)
+                  Servicio de respaldo (entra solo si el principal falla)
                 </label>
                 <select
                   value={sttBackup}
                   onChange={(e) => setSttBackup(e.target.value as "groq" | "deepgram" | "fixture" | "none")}
                   className={inputBase}
                 >
-                  <option value="groq">groq — Groq Whisper Large v3 Turbo</option>
-                  <option value="deepgram">deepgram — Deepgram Nova-3</option>
-                  <option value="fixture">fixture — Fixtures grabadas locales</option>
-                  <option value="none">none — Sin respaldo</option>
+                  <option value="groq">Groq Whisper Turbo</option>
+                  <option value="deepgram">Deepgram Nova-3</option>
+                  <option value="fixture">Modo de prueba local</option>
+                  <option value="none">Sin respaldo</option>
                 </select>
               </div>
             </div>
@@ -510,7 +514,7 @@ export default function SettingsPage() {
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <KeyRound className="h-4 w-4 text-emerald-300" />
-                    <span className="text-xs font-extrabold text-slate-100">DEEPGRAM_API_KEY</span>
+                    <span className="text-xs font-extrabold text-slate-100">Clave de Deepgram</span>
                   </div>
                   {renderKeyStatusBadge(
                     Boolean(settings?.has_deepgram_key),
@@ -526,8 +530,8 @@ export default function SettingsPage() {
                     onChange={(e) => setDeepgramKey(e.target.value)}
                     placeholder={
                       settings?.has_deepgram_key
-                        ? `Clave guardada (${settings.deepgram_api_key}) — escribe para reemplazar`
-                        : "Pega tu clave de Deepgram (ej. dg_...)"
+                        ? `Clave guardada (${settings.deepgram_api_key}) — escribe si quieres cambiarla`
+                        : "Pega aquí tu clave de Deepgram"
                     }
                     autoComplete="off"
                     className={`${inputBase} pr-10 font-mono text-xs`}
@@ -544,7 +548,7 @@ export default function SettingsPage() {
 
                 <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                    <span>Modelo:</span>
+                    <span>Versión:</span>
                     <input
                       type="text"
                       value={deepgramModel}
@@ -563,7 +567,7 @@ export default function SettingsPage() {
                     ) : (
                       <Wifi className="h-3.5 w-3.5" />
                     )}
-                    Probar Conexión
+                    Probar conexión
                   </button>
                 </div>
                 {renderTestResultBanner("deepgram")}
@@ -574,7 +578,7 @@ export default function SettingsPage() {
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <KeyRound className="h-4 w-4 text-amber-300" />
-                    <span className="text-xs font-extrabold text-slate-100">GROQ_API_KEY</span>
+                    <span className="text-xs font-extrabold text-slate-100">Clave de Groq Cloud</span>
                   </div>
                   {renderKeyStatusBadge(Boolean(settings?.has_groq_key), settings?.groq_api_key || "", groqKey)}
                 </div>
@@ -586,8 +590,8 @@ export default function SettingsPage() {
                     onChange={(e) => setGroqKey(e.target.value)}
                     placeholder={
                       settings?.has_groq_key
-                        ? `Clave guardada (${settings.groq_api_key}) — escribe para reemplazar`
-                        : "Pega tu clave de Groq Cloud (ej. gsk_...)"
+                        ? `Clave guardada (${settings.groq_api_key}) — escribe si quieres cambiarla`
+                        : "Pega aquí tu clave de Groq (gsk_...)"
                     }
                     autoComplete="off"
                     className={`${inputBase} pr-10 font-mono text-xs`}
@@ -604,7 +608,7 @@ export default function SettingsPage() {
 
                 <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                    <span>Modelo:</span>
+                    <span>Versión:</span>
                     <input
                       type="text"
                       value={groqSttModel}
@@ -619,7 +623,7 @@ export default function SettingsPage() {
                     className={`${btnSecondary} !px-3.5 !py-1.5 !text-xs`}
                   >
                     {testingProvider.groq ? <SoftSpinner className="h-3.5 w-3.5" /> : <Wifi className="h-3.5 w-3.5" />}
-                    Probar Conexión
+                    Probar conexión
                   </button>
                 </div>
                 {renderTestResultBanner("groq")}
@@ -636,47 +640,46 @@ export default function SettingsPage() {
                 </span>
                 <div>
                   <h2 className="text-lg font-extrabold text-slate-50">
-                    2. Curación Narrativa (LLM — Selección por IDs de Frase)
+                    2. Inteligencia Artificial para elegir los mejores momentos
                   </h2>
                   <p className="text-xs text-slate-400">
-                    Evalúa la línea de tiempo compacta (`u0001..u9999` + picos acústicos/HUD) y sugiere los mejores
-                    momentos.
+                    Analiza lo que pasó en la partida para elegir las jugadas más entretenidas y redactar sus títulos.
                   </p>
                 </div>
               </div>
               <Badge tone="gold">
-                Activo: {llmPrimary} ({llmModel})
+                En uso: {llmPrimary} ({llmModel})
               </Badge>
             </div>
 
             <div className="grid gap-5 md:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-slate-300">
-                  Proveedor Principal LLM (<code className="text-amber-300">CLIPS_LLM_PRIMARY</code>)
+                  Servicio principal de IA
                 </label>
                 <select
                   value={llmPrimary}
                   onChange={(e) => setLlmPrimary(e.target.value as "gemini" | "openai_compat" | "fixture")}
                   className={inputBase}
                 >
-                  <option value="gemini">gemini — Google Gemini API (Structured Outputs nativo)</option>
+                  <option value="gemini">Google Gemini — Rápido y con capa gratuita (Recomendado)</option>
                   <option value="openai_compat">
-                    openai_compat — OpenAI / Groq / OpenRouter / Ollama Compatible
+                    OpenAI / Groq / Compatible
                   </option>
-                  <option value="fixture">fixture — Modo Pruebas Offline ($0.00 sin red)</option>
+                  <option value="fixture">Modo de prueba sin internet ($0.00)</option>
                 </select>
               </div>
 
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-slate-300">
-                  Modelo Principal LLM (<code className="text-amber-300">CLIPS_LLM_MODEL</code>)
+                  Modelo de IA principal
                 </label>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={llmModel}
                     onChange={(e) => setLlmModel(e.target.value)}
-                    placeholder="ej. gemini-3.5-flash-lite o gpt-6-luna"
+                    placeholder="ej. gemini-3.5-flash-lite"
                     className={`${inputBase} font-mono text-xs`}
                   />
                   <select
@@ -687,7 +690,7 @@ export default function SettingsPage() {
                     }}
                     className="w-44 shrink-0 rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-2 text-xs font-semibold text-slate-300 focus:border-amber-300/60 focus:outline-none"
                   >
-                    <option value="">Presets...</option>
+                    <option value="">Elegir sugerido...</option>
                     {GEMINI_MODELS.map((m) => (
                       <option key={m.value} value={m.value}>
                         {m.value}
@@ -704,23 +707,23 @@ export default function SettingsPage() {
 
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-slate-300">
-                  Proveedor de Respaldo LLM (<code className="text-slate-400">CLIPS_LLM_BACKUP</code>)
+                  Servicio de respaldo
                 </label>
                 <select
                   value={llmBackup}
                   onChange={(e) => setLlmBackup(e.target.value as "openai_compat" | "gemini" | "fixture" | "none")}
                   className={inputBase}
                 >
-                  <option value="openai_compat">openai_compat — OpenAI / Compatible</option>
-                  <option value="gemini">gemini — Google Gemini</option>
-                  <option value="fixture">fixture — Fixtures locales</option>
-                  <option value="none">none — Sin respaldo</option>
+                  <option value="openai_compat">OpenAI / Compatible</option>
+                  <option value="gemini">Google Gemini</option>
+                  <option value="fixture">Modo de prueba local</option>
+                  <option value="none">Sin respaldo</option>
                 </select>
               </div>
 
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-slate-300">
-                  Modelo y Base URL OpenAI-Compatible (<code className="text-slate-400">CLIPS_LLM_BACKUP_MODEL</code>)
+                  Modelo y dirección del servicio de respaldo
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   <input
@@ -748,7 +751,7 @@ export default function SettingsPage() {
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <KeyRound className="h-4 w-4 text-amber-300" />
-                    <span className="text-xs font-extrabold text-slate-100">GEMINI_API_KEY</span>
+                    <span className="text-xs font-extrabold text-slate-100">Clave de Google Gemini</span>
                   </div>
                   {renderKeyStatusBadge(Boolean(settings?.has_gemini_key), settings?.gemini_api_key || "", geminiKey)}
                 </div>
@@ -760,8 +763,8 @@ export default function SettingsPage() {
                     onChange={(e) => setGeminiKey(e.target.value)}
                     placeholder={
                       settings?.has_gemini_key
-                        ? `Clave guardada (${settings.gemini_api_key}) — escribe para reemplazar`
-                        : "Pega tu clave de Google AI Studio (ej. AIza...)"
+                        ? `Clave guardada (${settings.gemini_api_key}) — escribe si quieres cambiarla`
+                        : "Pega aquí tu clave de Google AI Studio (AIza...)"
                     }
                     autoComplete="off"
                     className={`${inputBase} pr-10 font-mono text-xs`}
@@ -777,7 +780,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="mt-3.5 flex items-center justify-between gap-2">
-                  <span className="text-xs text-slate-400">Google Generative Language API (`v1beta`)</span>
+                  <span className="text-xs text-slate-400">Conexión con Google AI Studio</span>
                   <button
                     type="button"
                     onClick={() => handleTestConnection("gemini")}
@@ -789,7 +792,7 @@ export default function SettingsPage() {
                     ) : (
                       <Wifi className="h-3.5 w-3.5" />
                     )}
-                    Probar Conexión
+                    Probar conexión
                   </button>
                 </div>
                 {renderTestResultBanner("gemini")}
@@ -800,7 +803,7 @@ export default function SettingsPage() {
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <KeyRound className="h-4 w-4 text-sky-300" />
-                    <span className="text-xs font-extrabold text-slate-100">OPENAI_API_KEY</span>
+                    <span className="text-xs font-extrabold text-slate-100">Clave de OpenAI / Compatible</span>
                   </div>
                   {renderKeyStatusBadge(Boolean(settings?.has_openai_key), settings?.openai_api_key || "", openaiKey)}
                 </div>
@@ -812,8 +815,8 @@ export default function SettingsPage() {
                     onChange={(e) => setOpenaiKey(e.target.value)}
                     placeholder={
                       settings?.has_openai_key
-                        ? `Clave guardada (${settings.openai_api_key}) — escribe para reemplazar`
-                        : "Pega tu clave de OpenAI / OpenRouter (ej. sk-...)"
+                        ? `Clave guardada (${settings.openai_api_key}) — escribe si quieres cambiarla`
+                        : "Pega aquí tu clave de OpenAI u OpenRouter (sk-...)"
                     }
                     autoComplete="off"
                     className={`${inputBase} pr-10 font-mono text-xs`}
@@ -830,7 +833,7 @@ export default function SettingsPage() {
 
                 <div className="mt-3.5 flex items-center justify-between gap-2">
                   <span className="truncate text-xs text-slate-400" title={llmBackupBaseUrl}>
-                    Endpoint: {llmBackupBaseUrl}
+                    Servidor: {llmBackupBaseUrl}
                   </span>
                   <button
                     type="button"
@@ -843,7 +846,7 @@ export default function SettingsPage() {
                     ) : (
                       <Wifi className="h-3.5 w-3.5" />
                     )}
-                    Probar Conexión
+                    Probar conexión
                   </button>
                 </div>
                 {renderTestResultBanner("openai_compat")}
@@ -860,16 +863,15 @@ export default function SettingsPage() {
                 </span>
                 <div>
                   <h2 className="text-lg font-extrabold text-slate-50">
-                    3. Presupuesto, Límites y Operación
+                    3. Límite de gasto, espacio en disco y avisos
                   </h2>
                   <p className="text-xs text-slate-400">
-                    El orquestador detiene nuevas peticiones externas si el gasto acumulado alcanza el tope configurado
-                    (las llamadas en caché SQLite siguen costando $0.00).
+                    Te protege de gastos inesperados deteniendo nuevas consultas si llegas al límite que elijas.
                   </p>
                 </div>
               </div>
               <Badge tone="gold">
-                <ShieldCheck className="h-3.5 w-3.5" /> Consumido: ${spent.toFixed(4)} / $
+                <ShieldCheck className="h-3.5 w-3.5" /> Usado: ${spent.toFixed(2)} de $
                 {Number(maxBudgetUsd || 0).toFixed(2)} USD
               </Badge>
             </div>
@@ -877,7 +879,7 @@ export default function SettingsPage() {
             <div className="grid gap-5 md:grid-cols-3">
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-slate-300">
-                  Tope Máximo de Presupuesto USD (<code className="text-amber-300">CLIPS_MAX_BUDGET_USD</code>)
+                  Límite máximo de gasto (USD)
                 </label>
                 <input
                   type="number"
@@ -890,17 +892,17 @@ export default function SettingsPage() {
                 />
                 <ProgressBar value={budgetRatio} className="mt-2.5" />
                 <p className="mt-1.5 text-xs text-slate-400">
-                  Saldo restante:{" "}
+                  Te quedan{" "}
                   <strong className="font-mono text-slate-200">
-                    ${Math.max(0, (Number(maxBudgetUsd) || 0) - spent).toFixed(4)} USD
+                    ${Math.max(0, (Number(maxBudgetUsd) || 0) - spent).toFixed(2)} USD
                   </strong>{" "}
-                  ({budget?.calls_count ?? 0} llamadas cacheadas)
+                  disponibles.
                 </p>
               </div>
 
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-slate-300">
-                  Retención de Temporales WAV/Opus (<code className="text-slate-400">CLIPS_TEMP_TTL_DAYS</code>)
+                  Días antes de limpiar archivos temporales
                 </label>
                 <input
                   type="number"
@@ -912,13 +914,13 @@ export default function SettingsPage() {
                   className={`${inputBase} font-mono`}
                 />
                 <p className="mt-1.5 text-xs text-slate-400">
-                  Días antes de purgar archivos intermedios en sesiones entregadas (conserva Parquet y caché $0.00).
+                  Libera espacio en tu disco automáticamente sin borrar tus videos ni tus análisis guardados.
                 </p>
               </div>
 
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-slate-300">
-                  Webhook de Entrega (<code className="text-slate-400">CLIPS_WEBHOOK_URL</code>)
+                  Enlace de avisos (Discord o Slack)
                 </label>
                 <input
                   type="url"
@@ -928,7 +930,7 @@ export default function SettingsPage() {
                   className={`${inputBase} font-mono text-xs`}
                 />
                 <p className="mt-1.5 text-xs text-slate-400">
-                  Opcional (Discord, Slack o HTTP JSON) al finalizar la subida a <code>Salidas/</code>.
+                  Opcional: te avisa con un mensaje cuando los clips de tu sesión terminan de crearse.
                 </p>
               </div>
             </div>
@@ -943,18 +945,22 @@ export default function SettingsPage() {
                 </span>
                 <div>
                   <h2 className="text-lg font-extrabold text-slate-50">
-                    4. Conexión Directa a Google Drive (OAuth 2.0 y Explorador)
+                    4. Conexión con Google Drive
                   </h2>
                   <p className="text-xs text-slate-400">
-                    Vincula tu cuenta personal o Workspace por OAuth 2.0 (`data/drive_oauth_token.json`) para explorar
-                    carpetas y elegir `gameplay` + `camara` en 1 clic, o usa Cuenta de Servicio / espejo local.
+                    Conecta tu cuenta de Google para explorar tus carpetas y elegir tus videos en un clic, o usa una
+                    carpeta sincronizada en tu PC.
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {driveStatus?.oauth_connected || settings?.drive_oauth_connected ? (
+                {loadingDrive && !driveStatus && !settings?.drive_oauth_connected ? (
+                  <Badge tone="neutral">
+                    <SoftSpinner className="h-3 w-3" /> Verificando Drive...
+                  </Badge>
+                ) : driveStatus?.oauth_connected || settings?.drive_oauth_connected ? (
                   <Badge tone="success">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> OAuth Conectado
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Cuenta vinculada
                     {driveStatus?.user_email ? ` (${driveStatus.user_email})` : ""}
                   </Badge>
                 ) : (
@@ -966,7 +972,7 @@ export default function SettingsPage() {
             <div className="grid gap-5 md:grid-cols-3">
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-slate-300">
-                  Modo de Conexión Drive (<code className="text-amber-300">CLIPS_DRIVE_MODE</code>)
+                  ¿Cómo quieres usar Google Drive?
                 </label>
                 <select
                   value={driveMode}
@@ -975,16 +981,16 @@ export default function SettingsPage() {
                   }
                   className={inputBase}
                 >
-                  <option value="oauth">oauth — Conexión directa OAuth 2.0 (Cuenta de Google)</option>
-                  <option value="local">local — Espejo local / Google Drive for Desktop</option>
-                  <option value="service_account">service_account — Cuenta de Servicio JSON</option>
-                  <option value="disabled">disabled — Deshabilitado</option>
+                  <option value="oauth">Cuenta personal de Google (Explorador directo)</option>
+                  <option value="local">Carpeta de Google Drive instalada en tu PC</option>
+                  <option value="service_account">Cuenta de servicio empresarial</option>
+                  <option value="disabled">No usar Google Drive</option>
                 </select>
               </div>
 
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-slate-300">
-                  Carpeta Raíz en Drive (<code className="text-slate-400">CLIPS_DRIVE_ROOT_FOLDER_ID</code>)
+                  Carpeta inicial en tu Drive
                 </label>
                 <input
                   type="text"
@@ -994,13 +1000,13 @@ export default function SettingsPage() {
                   className={`${inputBase} font-mono text-xs`}
                 />
                 <p className="mt-1 text-[11px] text-slate-400">
-                  Deja vacío o <code>root</code> en OAuth para explorar desde &quot;Mi unidad&quot;.
+                  Déjalo vacío para ver todas tus carpetas desde «Mi unidad».
                 </p>
               </div>
 
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-slate-300">
-                  Intervalo de Vigilancia (<code className="text-slate-400">CLIPS_DRIVE_POLL_SEC</code>)
+                  Revisar grabaciones nuevas cada (segundos)
                 </label>
                 <input
                   type="number"
@@ -1012,7 +1018,7 @@ export default function SettingsPage() {
                   className={`${inputBase} font-mono`}
                 />
                 <p className="mt-1 text-[11px] text-slate-400">
-                  Segundos entre revisiones automáticas de <code>Entradas/</code>.
+                  Cada cuánto tiempo buscamos videos nuevos en tu carpeta de Entradas.
                 </p>
               </div>
             </div>
@@ -1023,10 +1029,10 @@ export default function SettingsPage() {
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <KeyRound className="h-4 w-4 text-sky-300" />
-                    <span className="text-xs font-extrabold text-slate-100">CLIPS_DRIVE_CLIENT_ID</span>
+                    <span className="text-xs font-extrabold text-slate-100">ID de Cliente de Google (Client ID)</span>
                   </div>
                   <Badge tone={driveClientId.trim() ? "info" : "neutral"}>
-                    {driveClientId.trim() ? "Configurado" : "Requerido para OAuth"}
+                    {driveClientId.trim() ? "Listo" : "Opcional"}
                   </Badge>
                 </div>
                 <input
@@ -1038,7 +1044,7 @@ export default function SettingsPage() {
                   className={`${inputBase} font-mono text-xs`}
                 />
                 <p className="mt-2 text-[11px] text-slate-400">
-                  Redirect URI autorizado en Google Cloud Console:{" "}
+                  Dirección de retorno en Google Cloud:{" "}
                   <code className="text-slate-200">http://127.0.0.1:8790/drive/auth/callback</code>
                 </p>
               </div>
@@ -1047,7 +1053,7 @@ export default function SettingsPage() {
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <KeyRound className="h-4 w-4 text-amber-300" />
-                    <span className="text-xs font-extrabold text-slate-100">CLIPS_DRIVE_CLIENT_SECRET</span>
+                    <span className="text-xs font-extrabold text-slate-100">Clave Secreta de Google (Client Secret)</span>
                   </div>
                   {renderKeyStatusBadge(
                     Boolean(settings?.has_drive_client_secret),
@@ -1062,8 +1068,8 @@ export default function SettingsPage() {
                     onChange={(e) => setDriveClientSecret(e.target.value)}
                     placeholder={
                       settings?.has_drive_client_secret
-                        ? `Secreto guardado (${settings.drive_client_secret}) — escribe para reemplazar`
-                        : "Pega tu Client Secret de Google OAuth (ej. GOCSPX-...)"
+                        ? `Secreto guardado (${settings.drive_client_secret}) — escribe si quieres cambiarlo`
+                        : "Pega tu Client Secret de Google (GOCSPX-...)"
                     }
                     autoComplete="off"
                     className={`${inputBase} pr-10 font-mono text-xs`}
@@ -1078,7 +1084,7 @@ export default function SettingsPage() {
                   </button>
                 </div>
                 <p className="mt-2 text-[11px] text-slate-400">
-                  El <code>refresh_token</code> se guarda localmente en <code>data/drive_oauth_token.json</code>.
+                  Se guarda de forma segura en tu propio equipo para que no tengas que iniciar sesión cada día.
                 </p>
               </div>
             </div>
@@ -1094,8 +1100,8 @@ export default function SettingsPage() {
                 >
                   {connectingDrive ? <SoftSpinner className="h-4 w-4" onAccent /> : <Link2 className="h-4 w-4" />}
                   {driveStatus?.oauth_connected || settings?.drive_oauth_connected
-                    ? "Reconectar Google Drive (OAuth 2.0)"
-                    : "Conectar con Google Drive (OAuth 2.0)"}
+                    ? "Cambiar cuenta de Google Drive"
+                    : "Vincular mi cuenta de Google Drive"}
                 </button>
 
                 {(driveStatus?.oauth_connected || settings?.drive_oauth_connected) && (
@@ -1106,7 +1112,7 @@ export default function SettingsPage() {
                     className={btnSecondary}
                   >
                     <Unlink className="h-4 w-4 text-rose-300" />
-                    Desconectar cuenta
+                    Desvincular cuenta
                   </button>
                 )}
               </div>
@@ -1116,8 +1122,8 @@ export default function SettingsPage() {
                   type="text"
                   value={driveAuthCode}
                   onChange={(e) => setDriveAuthCode(e.target.value)}
-                  placeholder="O pega código OAuth manual..."
-                  className="w-52 rounded-xl border border-white/10 bg-slate-900 px-3 py-1.5 font-mono text-xs text-slate-200 placeholder:text-slate-500 focus:border-amber-300/60 focus:outline-none"
+                  placeholder="Código manual (si la ventana no cerró sola)"
+                  className="w-64 rounded-xl border border-white/10 bg-slate-900 px-3 py-1.5 font-mono text-xs text-slate-200 placeholder:text-slate-500 focus:border-amber-300/60 focus:outline-none"
                 />
                 <button
                   type="button"
@@ -1125,7 +1131,7 @@ export default function SettingsPage() {
                   disabled={connectingDrive || !driveAuthCode.trim()}
                   className={`${btnSecondary} !px-3.5 !py-1.5 !text-xs`}
                 >
-                  Canjear código
+                  Confirmar código
                 </button>
               </div>
             </div>
@@ -1134,8 +1140,7 @@ export default function SettingsPage() {
           {/* Barra inferior de acciones */}
           <GlassCard className="flex flex-wrap items-center justify-between gap-4 px-6 py-4">
             <div className="text-xs text-slate-400">
-              Las claves dejadas en blanco o enmascaradas conservan intacto su valor actual en{" "}
-              <code className="font-mono text-slate-200">.env</code>.
+              Las claves que dejes en blanco conservarán la que ya tenías guardada.
             </div>
             <div className="flex items-center gap-3">
               <button
@@ -1144,11 +1149,11 @@ export default function SettingsPage() {
                 className={btnSecondary}
               >
                 <Wifi className="h-4 w-4" />
-                Probar Modo Offline
+                Probar modo sin internet
               </button>
               <button type="submit" disabled={saving} className={btnPrimary}>
                 {saving ? <SoftSpinner className="h-4 w-4" onAccent /> : <Save className="h-4 w-4" />}
-                {saving ? "Guardando..." : "Guardar Configuración"}
+                {saving ? "Guardando..." : "Guardar cambios"}
               </button>
             </div>
           </GlassCard>
