@@ -67,6 +67,8 @@ export default function SettingsPage() {
   const [driveStatus, setDriveStatus] = useState<DriveStatus | null>(null);
   const [resolveStatus, setResolveStatus] = useState<ResolveStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingDrive, setLoadingDrive] = useState(false);
+  const [loadingResolve, setLoadingResolve] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
@@ -162,19 +164,30 @@ export default function SettingsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [s, b, d, r] = await Promise.all([
+      // 1. Cargar configuración principal y presupuesto de inmediato (< 5 ms)
+      const [s, b] = await Promise.all([
         getSettings(),
         fetchBudget(),
-        fetchDriveStatus().catch(() => null),
-        fetchResolveStatus().catch(() => null),
       ]);
       applyLoadedSettings(s);
       setBudget(b);
-      setDriveStatus(d);
-      setResolveStatus(r);
+      setLoading(false);
+
+      // 2. Cargar diagnósticos externos en paralelo sin bloquear la pantalla
+      setLoadingDrive(true);
+      setLoadingResolve(true);
+
+      fetchDriveStatus()
+        .then((d) => setDriveStatus(d))
+        .catch(() => null)
+        .finally(() => setLoadingDrive(false));
+
+      fetchResolveStatus()
+        .then((r) => setResolveStatus(r))
+        .catch(() => null)
+        .finally(() => setLoadingResolve(false));
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo cargar la configuración del servidor.");
-    } finally {
       setLoading(false);
     }
   }, [applyLoadedSettings]);
@@ -235,15 +248,14 @@ export default function SettingsPage() {
       setGeminiKey("");
       setOpenaiKey("");
       setDriveClientSecret("");
-      const [freshBudget, freshDrive, freshResolve] = await Promise.all([
-        fetchBudget(),
-        fetchDriveStatus().catch(() => null),
-        fetchResolveStatus().catch(() => null),
-      ]);
-      setBudget(freshBudget);
-      setDriveStatus(freshDrive);
-      setResolveStatus(freshResolve);
+
+      const freshBudget = await fetchBudget().catch(() => null);
+      if (freshBudget) setBudget(freshBudget);
       showToast("ok", "Configuración guardada en .env y aplicada en memoria.");
+
+      // Refrescar diagnósticos externos en segundo plano
+      fetchDriveStatus().then((d) => setDriveStatus(d)).catch(() => null);
+      fetchResolveStatus(true).then((r) => setResolveStatus(r)).catch(() => null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error al guardar la configuración";
       setError(msg);
@@ -974,7 +986,11 @@ export default function SettingsPage() {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                {resolveStatus?.scripting_connected ? (
+                {loadingResolve && !resolveStatus ? (
+                  <Badge tone="neutral">
+                    <SoftSpinner className="h-3 w-3" /> Verificando DaVinci Resolve...
+                  </Badge>
+                ) : resolveStatus?.scripting_connected ? (
                   <Badge tone="success">
                     <CheckCircle2 className="h-3.5 w-3.5" /> DaVinci Resolve conectado
                   </Badge>
@@ -1111,7 +1127,11 @@ export default function SettingsPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {driveStatus?.oauth_connected || settings?.drive_oauth_connected ? (
+                {loadingDrive && !driveStatus && !settings?.drive_oauth_connected ? (
+                  <Badge tone="neutral">
+                    <SoftSpinner className="h-3 w-3" /> Verificando Drive...
+                  </Badge>
+                ) : driveStatus?.oauth_connected || settings?.drive_oauth_connected ? (
                   <Badge tone="success">
                     <CheckCircle2 className="h-3.5 w-3.5" /> Cuenta vinculada
                     {driveStatus?.user_email ? ` (${driveStatus.user_email})` : ""}

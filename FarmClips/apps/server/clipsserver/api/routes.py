@@ -1220,8 +1220,8 @@ def create_app(
     # --- DaVinci Resolve MCP Integration API -------------------------------
 
     @app.get("/resolve/status")
-    def resolve_mcp_status() -> Dict[str, Any]:
-        return orch.get_resolve_status()
+    def resolve_mcp_status(refresh: bool = False) -> Dict[str, Any]:
+        return orch.get_resolve_status(force_refresh=refresh)
 
     @app.post("/clips/{clip_id}/resolve")
     async def export_clip_resolve_endpoint(

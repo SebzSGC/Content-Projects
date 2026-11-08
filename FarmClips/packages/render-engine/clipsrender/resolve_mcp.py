@@ -155,26 +155,42 @@ def _default_resolve_paths() -> Dict[str, List[Path]]:
     }
 
 
-def _is_resolve_process_running() -> bool:
+_RESOLVE_PROC_CACHE: Dict[str, Any] = {
+    "running": False,
+    "checked_at": 0.0,
+}
+
+
+def _is_resolve_process_running(force: bool = False) -> bool:
+    now = time.time()
+    if not force and (now - _RESOLVE_PROC_CACHE["checked_at"]) < 15.0:
+        return bool(_RESOLVE_PROC_CACHE["running"])
+
     sys_name = platform.system().lower()
+    running = False
     try:
         if sys_name == "windows":
             out = subprocess.check_output(
                 ["tasklist", "/FI", "IMAGENAME eq Resolve.exe", "/NH"],
                 stderr=subprocess.DEVNULL,
                 text=True,
-                timeout=3.0,
+                timeout=1.5,
             )
-            return "resolve.exe" in out.lower()
-        out = subprocess.check_output(
-            ["ps", "-A"],
-            stderr=subprocess.DEVNULL,
-            text=True,
-            timeout=3.0,
-        )
-        return "resolve" in out.lower()
+            running = "resolve.exe" in out.lower()
+        else:
+            out = subprocess.check_output(
+                ["ps", "-A"],
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=1.5,
+            )
+            running = "resolve" in out.lower()
     except Exception:
-        return False
+        running = False
+
+    _RESOLVE_PROC_CACHE["running"] = running
+    _RESOLVE_PROC_CACHE["checked_at"] = now
+    return running
 
 
 _RESOLVE_CONN_CACHE: Dict[str, Any] = {
@@ -184,11 +200,83 @@ _RESOLVE_CONN_CACHE: Dict[str, Any] = {
     "checked_at": 0.0,
 }
 
+_RESOLVE_SCRIPTING_PROBE_CACHE: Dict[str, Any] = {
+    "connected": False,
+    "product": None,
+    "checked_at": 0.0,
+}
+
+_RESOLVE_ENV_CACHE: Dict[str, Any] = {
+    "data": None,
+    "checked_at": 0.0,
+    "key": "",
+}
+
+
+def _probe_resolve_scripting_status(
+    mod_dir: Optional[str],
+    lib_path: Optional[str],
+    force: bool = False,
+) -> Tuple[bool, Optional[str]]:
+    """Fast out-of-process probe to check if DaVinci Resolve external scripting is responding without locking the server's GIL."""
+    now = time.time()
+    if not force and (now - _RESOLVE_SCRIPTING_PROBE_CACHE["checked_at"]) < 30.0:
+        return _RESOLVE_SCRIPTING_PROBE_CACHE["connected"], _RESOLVE_SCRIPTING_PROBE_CACHE["product"]
+
+    if not _is_resolve_process_running(force=force):
+        _RESOLVE_SCRIPTING_PROBE_CACHE["connected"] = False
+        _RESOLVE_SCRIPTING_PROBE_CACHE["product"] = None
+        _RESOLVE_SCRIPTING_PROBE_CACHE["checked_at"] = now
+        return False, None
+
+    probe_py = """
+import sys, os
+m = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else ''
+l = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else ''
+if m:
+    sys.path.insert(0, m)
+    os.environ['RESOLVE_SCRIPT_API'] = os.path.dirname(m)
+if l:
+    os.environ['RESOLVE_SCRIPT_LIB'] = l
+try:
+    import DaVinciResolveScript as dvr
+    robj = dvr.scriptapp('Resolve')
+    if robj is not None:
+        pname = robj.GetProductName() or 'DaVinci Resolve'
+        pver = robj.GetVersionString() or ''
+        print(f"OK|{pname} {pver}".strip())
+    else:
+        print("NONE")
+except Exception:
+    print("ERR")
+"""
+    connected = False
+    product: Optional[str] = None
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", probe_py, mod_dir or "", lib_path or ""],
+            capture_output=True,
+            text=True,
+            timeout=0.6,
+        )
+        line = proc.stdout.strip()
+        if line.startswith("OK|"):
+            connected = True
+            product = line[3:].strip() or "DaVinci Resolve"
+    except Exception:
+        connected = False
+        product = None
+
+    _RESOLVE_SCRIPTING_PROBE_CACHE["connected"] = connected
+    _RESOLVE_SCRIPTING_PROBE_CACHE["product"] = product
+    _RESOLVE_SCRIPTING_PROBE_CACHE["checked_at"] = now
+    return connected, product
+
 
 def _try_connect_resolve_scripting(force_refresh: bool = False) -> Tuple[Optional[Any], Optional[str], Optional[str]]:
-    """Attempt to import `DaVinciResolveScript` and connect to a running local Resolve instance with TTL cache and strict timeout."""
+    """Attempt to import `DaVinciResolveScript` and connect to a running local Resolve instance with TTL cache and non-blocking timeout."""
     now = time.time()
-    if not force_refresh and (now - _RESOLVE_CONN_CACHE["checked_at"]) < 3.0:
+    if not force_refresh and (now - _RESOLVE_CONN_CACHE["checked_at"]) < 30.0:
         return (
             _RESOLVE_CONN_CACHE["obj"],
             _RESOLVE_CONN_CACHE["mod_dir"],
@@ -196,7 +284,7 @@ def _try_connect_resolve_scripting(force_refresh: bool = False) -> Tuple[Optiona
         )
 
     # 1. Fast process check: if Resolve.exe is not running, return immediately without touching IPC
-    if not _is_resolve_process_running():
+    if not _is_resolve_process_running(force=force_refresh):
         _RESOLVE_CONN_CACHE["obj"] = None
         _RESOLVE_CONN_CACHE["product"] = None
         _RESOLVE_CONN_CACHE["checked_at"] = now
@@ -233,7 +321,19 @@ def _try_connect_resolve_scripting(force_refresh: bool = False) -> Tuple[Optiona
 
     _RESOLVE_CONN_CACHE["mod_dir"] = str(resolved_mod_dir) if resolved_mod_dir else None
 
-    # 2. Strict timeout on scriptapp("Resolve") to prevent hanging if DaVinci Resolve is busy or modal
+    # Check probe cache: if probe already proved external scripting is not answering, don't block
+    probe_conn, probe_prod = _probe_resolve_scripting_status(
+        str(resolved_mod_dir) if resolved_mod_dir else None,
+        str(resolved_lib) if resolved_lib else None,
+        force=force_refresh,
+    )
+    if not probe_conn:
+        _RESOLVE_CONN_CACHE["obj"] = None
+        _RESOLVE_CONN_CACHE["product"] = probe_prod
+        _RESOLVE_CONN_CACHE["checked_at"] = now
+        return (None, _RESOLVE_CONN_CACHE["mod_dir"], probe_prod)
+
+    # 2. In-process connection (external scripting is active)
     def _call_scriptapp() -> Tuple[Optional[Any], Optional[str]]:
         try:
             import DaVinciResolveScript as dvr_script  # type: ignore[import-not-found]
@@ -253,22 +353,24 @@ def _try_connect_resolve_scripting(force_refresh: bool = False) -> Tuple[Optiona
             return None, None
 
     resolve_obj: Optional[Any] = None
-    product: Optional[str] = None
+    product: Optional[str] = probe_prod
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            fut = pool.submit(_call_scriptapp)
-            resolve_obj, product = fut.result(timeout=1.6)
+        fut = pool.submit(_call_scriptapp)
+        resolve_obj, product = fut.result(timeout=1.2)
     except (concurrent.futures.TimeoutError, Exception):
-        resolve_obj, product = None, None
+        resolve_obj = None
+    finally:
+        pool.shutdown(wait=False)
 
     _RESOLVE_CONN_CACHE["obj"] = resolve_obj
-    _RESOLVE_CONN_CACHE["product"] = product
+    _RESOLVE_CONN_CACHE["product"] = product or probe_prod
     _RESOLVE_CONN_CACHE["checked_at"] = now
 
     return (
         resolve_obj,
         _RESOLVE_CONN_CACHE["mod_dir"],
-        product,
+        product or probe_prod,
     )
 
 
@@ -277,8 +379,15 @@ def detect_resolve_environment(
     mcp_mode: str = "auto",
     mcp_command: str = "",
     mcp_url: str = "",
+    force_refresh: bool = False,
 ) -> Dict[str, Any]:
-    """Inspect local DaVinci Resolve installation, scripting modules, running state, and MCP readiness."""
+    """Inspect local DaVinci Resolve installation, scripting modules, running state, and MCP readiness (with fast TTL caching)."""
+    now = time.time()
+    cache_key = f"{editor_backend}:{mcp_mode}:{mcp_command}:{mcp_url}"
+    if not force_refresh and _RESOLVE_ENV_CACHE["data"] is not None:
+        if (now - _RESOLVE_ENV_CACHE["checked_at"]) < 20.0 and _RESOLVE_ENV_CACHE["key"] == cache_key:
+            return dict(_RESOLVE_ENV_CACHE["data"])
+
     paths = _default_resolve_paths()
     binary_path = next((str(p) for p in paths["binaries"] if p.is_file()), None)
     lib_path = next((str(p) for p in paths["libs"] if p.is_file()), None)
@@ -288,11 +397,18 @@ def detect_resolve_environment(
     if env_mod and Path(env_mod).exists() and not mod_dir:
         mod_dir = env_mod
 
-    proc_running = _is_resolve_process_running()
-    resolve_obj, detected_mod_dir, product_info = (
-        _try_connect_resolve_scripting() if (proc_running or mod_dir or lib_path) else (None, mod_dir, None)
-    )
-    scripting_connected = resolve_obj is not None
+    proc_running = _is_resolve_process_running(force=force_refresh)
+    scripting_connected = False
+    product_info: Optional[str] = None
+    detected_mod_dir = mod_dir
+
+    if proc_running:
+        scripting_connected, product_info = _probe_resolve_scripting_status(
+            mod_dir=mod_dir,
+            lib_path=lib_path,
+            force=force_refresh,
+        )
+
     installed = bool(binary_path or lib_path or detected_mod_dir)
 
     instructions = [
@@ -301,7 +417,7 @@ def detect_resolve_environment(
         "3. Si usas DaVinci Resolve Free sin scripting externo activo, puedes importar directamente el archivo .fcpxml generado (File -> Import -> Timeline...) o ejecutar resolve_build_timeline.py en Workspace -> Console -> Py3.",
     ]
 
-    return {
+    res = {
         "installed": installed,
         "resolve_binary_path": binary_path,
         "scripting_modules_dir": detected_mod_dir or mod_dir,
@@ -317,6 +433,10 @@ def detect_resolve_environment(
         "available_tools": [t["name"] for t in MCP_TOOLS_SPEC],
         "instructions": instructions,
     }
+    _RESOLVE_ENV_CACHE["data"] = res
+    _RESOLVE_ENV_CACHE["checked_at"] = now
+    _RESOLVE_ENV_CACHE["key"] = cache_key
+    return res
 
 
 def srt_time(sec: float) -> str:

@@ -694,12 +694,13 @@ class Orchestrator:
                     upload_to_drive=True,
                 )
 
-    def get_resolve_status(self) -> Dict[str, Any]:
+    def get_resolve_status(self, force_refresh: bool = False) -> Dict[str, Any]:
         return detect_resolve_environment(
             editor_backend=self.settings.editor_backend,
             mcp_mode=self.settings.resolve_mcp_mode,
             mcp_command=self.settings.resolve_mcp_command,
             mcp_url=self.settings.resolve_mcp_url,
+            force_refresh=force_refresh,
         )
 
     async def export_clip_to_resolve(

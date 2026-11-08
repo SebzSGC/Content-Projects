@@ -35,8 +35,8 @@ export function GlassCard({
   return (
     <Element
       onSubmit={onSubmit}
-      className={`rounded-3xl border border-white/[0.06] bg-slate-800/50 backdrop-blur-xl shadow-xl shadow-black/20 transition-all duration-300 ease-in-out motion-reduce:transition-none ${
-        interactive ? "hover:scale-[1.01] hover:border-amber-300/20 hover:shadow-2xl motion-reduce:hover:scale-100" : ""
+      className={`rounded-3xl border border-white/[0.06] bg-slate-900/70 backdrop-blur-md shadow-xl shadow-black/20 transition-all duration-200 ease-out motion-reduce:transition-none transform-gpu ${
+        interactive ? "hover:scale-[1.01] hover:border-amber-300/20 hover:shadow-2xl motion-reduce:hover:scale-100 will-change-transform" : ""
       } ${className}`}
     >
       {children}

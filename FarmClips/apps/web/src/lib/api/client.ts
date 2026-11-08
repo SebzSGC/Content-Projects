@@ -808,7 +808,8 @@ export const renderClip = (clipId: string, quality: "draft" | "final", upload_to
     body: JSON.stringify({ quality, upload_to_drive }),
   });
 
-export const fetchResolveStatus = () => apiJson<ResolveStatusResponse>("/resolve/status");
+export const fetchResolveStatus = (forceRefresh = false) =>
+  apiJson<ResolveStatusResponse>(`/resolve/status${forceRefresh ? "?refresh=true" : ""}`);
 
 export const exportClipToResolve = (
   clipId: string,
@@ -844,6 +845,98 @@ export const resolveArtifactUrl = (
   artifact: "fcpxml" | "srt" | "ass" | "script" | "mcp_plan"
 ) => `${API_PREFIX}/clips/${encodeURIComponent(clipId)}/resolve/download/${artifact}`;
 
+type SseListener = {
+  sessionId?: string;
+  callback: (ev: ServerSseEvent) => void;
+};
+
+class SharedSseManager {
+  private es: EventSource | null = null;
+  private listeners: Set<SseListener> = new Set();
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private closeTimer: ReturnType<typeof setTimeout> | null = null;
+
+  public subscribe(listener: SseListener): () => void {
+    if (this.closeTimer) {
+      clearTimeout(this.closeTimer);
+      this.closeTimer = null;
+    }
+    this.listeners.add(listener);
+    this.ensureConnection();
+
+    return () => {
+      this.listeners.delete(listener);
+      if (this.listeners.size === 0) {
+        this.closeTimer = setTimeout(() => {
+          if (this.listeners.size === 0) {
+            this.disconnect();
+          }
+        }, 3000);
+      }
+    };
+  }
+
+  private ensureConnection(): void {
+    if (typeof window === "undefined") return;
+    if (this.es && (this.es.readyState === EventSource.OPEN || this.es.readyState === EventSource.CONNECTING)) {
+      return;
+    }
+    this.disconnect();
+
+    try {
+      const es = new EventSource(`${API_PREFIX}/events`);
+      this.es = es;
+
+      es.onmessage = (msg) => {
+        try {
+          const parsed = JSON.parse(msg.data) as ServerSseEvent;
+          this.broadcast(parsed);
+        } catch {
+          // ignorar keepalive comments
+        }
+      };
+
+      es.onerror = () => {
+        if (this.listeners.size > 0 && !this.reconnectTimer) {
+          this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
+            this.ensureConnection();
+          }, 3000);
+        }
+      };
+    } catch {
+      // ignorar errores de creacion de socket
+    }
+  }
+
+  private broadcast(ev: ServerSseEvent): void {
+    for (const l of Array.from(this.listeners)) {
+      try {
+        if (!l.sessionId || !ev.session_id || ev.session_id === l.sessionId) {
+          l.callback(ev);
+        }
+      } catch (err) {
+        console.error("SSE listener error:", err);
+      }
+    }
+  }
+
+  private disconnect(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.es) {
+      try {
+        this.es.close();
+      } catch {}
+      this.es = null;
+    }
+  }
+}
+
+const sseManager = new SharedSseManager();
+
 export function useServerEvents(
   sessionId: string | undefined,
   onEvent: (ev: ServerSseEvent) => void
@@ -852,18 +945,10 @@ export function useServerEvents(
   cbRef.current = onEvent;
 
   useEffect(() => {
-    const q = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : "";
-    const es = new EventSource(`${API_PREFIX}/events${q}`);
-    es.onmessage = (msg) => {
-      try {
-        const parsed = JSON.parse(msg.data) as ServerSseEvent;
-        cbRef.current(parsed);
-      } catch {
-        // Ignore keepalive comments
-      }
+    const listener: SseListener = {
+      sessionId,
+      callback: (ev) => cbRef.current(ev),
     };
-    return () => {
-      es.close();
-    };
+    return sseManager.subscribe(listener);
   }, [sessionId]);
 }
