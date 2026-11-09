@@ -35,6 +35,7 @@ import {
   fetchClipDetail,
   fetchEmojiCatalog,
   renderClip,
+  retimeClip,
   saveClipEditPlan,
   useServerEvents,
   type ClipItem,
@@ -52,6 +53,10 @@ import {
   type EaseKind,
   type EditPlan,
 } from "@/lib/api/editplan";
+import { useAutosave, useUnsavedChangesWarning } from "@/lib/editor/useAutosave";
+import { useEditHistory } from "@/lib/editor/useEditHistory";
+import { useEditorShortcuts } from "@/lib/editor/useEditorShortcuts";
+import { captionGroupText, retextCaptionGroup } from "@/lib/editor/captionText";
 
 function dbToLinear(db: number): number {
   return Math.pow(10, db / 20);
@@ -131,22 +136,28 @@ export default function ClipEditorPage() {
   const [clip, setClip] = useState<ClipItem | null>(null);
   const [session, setSession] = useState<SessionSummary | null>(null);
   const [preset, setPreset] = useState<StylePreset | null>(null);
-  const [plan, setPlan] = useState<EditPlan | null>(null);
+  const { plan, planRef, dirty, canUndo, canRedo, mutatePlan, commitHistoryFrom, undo, redo, replacePlan } =
+    useEditHistory();
   const [emojiCatalog, setEmojiCatalog] = useState<EmojiCatalogItem[]>([]);
   const [openEmojiPickerIdx, setOpenEmojiPickerIdx] = useState<number | null>(null);
+  // Whole-phrase text editing (lets the word count change: "valor ant" -> "Valorant")
+  const [editingGroupIdx, setEditingGroupIdx] = useState<number | null>(null);
+  const [groupDraft, setGroupDraft] = useState("");
+  // Plan before the word field got focus: typing a word is one undo step, not one per key
+  const wordEditStartRef = useRef<EditPlan | null>(null);
+  // Clip span on the VOD (seconds) + jump cuts, applied with the retime endpoint
+  const [retimeStart, setRetimeStart] = useState(0);
+  const [retimeEnd, setRetimeEnd] = useState(0);
+  const [retimeJumpCuts, setRetimeJumpCuts] = useState(true);
+  const [retiming, setRetiming] = useState(false);
   const [emojiCategoryFilter, setEmojiCategoryFilter] = useState<string>("all");
   const [liveDuckPct, setLiveDuckPct] = useState<number>(0);
-
-  // Undo / Redo history stacks
-  const [undoStack, setUndoStack] = useState<EditPlan[]>([]);
-  const [redoStack, setRedoStack] = useState<EditPlan[]>([]);
 
   const [activeTab, setActiveTab] = useState<"captions" | "camera" | "cuts" | "json">("captions");
   const [previewSource, setPreviewSource] = useState<"live" | "rendered">("live");
 
   const [playing, setPlaying] = useState(false);
   const [clipTime, setClipTime] = useState(0);
-  const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [renderingQuality, setRenderingQuality] = useState<"draft" | "final" | null>(null);
   const [renderProgress, setRenderProgress] = useState<number | null>(null);
@@ -173,7 +184,6 @@ export default function ClipEditorPage() {
   const emojiCacheRef = useRef<Record<string, HTMLImageElement>>({});
   const clipTimeRef = useRef(0);
   const playingRef = useRef(false);
-  const planRef = useRef<EditPlan | null>(null);
   const sessionRef = useRef<SessionSummary | null>(null);
   const syncRef = useRef<{ shift: number; scale: number }>({ shift: 0, scale: 1 });
 
@@ -203,81 +213,19 @@ export default function ClipEditorPage() {
   const sfxBuffersRef = useRef<Record<string, AudioBuffer>>({});
   const duckEnvRef = useRef<number>(1.0);
 
-  planRef.current = plan;
   sessionRef.current = session;
   playingRef.current = playing;
 
-  // Plan mutation with optional history capture
-  const mutatePlan = useCallback(
-    (updater: (draft: EditPlan) => EditPlan, options?: { skipHistory?: boolean }) => {
-      setPlan((prev) => {
-        if (!prev) return prev;
-        const cloned = structuredClone(prev);
-        const updated = updater(cloned);
-        if (!options?.skipHistory) {
-          setUndoStack((st) => [...st.slice(-30), prev]);
-          setRedoStack([]);
-        }
-        setDirty(true);
-        return updated;
-      });
-    },
-    []
-  );
-
   const handleUndo = useCallback(() => {
-    if (undoStack.length === 0 || !plan) return;
-    const previous = undoStack[undoStack.length - 1];
-    const newUndo = undoStack.slice(0, -1);
-    setRedoStack((r) => [...r, plan]);
-    setUndoStack(newUndo);
-    setPlan(previous);
-    setDirty(true);
-    setStatusMsg("Deshecho el último cambio.");
-  }, [undoStack, plan]);
+    if (undo()) setStatusMsg("Deshecho el último cambio.");
+  }, [undo]);
 
   const handleRedo = useCallback(() => {
-    if (redoStack.length === 0 || !plan) return;
-    const next = redoStack[redoStack.length - 1];
-    const newRedo = redoStack.slice(0, -1);
-    setUndoStack((u) => [...u, plan]);
-    setRedoStack(newRedo);
-    setPlan(next);
-    setDirty(true);
-    setStatusMsg("Rehecho el cambio.");
-  }, [redoStack, plan]);
+    if (redo()) setStatusMsg("Rehecho el cambio.");
+  }, [redo]);
 
-  // Global Keyboard Shortcuts (Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z, Space to play/pause)
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      const isInput =
-        target &&
-        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
-
-      if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) {
-        if (e.shiftKey) {
-          e.preventDefault();
-          handleRedo();
-        } else {
-          if (!isInput) {
-            e.preventDefault();
-            handleUndo();
-          }
-        }
-      } else if ((e.ctrlKey || e.metaKey) && (e.key === "y" || e.key === "Y")) {
-        if (!isInput) {
-          e.preventDefault();
-          handleRedo();
-        }
-      } else if (e.code === "Space" && !isInput) {
-        e.preventDefault();
-        togglePlay();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleUndo, handleRedo]);
+  // Ctrl+Z, Ctrl+Y / Ctrl+Shift+Z and Space (handlers read fresh on every key press)
+  useEditorShortcuts({ onUndo: handleUndo, onRedo: handleRedo, onTogglePlay: () => togglePlay() });
 
   const loadAll = useCallback(async () => {
     if (!clipId) return;
@@ -287,7 +235,7 @@ export default function ClipEditorPage() {
       setSession(data.session);
       setPreset(data.preset);
       if (data.clip.editplan) {
-        setPlan(data.clip.editplan);
+        replacePlan(data.clip.editplan, { clean: true, resetHistory: true });
       }
       syncRef.current = {
         shift: data.session.sync?.shift_sec ?? 0,
@@ -296,7 +244,14 @@ export default function ClipEditorPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [clipId]);
+  }, [clipId, replacePlan]);
+
+  useEffect(() => {
+    if (!clip) return;
+    setRetimeStart(Number(clip.start.toFixed(1)));
+    setRetimeEnd(Number(clip.end.toFixed(1)));
+    setRetimeJumpCuts(clip.curated?.jump_cuts ?? true);
+  }, [clip?.id, clip?.start, clip?.end, clip?.curated?.jump_cuts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     loadAll();
@@ -627,6 +582,21 @@ export default function ClipEditorPage() {
     [preset, isDraggingCam, isDraggingCaptions]
   );
 
+  // Repaint the preview on every plan change. While paused the 60 fps loop is idle (requestVideoFrameCallback
+  // only fires when the video presents a frame), so edits must refresh the canvas themselves.
+  useEffect(() => {
+    renderFrameAt(clipTimeRef.current);
+  }, [plan, renderFrameAt]);
+
+  // Autosave a moment after the last edit (never mid-drag, mid-save or mid-render) + leave-page warning
+  useAutosave({
+    dirty,
+    paused: saving || renderingQuality !== null || isDraggingCam || isDraggingCaptions,
+    changeKey: plan,
+    save: () => handleSave({ auto: true }),
+  });
+  useUnsavedChangesWarning(dirty);
+
   // Recalculate camera cover bounds on window resize
   useEffect(() => {
     const onResize = () => {
@@ -903,10 +873,7 @@ export default function ClipEditorPage() {
   const handleCamPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     const startData = dragCamStartRef.current;
     if (isDraggingCam && startData && plan) {
-      const initialPlan = startData.initialPlan;
-      setUndoStack((s) => [...s.slice(-30), initialPlan]);
-      setRedoStack([]);
-      setDirty(true);
+      commitHistoryFrom(startData.initialPlan);
       dragCamStartRef.current = null;
       setIsDraggingCam(false);
       setIsSnappingCenterX(false);
@@ -964,19 +931,13 @@ export default function ClipEditorPage() {
       },
       { skipHistory: true }
     );
-    if (preset) {
-      preset.captions.gameplay_top_third_ratio = rounded;
-    }
     renderFrameAt(clipTime);
   };
 
   const handleCapPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     const startData = dragCapStartRef.current;
     if (isDraggingCaptions && startData) {
-      const initialPlan = startData.initialPlan;
-      setUndoStack((s) => [...s.slice(-30), initialPlan]);
-      setRedoStack([]);
-      setDirty(true);
+      commitHistoryFrom(startData.initialPlan);
       dragCapStartRef.current = null;
       setIsDraggingCaptions(false);
     }
@@ -1026,22 +987,51 @@ export default function ClipEditorPage() {
     setStatusMsg(`Plantilla aplicada con éxito.`);
   }
 
-  async function handleSave(): Promise<EditPlan | null> {
-    if (!plan) return null;
+  async function handleSave(options?: { auto?: boolean }): Promise<EditPlan | null> {
+    const snapshot = planRef.current;
+    if (!snapshot) return null;
     setSaving(true);
     setError(null);
     try {
-      const res = await saveClipEditPlan(clipId, plan);
+      const res = await saveClipEditPlan(clipId, snapshot);
       setClip(res.clip);
-      setPlan(res.editplan);
-      setDirty(false);
-      setStatusMsg("Cambios guardados al instante.");
+      // Edits made while the request was in flight stay in the editor (and stay "unsaved").
+      if (planRef.current === snapshot) {
+        replacePlan(res.editplan, { clean: true });
+      }
+      setStatusMsg(options?.auto ? "Guardado automático." : "Cambios guardados al instante.");
       return res.editplan;
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       return null;
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleRetime() {
+    if (!clip) return;
+    const ok = window.confirm(
+      "Se recalculan la cámara, los cortes y los subtítulos de este clip para el nuevo tramo.\n" +
+        "Tus correcciones de texto y el título se conservan; los ajustes manuales de cámara no."
+    );
+    if (!ok) return;
+    setRetiming(true);
+    setError(null);
+    try {
+      if (dirty) {
+        const saved = await handleSave();
+        if (!saved) return;
+      }
+      const res = await retimeClip(clip.id, retimeStart, retimeEnd, retimeJumpCuts);
+      setClip(res.clip);
+      replacePlan(res.editplan, { clean: true, resetHistory: true });
+      seekTo(0);
+      setStatusMsg("Tramo del clip actualizado.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRetiming(false);
     }
   }
 
@@ -1052,8 +1042,8 @@ export default function ClipEditorPage() {
     setRenderProgress(0.02);
     try {
       if (dirty) {
-        await saveClipEditPlan(clipId, plan);
-        setDirty(false);
+        const saved = await handleSave();
+        if (!saved) return;
       }
       const res = await renderClip(clipId, quality, quality === "final");
       setClip(res.clip);
@@ -1165,7 +1155,7 @@ export default function ClipEditorPage() {
             <button
               type="button"
               onClick={handleUndo}
-              disabled={undoStack.length === 0}
+              disabled={!canUndo}
               title="Deshacer cambio (Ctrl+Z)"
               className="rounded-lg p-2 text-zinc-300 hover:bg-zinc-800 hover:text-white disabled:opacity-25"
             >
@@ -1174,7 +1164,7 @@ export default function ClipEditorPage() {
             <button
               type="button"
               onClick={handleRedo}
-              disabled={redoStack.length === 0}
+              disabled={!canRedo}
               title="Rehacer cambio (Ctrl+Y)"
               className="rounded-lg p-2 text-zinc-300 hover:bg-zinc-800 hover:text-white disabled:opacity-25"
             >
@@ -1184,7 +1174,7 @@ export default function ClipEditorPage() {
 
           <button
             type="button"
-            onClick={handleSave}
+            onClick={() => handleSave()}
             disabled={saving}
             className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50"
           >
@@ -1698,12 +1688,44 @@ export default function ClipEditorPage() {
                           <input
                             type="text"
                             value={w.w}
+                            aria-label={`Texto de la palabra ${wIdx + 1}`}
+                            onFocus={() => {
+                              wordEditStartRef.current = planRef.current;
+                            }}
                             onChange={(e) => {
                               const txt = e.target.value;
-                              mutatePlan((d) => {
-                                d.captions.groups[gIdx].words[wIdx].w = txt;
-                                return d;
-                              });
+                              mutatePlan(
+                                (d) => {
+                                  d.captions.groups[gIdx].words[wIdx].w = txt;
+                                  return d;
+                                },
+                                { skipHistory: true }
+                              );
+                            }}
+                            onBlur={(e) => {
+                              const before = wordEditStartRef.current;
+                              wordEditStartRef.current = null;
+                              if (!before) return;
+                              const original = before.captions.groups[gIdx]?.words[wIdx]?.w ?? "";
+                              const typed = e.target.value.trim();
+                              if (!typed) {
+                                // An empty word would render nothing during its time: put the original back
+                                replacePlan(before);
+                                return;
+                              }
+                              if (typed !== e.target.value) {
+                                mutatePlan(
+                                  (d) => {
+                                    d.captions.groups[gIdx].words[wIdx].w = typed;
+                                    return d;
+                                  },
+                                  { skipHistory: true }
+                                );
+                              }
+                              if (typed !== original) commitHistoryFrom(before);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") e.currentTarget.blur();
                             }}
                             className="w-24 bg-transparent font-extrabold text-xs text-white focus:outline-none"
                           />
@@ -1728,6 +1750,48 @@ export default function ClipEditorPage() {
                         </div>
                       ))}
                     </div>
+
+                    {editingGroupIdx === gIdx ? (
+                      <div className="mt-2 flex items-center gap-2">
+                        <input
+                          type="text"
+                          autoFocus
+                          value={groupDraft}
+                          aria-label="Texto completo de la frase"
+                          onChange={(e) => setGroupDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") {
+                              setEditingGroupIdx(null);
+                              return;
+                            }
+                            if (e.key !== "Enter") return;
+                            e.preventDefault();
+                            const next = retextCaptionGroup(grp, groupDraft);
+                            if (next && captionGroupText(next) !== captionGroupText(grp)) {
+                              mutatePlan((d) => {
+                                d.captions.groups[gIdx] = { ...next, emoji: d.captions.groups[gIdx].emoji };
+                                return d;
+                              });
+                            }
+                            setEditingGroupIdx(null);
+                          }}
+                          className="flex-1 rounded-lg border border-[#FFD400]/50 bg-zinc-950 px-2.5 py-1.5 text-xs font-bold text-white focus:outline-none"
+                        />
+                        <span className="text-[10px] text-zinc-500">Enter para aplicar · Esc para cancelar</span>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGroupDraft(captionGroupText(grp));
+                          setEditingGroupIdx(gIdx);
+                        }}
+                        title="Corrige la frase completa aunque cambie el número de palabras"
+                        className="mt-2 text-[11px] font-semibold text-zinc-400 hover:text-[#FFD400]"
+                      >
+                        ✎ Corregir la frase completa
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -2109,6 +2173,82 @@ export default function ClipEditorPage() {
                     ))}
                   </div>
                 )}
+              </div>
+
+              {/* Clip span on the VOD + jump cuts (rebuilt on the server) */}
+              <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-950/70 p-3.5 text-xs">
+                <span className="font-bold text-zinc-300">Inicio y final del clip</span>
+                <p className="text-[11px] text-zinc-500">
+                  Segundos de la grabación original. Amplía el clip para darle más contexto o recórtalo para que
+                  vaya directo al grano.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  {(
+                    [
+                      ["Empieza en", retimeStart, setRetimeStart],
+                      ["Termina en", retimeEnd, setRetimeEnd],
+                    ] as const
+                  ).map(([label, value, setter]) => (
+                    <label key={label} className="space-y-1">
+                      <span className="block text-[11px] font-semibold text-zinc-400">{label}</span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setter(Number(Math.max(0, value - 1).toFixed(1)))}
+                          className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 font-bold text-zinc-200 hover:bg-zinc-800"
+                          aria-label={`${label}: 1 segundo antes`}
+                        >
+                          −1s
+                        </button>
+                        <input
+                          type="number"
+                          step={0.1}
+                          min={0}
+                          value={value}
+                          onChange={(e) => setter(Number(e.target.value))}
+                          className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-center font-mono text-zinc-100 focus:border-[#FFD400] focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setter(Number((value + 1).toFixed(1)))}
+                          className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 font-bold text-zinc-200 hover:bg-zinc-800"
+                          aria-label={`${label}: 1 segundo después`}
+                        >
+                          +1s
+                        </button>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <label className="flex cursor-pointer items-center gap-2 text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={retimeJumpCuts}
+                    onChange={(e) => setRetimeJumpCuts(e.target.checked)}
+                    className="accent-[#FFD400]"
+                  />
+                  Quitar las pausas largas (cortes rápidos)
+                </label>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-mono text-[11px] text-zinc-500">
+                    Duración: {Math.max(0, retimeEnd - retimeStart).toFixed(1)} s (sin contar los cortes)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleRetime}
+                    disabled={
+                      retiming ||
+                      retimeEnd - retimeStart < 5 ||
+                      (Math.abs(retimeStart - clip.start) < 0.05 &&
+                        Math.abs(retimeEnd - clip.end) < 0.05 &&
+                        retimeJumpCuts === (clip.curated?.jump_cuts ?? true))
+                    }
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#FFD400] px-3.5 py-1.5 text-[11px] font-extrabold text-black hover:bg-amber-300 disabled:opacity-40"
+                  >
+                    {retiming ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Scissors className="h-3.5 w-3.5" />}
+                    Aplicar tramo
+                  </button>
+                </div>
               </div>
 
               {/* Jump cut ranges */}
