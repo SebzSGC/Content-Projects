@@ -309,7 +309,11 @@ def build_editplan(
     ]
     snapped_words = snap_word_starts_to_attack(raw_words, mic_attack_100hz, mic_attack_start_sec)
 
-    ranges = compute_jump_cut_ranges(clip.start, clip.end, snapped_words, speech_silences, signals, preset)
+    ranges = (
+        compute_jump_cut_ranges(clip.start, clip.end, snapped_words, speech_silences, signals, preset)
+        if clip.jump_cuts
+        else [(round(clip.start, 3), round(clip.end, 3))]
+    )
     out_fps = min(preset.format.max_fps, max(24, int(round(source_fps or 60))))
 
     plan = EditPlan(

@@ -77,6 +77,12 @@ class ManualSyncBody(BaseModel):
     scale: float = Field(default=1.0, gt=0.98, lt=1.02)
 
 
+class RetimeClipBody(BaseModel):
+    start: float = Field(ge=0.0, description="Nuevo inicio del clip en segundos del VOD")
+    end: float = Field(gt=0.0, description="Nuevo final del clip en segundos del VOD")
+    jump_cuts: bool = Field(default=True, description="Quitar las pausas largas (jump cuts)")
+
+
 class RenderClipBody(BaseModel):
     quality: Literal["draft", "final"] = "final"
     upload_to_drive: bool = True
@@ -1135,6 +1141,18 @@ def create_app(
         crow = orch.db.get_clip(clip_id)
         assert crow is not None
         return {"clip": _serialize_clip(crow), "editplan": saved.model_dump(mode="json", exclude_none=True)}
+
+    @app.post("/clips/{clip_id}/retime")
+    async def retime_clip_endpoint(clip_id: str, body: RetimeClipBody) -> Dict[str, Any]:
+        try:
+            plan = await orch.retime_clip(clip_id, body.start, body.end, body.jump_cuts)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+        crow = orch.db.get_clip(clip_id)
+        assert crow is not None
+        return {"clip": _serialize_clip(crow), "editplan": plan.model_dump(mode="json", exclude_none=True)}
 
     @app.post("/clips/{clip_id}/render")
     async def render_clip_endpoint(clip_id: str, body: RenderClipBody) -> Dict[str, Any]:

@@ -59,6 +59,34 @@ def _file_sig(path_str: str) -> Dict[str, Any]:
     return {"path": str(p.resolve()), "size": st.st_size, "mtime_ns": st.st_mtime_ns}
 
 
+# Bounds for a clip edited by hand in the Web Studio editor
+MIN_CLIP_SEC = 5.0
+MAX_CLIP_SEC = 180.0
+
+
+def carry_over_user_text(old_plan: EditPlan, new_plan: EditPlan) -> None:
+    """Copy caption text/emphasis corrections and the title from a plan to its rebuilt version.
+
+    Words are matched by their moment on the VOD (master time), so corrections survive a change of
+    start, end or jump cuts. Words that are no longer in the clip are simply dropped.
+    """
+    old_words = {}
+    for g in old_plan.captions.groups:
+        for w in g.words:
+            _, master = old_plan.clip_to_master_time(w.s)
+            old_words[round(master, 1)] = w
+    for g in new_plan.captions.groups:
+        for w in g.words:
+            _, master = new_plan.clip_to_master_time(w.s)
+            prev = old_words.get(round(master, 1))
+            if prev is not None:
+                w.w = prev.w
+                w.emphasis = prev.emphasis
+    old_title = next((o for o in old_plan.overlays if o.kind == "title"), None)
+    new_title = next((o for o in new_plan.overlays if o.kind == "title"), None)
+    if old_title is not None and new_title is not None:
+        new_title.text = old_title.text
+
 class Orchestrator:
     def __init__(
         self,
@@ -696,6 +724,62 @@ class Orchestrator:
         self.db.update_clip(clip_id, editplan_json=raw_json, state="EDITED")
         self.events.publish("clip_updated", session_id=row["session_id"], clip_id=clip_id, state="EDITED")
         return plan
+
+    async def retime_clip(self, clip_id: str, start: float, end: float, jump_cuts: bool = True) -> EditPlan:
+        """Move a clip's start/end on the VOD and/or turn jump cuts on or off, then rebuild its EditPlan.
+
+        Face tracking and the plan are recomputed for the new span (cached by span, so going back is free).
+        Caption text corrections and the title are carried over from the previous plan; manual camera
+        keyframes are not, because they belong to the old timing.
+        """
+        row = self.db.get_clip(clip_id)
+        if row is None:
+            raise KeyError(f"Clip {clip_id} no existe")
+        sid = row["session_id"]
+        ses_row = self.db.get_session(sid)
+        if ses_row is None or not ses_row.get("prepared_json") or not row.get("curated_json"):
+            raise RuntimeError("La sesión aún no terminó de procesarse.")
+        prep = PreparedMedia.model_validate_json(ses_row["prepared_json"])
+        start = round(max(0.0, float(start)), 3)
+        end = round(min(float(prep.gameplay.duration), float(end)), 3)
+        if end - start < MIN_CLIP_SEC:
+            raise ValueError(f"El clip debe durar al menos {MIN_CLIP_SEC:.0f} segundos.")
+        if end - start > MAX_CLIP_SEC:
+            raise ValueError(f"El clip no puede durar más de {MAX_CLIP_SEC:.0f} segundos.")
+
+        sdir = self.session_dir(sid)
+        utts_file = sdir / "utterances.json"
+        signals_parquet = sdir / "signals.parquet"
+        if not utts_file.is_file() or not signals_parquet.is_file():
+            raise RuntimeError("Faltan la transcripción o las señales de la sesión para regenerar el clip.")
+        utts_dicts = json.loads(utts_file.read_text(encoding="utf-8"))
+        old_plan = EditPlan.model_validate_json(row["editplan_json"]) if row.get("editplan_json") else None
+
+        clip = CuratedClip.model_validate_json(row["curated_json"])
+        clip = clip.model_copy(update={"start": start, "end": end, "jump_cuts": bool(jump_cuts)})
+        self.db.update_clip(
+            clip_id, start_sec=start, end_sec=end, curated_json=clip.model_dump_json(), state="PLANNED"
+        )
+        preset = load_preset(ses_row.get("style_preset") or self.settings.style_preset)
+        await self._clip_pipeline(
+            session_row=ses_row,
+            prep=prep,
+            clip=clip,
+            rank_idx=int(row.get("rank_order") or 1),
+            utts_dicts=utts_dicts,
+            signals_parquet=signals_parquet,
+            silences_dicts=[s.model_dump(mode="json") for s in prep.speech_silences_master],
+            sync_dict=prep.sync.model_dump(mode="json"),
+            preset_id=preset.id,
+            preset_hash=preset.content_hash(),
+            should_auto_render=False,
+        )
+        fresh = self.db.get_clip(clip_id)
+        assert fresh is not None and fresh.get("editplan_json")
+        new_plan = EditPlan.model_validate_json(fresh["editplan_json"])
+        if old_plan is not None:
+            carry_over_user_text(old_plan, new_plan)
+        return await self.save_clip_editplan(clip_id, new_plan)
 
     async def render_and_deliver_clip(
         self,

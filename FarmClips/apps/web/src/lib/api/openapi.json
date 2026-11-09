@@ -1726,6 +1726,57 @@
         }
       }
     },
+    "/clips/{clip_id}/retime": {
+      "post": {
+        "summary": "Retime Clip Endpoint",
+        "operationId": "retime_clip_endpoint_clips__clip_id__retime_post",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Clip Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetimeClipBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Retime Clip Endpoint Clips  Clip Id  Retime Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/clips/{clip_id}/render": {
       "post": {
         "summary": "Render Clip Endpoint",
@@ -2590,6 +2641,34 @@
         },
         "type": "object",
         "title": "RenderClipBody"
+      },
+      "RetimeClipBody": {
+        "properties": {
+          "start": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Start",
+            "description": "Nuevo inicio del clip en segundos del VOD"
+          },
+          "end": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "End",
+            "description": "Nuevo final del clip en segundos del VOD"
+          },
+          "jump_cuts": {
+            "type": "boolean",
+            "title": "Jump Cuts",
+            "description": "Quitar las pausas largas (jump cuts)",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "RetimeClipBody"
       },
       "SfxCue": {
         "properties": {

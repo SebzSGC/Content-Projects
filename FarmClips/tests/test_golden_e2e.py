@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 import httpx
+import pytest
 from clipsmedia.ffmpeg import probe
 from clipsserver.api import create_app
 from clipsserver.config import ServerSettings
@@ -163,5 +164,28 @@ async def test_full_golden_hybrid_pipeline_and_editor_cycle(tmp_path: Path) -> N
             assert len(list(salidas_dir.glob("*.mp4"))) == 1
             updated_meta = json.loads(salidas_jsons[0].read_text(encoding="utf-8"))
             assert updated_meta["overlay_title"] == "EDITADO EN STUDIO 1v3"
+
+            # 6. Editor retime: move start/end and turn jump cuts off, keeping caption fixes and the title
+            r_clip2 = await client.get(f"/clips/{cid}")
+            plan_now = r_clip2.json()["clip"]["editplan"]
+            plan_now["captions"]["groups"][1]["words"][0]["w"] = "CORREGIDO"
+            assert (await client.put(f"/clips/{cid}/editplan", json=plan_now)).status_code == 200
+            old_start, old_end = clip_row["start_sec"], clip_row["end_sec"]
+            new_start = max(0.0, old_start - 1.0)
+            r_retime = await client.post(
+                f"/clips/{cid}/retime", json={"start": new_start, "end": old_end, "jump_cuts": False}
+            )
+            assert r_retime.status_code == 200, r_retime.text
+            retimed = r_retime.json()
+            assert retimed["clip"]["state"] == "EDITED"
+            assert retimed["editplan"]["source"]["ranges"] == [[round(new_start, 3), round(old_end, 3)]]
+            words_after = [w["w"] for g in retimed["editplan"]["captions"]["groups"] for w in g["words"]]
+            assert "CORREGIDO" in words_after
+            assert retimed["editplan"]["overlays"][0]["text"] == "EDITADO EN STUDIO 1v3"
+            assert retimed["clip"]["start"] == pytest.approx(new_start, abs=1e-3)
+
+            # Too short a clip is rejected with a clear 400
+            r_bad = await client.post(f"/clips/{cid}/retime", json={"start": 10.0, "end": 12.0, "jump_cuts": True})
+            assert r_bad.status_code == 400
     finally:
         await orch.shutdown()

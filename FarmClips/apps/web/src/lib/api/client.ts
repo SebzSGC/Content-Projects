@@ -186,6 +186,7 @@ export interface ClipItem {
     emphasis_words: string[];
     emojis: { word: string; emoji: string }[];
     reaction_peaks: number[];
+    jump_cuts?: boolean;
   } | null;
   editplan: EditPlan | null;
   has_draft: boolean;
@@ -735,6 +736,13 @@ export const saveClipEditPlan = (clipId: string, plan: EditPlan) =>
   apiJson<{ clip: ClipItem; editplan: EditPlan }>(`/clips/${encodeURIComponent(clipId)}/editplan`, {
     method: "PUT",
     body: JSON.stringify(plan),
+  });
+
+/** Move the clip's start/end on the VOD and/or toggle jump cuts; the server rebuilds the EditPlan. */
+export const retimeClip = (clipId: string, start: number, end: number, jumpCuts: boolean) =>
+  apiJson<{ clip: ClipItem; editplan: EditPlan }>(`/clips/${encodeURIComponent(clipId)}/retime`, {
+    method: "POST",
+    body: JSON.stringify({ start, end, jump_cuts: jumpCuts }),
   });
 
 export const renderClip = (clipId: string, quality: "draft" | "final", upload_to_drive = true) =>

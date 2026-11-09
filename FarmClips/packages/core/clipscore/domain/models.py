@@ -209,6 +209,8 @@ class CuratedClip(BaseModel):
     final_score: float = 0.0
     reason: str = ""
     reaction_peaks: List[float] = Field(default_factory=list)
+    # False keeps the clip continuous (no jump cuts on long pauses); set from the editor
+    jump_cuts: bool = True
     created_at: float = Field(default_factory=time.time)
 
     @property
