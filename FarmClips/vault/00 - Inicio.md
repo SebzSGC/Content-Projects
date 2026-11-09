@@ -6,7 +6,7 @@ audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
 actualizado: 2026-11-09
 etiquetas: [tipo/inicio]
-commit_codigo: 0accd57
+commit_codigo: 507ee06
 ---
 
 # 🏠 FarmClips — Arquitectura Híbrida
@@ -66,6 +66,7 @@ flowchart LR
 
 ---
 
+- **2026-11-09 (v2.6.0)**: Editor más confiable (Espacio pausa, deshacer correcto, el visor se actualiza en pausa), corrección de frases completas, inicio/final del clip y cortes desde el editor, guardado automático, y render casi el doble de rápido en Mac con VideoToolbox (Windows sin cambios) → [[Historial de cambios]].
 - **2026-11-09 (v2.5.1)**: Transcripción solo de voz (silencios largos recortados antes de pagar la API, mismos tiempos y texto) y costo real de Gemini con tokens de razonamiento → [[Historial de cambios]].
 - **2026-11-07 (v2.3.0)**: Optimización integral de fluidez en Web Studio (`SharedSseManager` singleton, GPU compositing), carga instantánea de `/settings` (< 10 ms) y lenguaje claro y digerible en toda la interfaz → [[Historial de cambios]].
 - **2026-11-07 (v2.0.0)**: Lanzamiento del monorepo unificado, motor de edición declarativo EditPlan v2, renderizado acelerado en C++ (`FastCompositor`), normalización en 2 pasadas a -14 LUFS y panel de ajustes en caliente `/settings` → [[Historial de cambios]].

@@ -43,7 +43,8 @@ etiquetas: [tipo/guia, area/configuracion]
 | Variable | Valor por defecto | Descripción |
 |---|:---:|---|
 | `CLIPS_CPU_WORKERS` | `núcleos - 1` | Número de procesos paralelos para cómputo numérico y tracking. |
-| `CLIPS_USE_NVENC` | `true` | Habilita codificación por hardware en GPU NVIDIA. |
+| `CLIPS_NVENC` | `true` | Habilita codificación por hardware en GPU NVIDIA. (Antes esta tabla decía `CLIPS_USE_NVENC`; el nombre que lee el servidor es `CLIPS_NVENC`.) |
+| `CLIPS_VIDEOTOOLBOX` | `true` | Solo en Mac: usa [[Glosario#VideoToolbox|VideoToolbox]] antes de libx264 con la misma calidad (VMAF). En Windows y Linux se ignora. |
 | `CLIPS_NVENC_SLOTS` | `3` | Sesiones de codificación simultáneas permitidas en la GPU. |
 | `CLIPS_ENABLE_GAMEPLAY_MOTION`| `true` | Activa análisis visual de movimiento y Killfeed a 2 fps en el juego. |
 

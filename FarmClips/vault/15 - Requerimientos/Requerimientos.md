@@ -39,12 +39,13 @@ flowchart LR
 
 | Épica | Avance | Ítems |
 |---|---|---|
-| [[EP-02 Claridad y Experiencia de Usuario en Web Studio\|EP-02]] Claridad y Experiencia de Usuario en Web Studio | `██████████ 100 %` | 2 |
+| [[EP-02 Claridad y Experiencia de Usuario en Web Studio\|EP-02]] Claridad y Experiencia de Usuario en Web Studio | `██████████ 95 %` | 3 |
 
 ## 🗒️ Notas de origen
 
 - [[2026-11-07 Editor interactivo WYSIWYG reencuadre visual y rendimiento 60 fps]]
 - [[2026-11-07 Textos claros y digeribles en la plataforma]]
+- [[2026-11-09 Mejoras del editor de clips]]
 
 <!-- fin:indice-automatico -->
 

@@ -4,7 +4,7 @@ tipo: glosario
 estado: vigente
 audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
-actualizado: 2026-11-07
+actualizado: 2026-11-09
 etiquetas: [tipo/glosario, area/general]
 ---
 
@@ -41,6 +41,12 @@ Codificador por hardware integrado en las tarjetas gráficas NVIDIA (NVIDIA Enco
 
 ### libx264
 Codificador por software libre para compresión de video H.264 ejecutado en el procesador principal (CPU). Actúa como respaldo automático y configurable en caso de no disponer de tarjeta gráfica NVIDIA o en entornos de renderizado por lotes.
+
+### VideoToolbox
+Codificador por hardware de los Mac (chip de Apple). FarmClips lo usa solo en Mac, antes que [[Glosario#libx264|libx264]], porque renderiza casi el doble de rápido con la misma calidad. En Windows no existe y no se intenta.
+
+### VMAF
+Medida de calidad de video de Netflix, de 0 a 100: compara un video comprimido con el original y estima cuánto se parecen a ojo humano. Por encima de ~95 la diferencia casi no se ve. FarmClips la usó para elegir la calidad de [[Glosario#VideoToolbox|VideoToolbox]].
 
 ### libass
 Librería de renderizado de subtítulos altamente configurable y eficiente para el estándar Advanced SubStation Alpha (`.ass`). Soporta animaciones por frame, deformaciones, escalado tipográfico y cambios cromáticos instantáneos.

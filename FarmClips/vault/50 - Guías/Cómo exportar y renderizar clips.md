@@ -4,14 +4,14 @@ tipo: guia
 estado: vigente
 audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
-actualizado: 2026-11-07
+actualizado: 2026-11-09
 etiquetas: [tipo/guia, area/render]
 ---
 
 # Cómo exportar y renderizar clips de video
 
 > [!abstract] En pocas palabras
-> Guía práctica sobre los dos modos de renderizado (borrador rápido de 540p vs exportación final en 1080p), cómo aprovechar la tarjeta gráfica NVIDIA y dónde se guardan los archivos finales listos para publicar.
+> Guía práctica sobre los dos modos de renderizado (borrador rápido de 540p vs exportación final en 1080p), cómo se aprovecha la tarjeta gráfica (NVIDIA en Windows, el chip de Apple en Mac) y dónde se guardan los archivos finales listos para publicar.
 
 ---
 
@@ -21,6 +21,31 @@ etiquetas: [tipo/guia, area/render]
 |---|:---:|:---:|:---:|---|
 | **Borrador (*Draft*)** | $540 \times 960$ | 30 fps | **5 a 10 segundos** | Revisión rápida en celular o previsualización. |
 | **Final (*Final*)** | $1080 \times 1920$ | 60 fps | **35 a 50 segundos** | Publicación definitiva en YouTube Shorts, TikTok y Reels. |
+
+---
+
+## 🖥️ ¿Con qué se codifica el video en cada equipo?
+
+FarmClips elige solo el codificador más rápido que funcione, y si falla pasa al siguiente sin que hagas nada:
+
+| Equipo | Orden que se intenta |
+|---|---|
+| Windows o Linux con NVIDIA | NVENC (tarjeta gráfica) → libx264 (procesador) |
+| Windows o Linux sin NVIDIA | libx264 |
+| Mac | VideoToolbox (chip de Apple) → libx264 |
+
+En Windows nada cambió: VideoToolbox solo existe en Mac y FarmClips no lo intenta en otro sistema.
+
+> [!example] Ejemplo (clip de muestra de 24 s en un Mac)
+> | Render | libx264 | VideoToolbox |
+> |---|---|---|
+> | Final 1080p | 6.7 s · VMAF 97.7 | 3.9 s · VMAF 98.0 |
+> | Borrador 540p | 2.2 s · VMAF 93.6 | 1.7 s · VMAF 95.2 |
+>
+> [[Glosario#VMAF|VMAF]] mide de 0 a 100 cuánto se parece el video al original; con VideoToolbox la calidad queda igual o un poco mejor y el render tarda casi la mitad.
+
+> [!info]- Detalle técnico
+> `LocalFfmpegRenderBackend.encoder_chain()` en `clipsrender/runner.py`. VideoToolbox usa calidad constante `-q:v 75` (final) y `-q:v 55` (borrador), elegidas comparando con VMAF contra un render sin pérdida. Se desactiva con `CLIPS_VIDEOTOOLBOX=0` (ver [[Variables de Entorno]]).
 
 ---
 
@@ -35,7 +60,7 @@ Cuando el orquestador concluye el análisis de una sesión:
 ### 2. Renderizado Manual desde el Estudio Web
 Si quieres renderizar un clip que no quedó en el Top 5 o que acabas de modificar:
 1. Abre el clip en `/editor/[clipId]`.
-2. Pulsa el botón **"Render 1080p"** (o "Render 540p" para prueba).
+2. Pulsa **"Exportar video final (1080p)"** (o **"Prueba rápida"** para un borrador de 540p). Si había cambios sin guardar, se guardan antes.
 3. Aparecerá una barra de progreso que refleja el avance de FFmpeg cuadro a cuadro:
    `En cola...` $\rightarrow$ `Codificando video (45%)` $\rightarrow$ `Normalizando audio -14 LUFS` $\rightarrow$ `¡Completado!`.
 

@@ -9,7 +9,7 @@ prioridad: alta
 avance: 100
 actualizado: 2026-11-07
 etiquetas: [requerimientos, epica, area/frontend]
-progreso: 100
+progreso: 95
 ---
 
 # 🧩 EP-02 — Claridad y Experiencia de Usuario en Web Studio
@@ -19,6 +19,8 @@ progreso: 100
 
 ## Historias de usuario
 - [[HU-002 Simplificación y lenguaje claro en toda la plataforma]]
+- [[HU-003 Editor interactivo WYSIWYG reencuadre visual y rendimiento 60 fps]]
+- [[HU-004 Edición confiable de clips tramos frases y guardado automático]]
 
 ## 🔗 Relacionado
 - [[Motor de Edición Web Studio]]

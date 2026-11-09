@@ -4,7 +4,7 @@ tipo: api
 estado: vigente
 audiencia: [tecnico]
 responsable: Equipo FarmClips
-actualizado: 2026-11-07
+actualizado: 2026-11-09
 etiquetas: [tipo/api, area/backend]
 ---
 
@@ -44,6 +44,7 @@ etiquetas: [tipo/api, area/backend]
 |---|---|---|---|
 | `GET` | `/clips/{clip_id}` | Obtiene los datos del clip, puntuaciones y EditPlan. | URL: `{clip_id}` |
 | `PUT` | `/clips/{clip_id}/editplan` | Guarda modificaciones manuales del EditPlan (estado `EDITED`). | JSON: objeto `EditPlan` completo |
+| `POST`| `/clips/{clip_id}/retime` | Cambia el inicio y el final del clip (segundos de la grabación) y activa o no los cortes rápidos; vuelve a generar cámara, cortes y subtítulos conservando el texto corregido y el título. Duración entre 5 s y 180 s. Responde `{clip, editplan}`; `400` si el tramo no es válido, `404` si el clip no existe. | JSON: `start, end, jump_cuts` (por defecto `true`) |
 | `POST`| `/clips/{clip_id}/render` | Solicita renderizado manual de un clip en borrador o final. | JSON: `quality: "draft"\|"final"` |
 | `GET` | `/clips/{clip_id}/thumbnail` | Obtiene o genera una miniatura vertical 9:16 compuesta en caché (gameplay + cámara). | `?width=540` |
 | `GET` | `/clips/{clip_id}/file` | Descarga o reproduce el render MP4 (`final` o `draft`) del clip. | `?quality=draft\|final&download=bool` |

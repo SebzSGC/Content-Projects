@@ -13,7 +13,37 @@ etiquetas: [tipo/cambios, area/general]
 > [!abstract] En pocas palabras
 > Registro cronológico de las versiones de FarmClips, nuevas funcionalidades, optimizaciones de rendimiento y ajustes en la arquitectura del sistema.
 
-## [2.5.1] — 2026-11-09 (Versión actual)
+## [2.6.0] — 2026-11-09 (Versión actual)
+
+### ✂️ Editor confiable, tramos del clip, guardado automático y render rápido en Mac
+
+Revisión del editor de clips: se corrigieron fallos que se notaban al editar y se agregó lo que faltaba para dejar un clip listo sin salir del editor. En Mac el render usa el chip de Apple con la misma calidad.
+
+#### Qué cambió
+- **Correcciones del editor** (`apps/web/src/app/editor/[clipId]/page.tsx`, `src/lib/editor/`):
+  - `Espacio` no pausaba (el atajo usaba una versión vieja de la función). Ahora reproduce y pausa siempre.
+  - En pausa, los cambios no se veían en el visor hasta reproducir. Ahora cada cambio repinta el visor y el contador de tiempo.
+  - Deshacer después de mover los subtítulos dejaba la posición mal; y con `StrictMode` algunos cambios se registraban dos veces. El historial nuevo (`useEditHistory`) lo hace bien.
+  - Corregir una palabra creaba un paso de deshacer por cada letra; ahora es uno por palabra y no se permiten palabras vacías.
+- **Corregir la frase completa**, aunque cambie el número de palabras (el tiempo se reparte entre ellas).
+- **Inicio y final del clip** con ±1 s y el interruptor **Quitar las pausas largas**; nuevo endpoint `POST /clips/{id}/retime` que regenera el plan conservando el texto corregido y el título (`engine.retime_clip`, `CuratedClip.jump_cuts`).
+- **Guardado automático** 2.5 s después del último cambio y aviso al salir con cambios sin guardar.
+- **VideoToolbox en Mac** (`clipsrender/runner.py`): en macOS se intenta antes que libx264, con calidad elegida por VMAF (igual o mejor) y casi el doble de rápido. En Windows/Linux la cadena sigue siendo NVENC → libx264. Nuevo ajuste `CLIPS_VIDEOTOOLBOX`.
+- **Pruebas**: `tests/test_encoder_selection.py` (cadena por plataforma), escenario de tramo en `tests/test_golden_e2e.py`; el benchmark exige la mejora de 1.54x solo donde NVENC funciona. 34 pruebas pasan.
+
+#### Por qué
+- Los fallos hacían perder ediciones o confundían (el visor no mostraba el cambio, deshacer no volvía al estado anterior).
+- Ajustar el inicio o el final de un clip obligaba a reprocesar la sesión.
+- En un Mac sin NVIDIA el render usaba solo el procesador.
+
+> [!warning] ⚠️ Cambia para ti
+> - Ya no hace falta pulsar **Guardar cambios**: el editor guarda solo a los 2.5 s.
+> - Puedes alargar o recortar un clip desde la pestaña **Mezclador de Sonido y Ritmo** → **Inicio y final del clip**. Al aplicarlo se pierden los ajustes manuales de cámara de ese clip (el texto y el título se conservan).
+> - En Mac los clips se exportan más rápido. En Windows todo sigue igual.
+
+---
+
+## [2.5.1] — 2026-11-09
 
 ### 💸 Transcripción solo de voz y costo real de Gemini
 
@@ -21,6 +51,7 @@ La transcripción es cerca del $97\%$ del gasto en APIs de cada VOD (Deepgram co
 
 #### Qué cambió
 - **STT solo con voz (`clipsmedia/silence.py`, `ApiPool`)**: antes de subir cada tramo de 10 min se recortan los silencios de $\ge 2\text{ s}$ con $0.35\text{ s}$ de margen y se sube un Opus solo con voz; las palabras vuelven a su tiempo original con un mapa de segmentos que se guarda junto a la respuesta cruda. Se aplica si ahorra $\ge 20\text{ s}$ y $\ge 15\%$ del tramo; si falla, se envía el tramo completo. Nuevo ajuste `CLIPS_STT_SPEECH_ONLY` (activo por defecto).
+- **Corrección: el orquestador pasa los silencios (`engine.run_session`)**: la primera versión enviaba la lista de silencios vacía y el recorte nunca se aplicaba; ahora convierte los silencios de voz al tiempo de la cámara y los pasa a la transcripción (prueba espía en `tests/test_golden_e2e.py`).
 - **Costo de Gemini con razonamiento (`gemini.py`)**: suma `thoughtsTokenCount` (facturado como salida) a los tokens de salida; antes el gasto y el tope en USD se subestimaban.
 - **Pruebas**: `tests/test_speech_only_stt.py` (planificación de cortes, remapeo, audio real con FFmpeg, `ApiPool` con y sin *fixtures*, costo de Gemini).
 

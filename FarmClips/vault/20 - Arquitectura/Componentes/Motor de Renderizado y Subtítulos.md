@@ -4,7 +4,7 @@ tipo: componente
 estado: vigente
 audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
-actualizado: 2026-11-07
+actualizado: 2026-11-09
 etiquetas: [tipo/componente, area/render]
 ---
 
@@ -25,7 +25,7 @@ flowchart TD
     subgraph VideoEngine["Procesamiento de Video"]
         V_IN["Fuentes originales (1080p 60fps)"] --> WARP["fast_compositor.py<br/>(C++ cv2.warpAffine: zooms y paneos sub-píxel)"]
         WARP --> SUB["Filtro libass<br/>(Subtítulos activos + Títulos balanceados)"]
-        SUB --> ENC["Codificador de Video<br/>(h264_nvenc por GPU o libx264 por CPU)"]
+        SUB --> ENC["Codificador de Video<br/>(NVENC, VideoToolbox en Mac<br/>o libx264 por CPU)"]
     end
 
     subgraph AudioEngine["Procesamiento de Audio"]
@@ -61,6 +61,24 @@ Aplica paneos y transiciones de cámara (*zoom in*, *zoom out*) con curvas matem
 - Se apoya en transformaciones afines directas en C++ a través de OpenCV (`cv2.warpAffine` con interpolación lineal/bicúbica).
 - **Pool de buffers YUV420p preasignados (`free_buffers`)**: Reutiliza un anillo fijo de 10 matrices `np.ndarray` en memoria (`cv2.cvtColor(..., dst=yuv_buf)`) entre el hilo compositor y el escritor de tubería hacia FFmpeg, eliminando ~5 GB de asignaciones dinámicas de RAM por cada clip renderizado.
 - **Aceleración por hardware en decodificación**: Solicita `cv2.VIDEO_ACCELERATION_ANY` en `_SequentialVideoSampler` y transmite matrices de píxeles directamente hacia la entrada de codificación [[Glosario#NVENC|NVENC]].
+
+---
+
+## 🎞️ Elección del codificador por plataforma
+
+`LocalFfmpegRenderBackend.encoder_chain()` arma la lista de codificadores a intentar, en orden, y pasa al siguiente si uno falla:
+
+| Sistema | Cadena |
+|---|---|
+| Windows / Linux | [[Glosario#NVENC|NVENC]] (si `CLIPS_NVENC` está activo) → [[Glosario#libx264|libx264]] |
+| macOS | NVENC (si existiera) → [[Glosario#VideoToolbox|VideoToolbox]] (si `CLIPS_VIDEOTOOLBOX` está activo y FFmpeg lo trae) → libx264 |
+
+> [!example] Calidad medida con [[Glosario#VMAF|VMAF]] (clip de 24 s, Mac)
+> - Final 1080p: libx264 CRF 19 → 97.67 (mín. 94.96) en 6.7 s; VideoToolbox `-q:v 75` → 97.98 (mín. 96.19) en 3.9 s.
+> - Borrador 540p: libx264 *veryfast* CRF 25 → 93.63 (mín. 89.39) en 2.2 s; VideoToolbox `-q:v 55` → 95.15 (mín. 92.64) en 1.7 s.
+
+> [!info]- Detalle técnico
+> `videotoolbox_available()` (en caché) devuelve `False` si `sys.platform != "darwin"` o si `ffmpeg -encoders` no lista `h264_videotoolbox`, así que en Windows la cadena es idéntica a la anterior. Pruebas: `tests/test_encoder_selection.py`.
 
 ---
 
