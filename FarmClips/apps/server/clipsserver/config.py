@@ -206,6 +206,8 @@ class ServerSettings:
     # Pools & Render
     cpu_workers: int = 2
     use_nvenc: bool = True
+    # Apple hardware encoder; only used on macOS (ignored on Windows/Linux)
+    use_videotoolbox: bool = True
     nvenc_slots: int = 2
     auto_render_top_k: int = 5
     auto_render_min_score: float = 60.0
@@ -291,6 +293,7 @@ class ServerSettings:
             openai_api_key=os.environ.get("OPENAI_API_KEY", "").strip(),
             cpu_workers=max(1, int(os.environ.get("CLIPS_CPU_WORKERS", str(max(1, cpu_count - 1))))),
             use_nvenc=_bool("CLIPS_NVENC", True),
+            use_videotoolbox=_bool("CLIPS_VIDEOTOOLBOX", True),
             nvenc_slots=max(1, int(os.environ.get("CLIPS_RENDER_SLOTS_NVENC", "2"))),
             auto_render_top_k=int(os.environ.get("CLIPS_AUTO_RENDER_TOP_K", "5")),
             auto_render_min_score=float(os.environ.get("CLIPS_AUTO_RENDER_MIN_SCORE", "60.0")),

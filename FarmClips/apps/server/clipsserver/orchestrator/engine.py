@@ -105,6 +105,7 @@ class Orchestrator:
             use_nvenc=settings.use_nvenc,
             nvenc_slots=settings.nvenc_slots,
             cache_dir=settings.data_dir / "render_cache",
+            use_videotoolbox=settings.use_videotoolbox,
         )
         self._require_two_drive_polls = require_two_drive_polls
         self.drive: Optional[DriveConnector] = self._init_drive(require_two_drive_polls)

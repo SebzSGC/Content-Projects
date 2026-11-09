@@ -31,10 +31,13 @@ class RenderPool:
         use_nvenc: bool = True,
         nvenc_slots: int = 2,
         cache_dir: Optional[Path] = None,
+        use_videotoolbox: bool = True,
     ) -> None:
         cpu_slots = max(1, (os.cpu_count() or 4) // 4)
         self.slots = max(1, min(3, nvenc_slots)) if use_nvenc else cpu_slots
-        self.backend: RenderBackend = backend or LocalFfmpegRenderBackend(use_nvenc=use_nvenc, cache_dir=cache_dir)
+        self.backend: RenderBackend = backend or LocalFfmpegRenderBackend(
+            use_nvenc=use_nvenc, cache_dir=cache_dir, use_videotoolbox=use_videotoolbox
+        )
         self._queue: asyncio.PriorityQueue[_QueuedRender] = asyncio.PriorityQueue()
         self._counter = itertools.count()
         self._workers: List[asyncio.Task] = []

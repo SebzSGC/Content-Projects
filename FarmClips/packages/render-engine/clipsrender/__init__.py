@@ -12,7 +12,14 @@ from .filtergraph import (
     compile_ffmpeg_plan,
     quote_filter_path,
 )
-from .runner import LocalFfmpegRenderBackend, RenderBackend, libx264_encoder_args, nvenc_encoder_args
+from .runner import (
+    LocalFfmpegRenderBackend,
+    RenderBackend,
+    libx264_encoder_args,
+    nvenc_encoder_args,
+    videotoolbox_available,
+    videotoolbox_encoder_args,
+)
 
 __all__ = [
     "CompiledRenderCommand",
@@ -30,6 +37,8 @@ __all__ = [
     "libx264_encoder_args",
     "measure_plan_loudnorm_pass1",
     "nvenc_encoder_args",
+    "videotoolbox_available",
+    "videotoolbox_encoder_args",
     "quote_filter_path",
     "render_fast_affine_sync",
 ]
