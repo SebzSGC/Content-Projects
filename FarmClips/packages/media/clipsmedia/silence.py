@@ -1,13 +1,14 @@
-"""FFmpeg silencedetect wrapper and zero-overlap 10-minute chunk slicer."""
+"""FFmpeg silencedetect wrapper, zero-overlap 10-minute chunk slicer and speech-only STT packing."""
 
 from __future__ import annotations
 
+import bisect
 import hashlib
 import re
 from pathlib import Path
-from typing import List, Sequence, Tuple
+from typing import List, NamedTuple, Optional, Sequence, Tuple
 
-from clipscore.domain import AudioChunk, SilenceSpan
+from clipscore.domain import AudioChunk, SilenceSpan, TranscriptWord
 
 from .ffmpeg import extract_opus_mono, run_ffmpeg
 
@@ -159,3 +160,143 @@ def resplit_chunk_finer(
             )
         )
     return sub_chunks
+
+
+# ───────────────────────── Speech-only STT packing ─────────────────────────
+# STT providers bill per second of audio sent. Long silences (gameplay without talking, AFK) are cut out
+# of the chunk before upload and every word timestamp is mapped back to the original chunk timeline, so
+# the transcript downstream is identical in timing. Short pauses are always kept: the STT model needs
+# them for punctuation, and the kept padding leaves >= 0.7 s between sentences (utterance grouping
+# splits at 0.65 s on the remapped, original timestamps anyway).
+SPEECH_ONLY_MIN_GAP_SEC = 2.0
+SPEECH_ONLY_PAD_SEC = 0.35
+SPEECH_ONLY_MIN_SAVED_SEC = 20.0
+SPEECH_ONLY_MIN_SAVED_RATIO = 0.15
+SPEECH_ONLY_MAX_SEGMENTS = 300
+
+
+class PackedSegment(NamedTuple):
+    packed_start: float
+    orig_start: float
+    length: float
+
+
+class SpeechOnlyAudio(NamedTuple):
+    path: Path
+    duration: float
+    segments: List[PackedSegment]
+
+
+def plan_speech_only_spans(
+    chunk_duration: float,
+    local_silences: Sequence[SilenceSpan],
+    min_gap_sec: float = SPEECH_ONLY_MIN_GAP_SEC,
+    pad_sec: float = SPEECH_ONLY_PAD_SEC,
+) -> List[Tuple[float, float]]:
+    """Chunk-local spans to keep: everything except silences >= min_gap_sec, each cut shrunk by pad_sec."""
+    keep: List[Tuple[float, float]] = []
+    cursor = 0.0
+    for s in sorted(local_silences, key=lambda x: x.start):
+        if s.duration < min_gap_sec:
+            continue
+        # No padding at the chunk edges: there is no speech beyond them to protect.
+        cut_a = cursor if s.start <= 0.001 else max(cursor, s.start + pad_sec)
+        cut_b = chunk_duration if s.end >= chunk_duration - 0.001 else min(chunk_duration, s.end - pad_sec)
+        if cut_b <= cut_a:
+            continue
+        if cut_a > cursor:
+            keep.append((cursor, cut_a))
+        cursor = cut_b
+    if cursor < chunk_duration:
+        keep.append((cursor, chunk_duration))
+    return [(round(a, 3), round(b, 3)) for a, b in keep if b - a > 0.05]
+
+
+def build_packed_segments(spans: Sequence[Tuple[float, float]]) -> List[PackedSegment]:
+    out: List[PackedSegment] = []
+    packed = 0.0
+    for a, b in spans:
+        out.append(PackedSegment(packed_start=round(packed, 6), orig_start=a, length=round(b - a, 6)))
+        packed += b - a
+    return out
+
+
+def map_packed_time(t: float, segments: Sequence[PackedSegment]) -> float:
+    """Map a timestamp of the packed (speech-only) audio back to the original chunk timeline."""
+    if not segments:
+        return t
+    starts = [s.packed_start for s in segments]
+    i = max(0, bisect.bisect_right(starts, t) - 1)
+    seg = segments[i]
+    return seg.orig_start + min(max(0.0, t - seg.packed_start), seg.length)
+
+
+def remap_packed_words(words: Sequence[TranscriptWord], segments: Sequence[PackedSegment]) -> List[TranscriptWord]:
+    """Map STT words from packed time to original chunk time. A word never stretches across a removed silence."""
+    if not segments:
+        return list(words)
+    starts = [s.packed_start for s in segments]
+    out: List[TranscriptWord] = []
+    for w in words:
+        i = max(0, bisect.bisect_right(starts, w.start) - 1)
+        seg = segments[i]
+        offset = seg.orig_start - seg.packed_start
+        seg_end = seg.packed_start + seg.length
+        s = w.start + offset
+        e = min(w.end, seg_end) + offset
+        out.append(TranscriptWord(text=w.text, start=round(s, 3), end=round(max(s + 0.03, e), 3), prob=w.prob))
+    return out
+
+
+def _local_silences(chunk: AudioChunk, silences: Sequence[SilenceSpan]) -> List[SilenceSpan]:
+    out: List[SilenceSpan] = []
+    for s in silences:
+        a = max(0.0, s.start - chunk.start_cam_sec)
+        b = min(chunk.duration, s.end - chunk.start_cam_sec)
+        if b > a:
+            out.append(SilenceSpan(start=round(a, 3), end=round(b, 3)))
+    return out
+
+
+def write_speech_only_opus(
+    chunk: AudioChunk,
+    silences: Sequence[SilenceSpan],
+    work_dir: Path,
+    bitrate: str = "48k",
+) -> Optional[SpeechOnlyAudio]:
+    """Build a speech-only Opus file for a chunk, or None when cutting would save too little to be worth it.
+
+    Segments are cut with sample-accurate `atrim` and joined with `concat`, so the packed timeline matches
+    the segment map exactly. Re-encoding uses a higher bitrate than the source chunk to avoid audible
+    generational loss on the voice.
+    """
+    local = _local_silences(chunk, silences)
+    min_gap = SPEECH_ONLY_MIN_GAP_SEC
+    spans = plan_speech_only_spans(chunk.duration, local, min_gap_sec=min_gap)
+    while len(spans) > SPEECH_ONLY_MAX_SEGMENTS:
+        min_gap *= 1.5
+        spans = plan_speech_only_spans(chunk.duration, local, min_gap_sec=min_gap)
+    packed_dur = sum(b - a for a, b in spans)
+    saved = chunk.duration - packed_dur
+    if not spans or saved < SPEECH_ONLY_MIN_SAVED_SEC or saved < chunk.duration * SPEECH_ONLY_MIN_SAVED_RATIO:
+        return None
+
+    work_dir.mkdir(parents=True, exist_ok=True)
+    dst = work_dir / f"speech_{chunk.sha256 or chunk.index}_{len(spans)}.opus"
+    if not dst.is_file() or dst.stat().st_size == 0:
+        branches = "".join(
+            f"[0:a]atrim=start={a:.3f}:end={b:.3f},asetpts=PTS-STARTPTS[s{i}];" for i, (a, b) in enumerate(spans)
+        )
+        joined = "".join(f"[s{i}]" for i in range(len(spans)))
+        graph = f"{branches}{joined}concat=n={len(spans)}:v=0:a=1[out]"
+        run_ffmpeg(
+            [
+                "-loglevel", "error",
+                "-i", str(chunk.path),
+                "-filter_complex", graph,
+                "-map", "[out]",
+                "-ac", "1", "-ar", "16000", "-c:a", "libopus", "-b:a", bitrate, "-vbr", "on",
+                str(dst),
+            ]
+        )
+    return SpeechOnlyAudio(path=dst, duration=round(packed_dur, 3), segments=build_packed_segments(spans))

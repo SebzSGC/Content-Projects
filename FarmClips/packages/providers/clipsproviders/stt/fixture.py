@@ -14,6 +14,7 @@ from .groq import parse_groq_words
 class RecordedSttFixtureAdapter(SttAdapter):
     provider_name = "fixture_stt"
     model_name = "recorded-nova-3"
+    accepts_speech_only_audio = False
 
     def __init__(self, fixture_path: Path) -> None:
         self.fixture_path = fixture_path

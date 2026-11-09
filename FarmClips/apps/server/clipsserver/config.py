@@ -190,6 +190,8 @@ class ServerSettings:
         default_factory=lambda: ["clutch", "headshot", "boss", "lag", "stream", "chat", "bro", "no puede ser"]
     )
     chunk_target_sec: float = 600.0
+    # Upload only speech to STT (long silences cut, timestamps mapped back): same transcript, fewer billed minutes
+    stt_speech_only: bool = True
     # LLM providers
     llm_primary: str = "gemini"          # gemini | openai_compat | fixture
     llm_model: str = "gemini-3.5-flash-lite"
@@ -277,6 +279,7 @@ class ServerSettings:
             groq_stt_model=os.environ.get("CLIPS_GROQ_STT_MODEL", "whisper-large-v3-turbo").strip(),
             default_keyterms=[t.strip() for t in keyterms_raw.split(",") if t.strip()],
             chunk_target_sec=float(os.environ.get("CLIPS_CHUNK_TARGET_SEC", "600")),
+            stt_speech_only=_bool("CLIPS_STT_SPEECH_ONLY", True),
             llm_primary=os.environ.get("CLIPS_LLM_PRIMARY", "gemini").strip().lower(),
             llm_model=os.environ.get("CLIPS_LLM_MODEL", "gemini-3.5-flash-lite").strip(),
             llm_backup=os.environ.get("CLIPS_LLM_BACKUP", "openai_compat").strip().lower(),

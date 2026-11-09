@@ -23,6 +23,9 @@ class SttResult(BaseModel):
 class SttAdapter(ABC):
     provider_name: str = "base"
     model_name: str = "base"
+    # Real providers transcribe whatever audio they get; recorded fixtures replay fixed timestamps and must
+    # receive the original chunk.
+    accepts_speech_only_audio: bool = True
 
     @abstractmethod
     async def transcribe_chunk(

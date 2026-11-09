@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence
 
 from clipscore.domain import AudioChunk, SilenceSpan, SyncResult, TranscriptWord
-from clipsmedia.silence import resplit_chunk_finer
+from clipsmedia.silence import remap_packed_words, resplit_chunk_finer, write_speech_only_opus
 from clipsproviders.http import FailoverRouter, PayloadTooLargeError
 from clipsproviders.llm import (
     CURATION_PROMPT_VERSION,
@@ -175,15 +175,30 @@ class ApiPool:
 
         self.db.assert_within_budget(self.settings.max_budget_usd)
         tid = self.db.start_task(session_id, "stt_chunk", task_hash)
-        try:
-            res = await self.stt_router.call(
-                lambda adapter: adapter.transcribe_chunk(
-                    audio_path=audio_p,
-                    duration_sec=chunk.duration,
-                    language=language,
-                    keyterms=keyterms,
+
+        # Billing is per second sent: upload only the speech (long silences cut out) and map timestamps back.
+        speech_only = None
+        if self.settings.stt_speech_only:
+            try:
+                speech_only = await asyncio.to_thread(
+                    write_speech_only_opus, chunk, silences, chunks_work_dir / "speech_only"
                 )
+            except Exception:  # never lose a transcript over an optimization: send the original chunk
+                speech_only = None
+        sent_packed = {"value": False}
+
+        def _transcribe(adapter: SttAdapter):
+            use_packed = speech_only is not None and adapter.accepts_speech_only_audio
+            sent_packed["value"] = use_packed
+            return adapter.transcribe_chunk(
+                audio_path=speech_only.path if use_packed else audio_p,
+                duration_sec=speech_only.duration if use_packed else chunk.duration,
+                language=language,
+                keyterms=keyterms,
             )
+
+        try:
+            res = await self.stt_router.call(_transcribe)
         except PayloadTooLargeError:
             self.db.finish_task(tid, state="DONE", error="413 -> resplitting finer")
             sub_chunks = resplit_chunk_finer(chunk, chunks_work_dir, silences)
@@ -206,6 +221,13 @@ class ApiPool:
         # Persist raw API response BEFORE normalized artifact
         raw_file = self.raw_dir / f"stt_{task_hash}.raw.json"
         raw_file.write_text(json.dumps(res.raw_response, ensure_ascii=False, indent=2), encoding="utf-8")
+        words = res.words
+        if sent_packed["value"] and speech_only is not None:
+            # The raw response is in packed time: keep the segment map next to it so it can be re-normalized.
+            (self.raw_dir / f"stt_{task_hash}.packmap.json").write_text(
+                json.dumps([s._asdict() for s in speech_only.segments]), encoding="utf-8"
+            )
+            words = remap_packed_words(res.words, speech_only.segments)
         self.db.record_api_call(
             session_id=session_id,
             task_hash=task_hash,
@@ -220,13 +242,13 @@ class ApiPool:
 
         norm_file = self.norm_dir / f"stt_words_{task_hash}.json"
         norm_file.write_text(
-            json.dumps([w.model_dump(mode="json") for w in res.words], ensure_ascii=False, indent=1),
+            json.dumps([w.model_dump(mode="json") for w in words], ensure_ascii=False, indent=1),
             encoding="utf-8",
         )
         self.db.put_artifact(task_hash, "stt_words", norm_file)
         self.db.finish_task(tid, state="DONE")
 
-        return offset_and_map_words_to_master(res.words, chunk.start_cam_sec, sync.master_time)
+        return offset_and_map_words_to_master(words, chunk.start_cam_sec, sync.master_time)
 
     async def curate_window_cached(
         self,

@@ -19,10 +19,16 @@ from .ffmpeg import (
     run_ffmpeg,
 )
 from .silence import (
+    PackedSegment,
+    SpeechOnlyAudio,
     compute_chunk_boundaries,
     detect_silences,
+    map_packed_time,
+    plan_speech_only_spans,
+    remap_packed_words,
     resplit_chunk_finer,
     slice_opus_chunks,
+    write_speech_only_opus,
 )
 from .sync import classify_recording_pair, estimate_audio_sync, prepare_session_media
 
@@ -32,9 +38,11 @@ __all__ = [
     "GoogleDriveOAuthConnector",
     "GoogleDriveServiceAccountConnector",
     "LocalFolderDriveConnector",
+    "PackedSegment",
     "ReadyRecording",
     "RemoteFileEntry",
     "SizeStabilityTracker",
+    "SpeechOnlyAudio",
     "classify_recording_pair",
     "compute_chunk_boundaries",
     "detect_clean_game_audio_stream",
@@ -43,11 +51,15 @@ __all__ = [
     "extract_frame",
     "extract_opus_mono",
     "extract_wav16k",
+    "map_packed_time",
     "measure_loudnorm",
+    "plan_speech_only_spans",
     "prepare_session_media",
     "probe",
+    "remap_packed_words",
     "resolve_binary",
     "resplit_chunk_finer",
     "run_ffmpeg",
     "slice_opus_chunks",
+    "write_speech_only_opus",
 ]
