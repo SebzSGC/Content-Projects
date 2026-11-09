@@ -4,7 +4,7 @@ tipo: guia
 estado: vigente
 audiencia: [tecnico]
 responsable: Equipo FarmClips
-actualizado: 2026-11-07
+actualizado: 2026-11-09
 etiquetas: [tipo/guia, area/configuracion]
 ---
 
@@ -60,6 +60,7 @@ etiquetas: [tipo/guia, area/configuracion]
 | `GROQ_API_KEY` | *(vacío)* | Clave de API de Groq Cloud. |
 | `GROQ_STT_MODEL` | `whisper-large-v3-turbo` | Modelo de Whisper ejecutado en hardware LPU de Groq. |
 | `CLIPS_CHUNK_TARGET_SEC` | `600.0` | Tamaño objetivo en segundos para partir el audio Opus (10 min). |
+| `CLIPS_STT_SPEECH_ONLY` | `true` | Envía a la transcripción solo los tramos con voz (recorta silencios $\ge 2\text{ s}$ y devuelve las palabras a su tiempo original). Reduce los minutos facturados. |
 
 ---
 

@@ -4,7 +4,7 @@ tipo: componente
 estado: vigente
 audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
-actualizado: 2026-11-07
+actualizado: 2026-11-09
 etiquetas: [tipo/componente, area/ia]
 ---
 
@@ -50,6 +50,11 @@ flowchart TD
   Utiliza el endpoint compatible con OpenAI `https://api.groq.com/openai/v1/audio/transcriptions` con el modelo `whisper-large-v3-turbo`, enviando el audio como `multipart/form-data`.
 - **Pre-filtrado VAD / Silencios (`ApiPool._chunk_speech_ratio`)**:
   Antes de facturar un fragmento de audio en la API externa, calcula la proporción de voz activa frente a los silencios detectados (`SilenceSpan`). Si un tramo ($\ge 10\text{ s}$) supera el $97\%$ de silencio (streamer ausente o pantalla de espera), se omite la llamada HTTP con costo \$0.00 y se almacena en caché como tramo vacío.
+- **Envío solo de voz (`clipsmedia.silence.write_speech_only_opus`, `CLIPS_STT_SPEECH_ONLY`)**:
+  En los tramos que sí se transcriben, se recortan los silencios de $\ge 2\text{ s}$ (dejando $0.35\text{ s}$ de margen a cada lado) y se sube un Opus solo con voz, unido con `atrim` + `concat` a precisión de muestra. Las palabras vuelven a su tiempo original con el mapa de segmentos (`remap_packed_words`); una palabra nunca queda estirada sobre un silencio quitado y el mapa se guarda junto a la respuesta cruda (`stt_<hash>.packmap.json`). Solo se usa si ahorra $\ge 20\text{ s}$ y $\ge 15\%$ del tramo; si el recorte falla, se envía el tramo original. Los adaptadores de *fixtures* (`accepts_speech_only_audio = False`) reciben siempre el audio original.
+
+  > [!example] Ejemplo
+  > Un tramo de 10 min con 3 min de partida en silencio se factura como $\approx 7\text{ min}$ de audio. Las pausas cortas entre frases se conservan, así que el texto y los tiempos que llegan a la curación son los mismos.
 - **`fixture.py`**:
   Carga respuestas grabadas en disco sin conexión a internet para pruebas automáticas (`pytest`).
 
@@ -59,6 +64,8 @@ flowchart TD
 
 - **`gemini.py` y `openai_compat.py`**:
   Envían la línea de tiempo compacta a `gemini-3.5-flash-lite` o proveedores compatibles con OpenAI (`gpt-6-luna`, Ollama, vLLM) con validación estricta de JSON Schema.
+- **Costo real de Gemini (tokens de razonamiento)**:
+  Google cobra el razonamiento del modelo a tarifa de salida pero lo reporta aparte (`thoughtsTokenCount`). `gemini.py` lo suma a `output_tokens`, así el gasto registrado y el tope `CLIPS_MAX_BUDGET_USD` reflejan lo que realmente se factura. En OpenAI-compatible no hace falta: `completion_tokens` ya incluye el razonamiento.
 - **Prefijo Invariante para *Prompt Caching***:
   `CURATION_SYSTEM_PROMPT` (versión `v2.1`) mantiene las directivas estáticas al inicio y ubica los parámetros dinámicos de la sesión en la última línea, maximizando los aciertos automáticos de caché de prefijo en Gemini y OpenAI con descuentos de hasta el $75\%$.
 - **Directivas Cinematográficas de Alto Impacto y Bajo Consumo**:

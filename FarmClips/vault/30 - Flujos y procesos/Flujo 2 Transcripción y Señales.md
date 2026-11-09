@@ -4,7 +4,7 @@ tipo: flujo
 estado: vigente
 audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
-actualizado: 2026-11-07
+actualizado: 2026-11-09
 etiquetas: [tipo/flujo, area/ia]
 ---
 
@@ -24,9 +24,10 @@ flowchart TD
     subgraph Nube["🌐 ApiPool (En la Nube)"]
         SPLIT --> T1["Tramo Opus 1 (0-10 min)"]
         SPLIT --> T2["Tramo Opus 2 (10-20 min)"]
-        T1 --> STT["API Deepgram Nova-3<br/>(Con Keyterms del juego)"]
-        T2 --> STT
-        STT --> WORDS["Lista de palabras con timestamps exactos"]
+        T1 --> VOZ["Solo voz: silencios de 2 s o más recortados"]
+        T2 --> VOZ
+        VOZ --> STT["API Deepgram Nova-3<br/>(Con Keyterms del juego)"]
+        STT --> WORDS["Palabras devueltas a su tiempo original"]
         WORDS --> UTTS["Agrupación en Utterances (u0001..u9999)"]
     end
 
@@ -48,6 +49,11 @@ flowchart TD
 
 ### Paso 1: Transcripción concurrente de tramos Opus
 El `ApiPool` toma los fragmentos de 10 minutos generados en el Flujo 1 y los envía en paralelo a Deepgram Nova-3. Cada llamada inyecta la lista de **[[Glosario#Keyterms|Keyterms]]** asociada al videojuego para no confundir nombres propios ni jerga (p. ej. *Ace, Spike, Defuse*).
+
+Antes de subir cada tramo se quitan los silencios largos (jugadas sin hablar, pausas AFK): la API cobra por segundo de audio y el silencio no aporta palabras. Al volver, cada palabra se coloca de nuevo en su segundo exacto del video, por lo que el resto del pipeline no nota la diferencia.
+
+> [!info]- 🔧 Detalle técnico
+> `ApiPool.transcribe_chunk_cached` llama a `write_speech_only_opus` (umbral $2\text{ s}$, margen $0.35\text{ s}$, mínimo $20\text{ s}$ y $15\%$ de ahorro) y remapea con `remap_packed_words`. Se desactiva con `CLIPS_STT_SPEECH_ONLY=false`.
 
 ### Paso 2: Agrupación en frases lingüísticas ([[Glosario#Utterance|Utterances]])
 Al recibir las palabras individuales, el algoritmo `group_words_into_utterances()` agrupa el texto basándose en pausas fonéticas ($> 0.4\text{ s}$) y puntuación sintáctica, generando identificadores legibles (`u0001`, `u0002`...).

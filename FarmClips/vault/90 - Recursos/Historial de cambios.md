@@ -4,7 +4,7 @@ tipo: cambios
 estado: vigente
 audiencia: [todos]
 responsable: Equipo FarmClips
-actualizado: 2026-11-07
+actualizado: 2026-11-09
 etiquetas: [tipo/cambios, area/general]
 ---
 
@@ -13,7 +13,27 @@ etiquetas: [tipo/cambios, area/general]
 > [!abstract] En pocas palabras
 > Registro cronológico de las versiones de FarmClips, nuevas funcionalidades, optimizaciones de rendimiento y ajustes en la arquitectura del sistema.
 
-## [2.5.0] — 2026-11-07 (Versión actual)
+## [2.5.1] — 2026-11-09 (Versión actual)
+
+### 💸 Transcripción solo de voz y costo real de Gemini
+
+La transcripción es cerca del $97\%$ del gasto en APIs de cada VOD (Deepgram cobra por minuto de audio enviado). Esta versión deja de pagar por el silencio sin cambiar el resultado, y corrige el cálculo del gasto de Gemini.
+
+#### Qué cambió
+- **STT solo con voz (`clipsmedia/silence.py`, `ApiPool`)**: antes de subir cada tramo de 10 min se recortan los silencios de $\ge 2\text{ s}$ con $0.35\text{ s}$ de margen y se sube un Opus solo con voz; las palabras vuelven a su tiempo original con un mapa de segmentos que se guarda junto a la respuesta cruda. Se aplica si ahorra $\ge 20\text{ s}$ y $\ge 15\%$ del tramo; si falla, se envía el tramo completo. Nuevo ajuste `CLIPS_STT_SPEECH_ONLY` (activo por defecto).
+- **Costo de Gemini con razonamiento (`gemini.py`)**: suma `thoughtsTokenCount` (facturado como salida) a los tokens de salida; antes el gasto y el tope en USD se subestimaban.
+- **Pruebas**: `tests/test_speech_only_stt.py` (planificación de cortes, remapeo, audio real con FFmpeg, `ApiPool` con y sin *fixtures*, costo de Gemini).
+
+#### Por qué
+- Pagar solo por los minutos en que el streamer habla, manteniendo la misma transcripción, y que el presupuesto refleje el costo real.
+
+> [!warning] ⚠️ Cambia para ti
+> - Las sesiones con mucho tiempo de juego en silencio cuestan menos en transcripción; los clips, subtítulos y tiempos son los mismos.
+> - El gasto que muestra el panel puede subir un poco en la curación con Gemini: ahora incluye el razonamiento del modelo, que ya se estaba cobrando.
+
+---
+
+## [2.5.0] — 2026-11-07
 
 ### 🎯 Perfeccionamiento de Prompts v2.1 y Dirección Semántica de Zooms Token-Frugal
 
