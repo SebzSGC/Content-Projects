@@ -584,7 +584,13 @@ export default function ClipEditorPage() {
 
   // Repaint the preview on every plan change. While paused the 60 fps loop is idle (requestVideoFrameCallback
   // only fires when the video presents a frame), so edits must refresh the canvas themselves.
+  // The time label and playhead are written straight to the DOM by the 60 fps loop, so a plan whose length
+  // changed (new range, undo of a retime) must refresh them too or they keep showing the old total.
   useEffect(() => {
+    const total = plan ? getTotalClipDuration(plan) : 0;
+    const t = Math.min(clipTimeRef.current, total);
+    if (timeLabelRef.current) timeLabelRef.current.textContent = `${t.toFixed(2)}s / ${total.toFixed(1)}s`;
+    if (playheadBarRef.current) playheadBarRef.current.style.left = `${(t / Math.max(0.1, total)) * 100}%`;
     renderFrameAt(clipTimeRef.current);
   }, [plan, renderFrameAt]);
 
@@ -770,7 +776,9 @@ export default function ClipEditorPage() {
   }
 
   function seekTo(newT: number) {
-    const total = plan ? getTotalClipDuration(plan) : 0;
+    // planRef, not the render's `plan`: right after replacePlan (retime, load) the closure is still the old plan.
+    const current = planRef.current;
+    const total = current ? getTotalClipDuration(current) : 0;
     const clamped = Math.max(0, Math.min(total, newT));
     clipTimeRef.current = clamped;
     if (scrubberInputRef.current) scrubberInputRef.current.value = String(clamped);
