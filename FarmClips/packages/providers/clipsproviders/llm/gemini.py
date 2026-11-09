@@ -100,7 +100,11 @@ class GeminiAdapter(LlmAdapter):
 
         usage = payload.get("usageMetadata") or {}
         in_tok = int(usage.get("promptTokenCount") or int(est_tokens))
-        out_tok = int(usage.get("candidatesTokenCount") or max(1, len(raw_text) // 4))
+        # Thinking tokens are billed at the output rate but reported apart from the answer's tokens:
+        # without them the spend (and the USD budget cap) is under-counted.
+        out_tok = int(usage.get("candidatesTokenCount") or max(1, len(raw_text) // 4)) + int(
+            usage.get("thoughtsTokenCount") or 0
+        )
         in_rate, out_rate = GEMINI_PRICING_PER_1M.get(self.model_name, (0.30, 2.50))
         cost = round((in_tok / 1_000_000.0) * in_rate + (out_tok / 1_000_000.0) * out_rate, 6)
 
