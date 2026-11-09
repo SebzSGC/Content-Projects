@@ -50,6 +50,16 @@ async def test_full_golden_hybrid_pipeline_and_editor_cycle(tmp_path: Path) -> N
     orch = app.state.orchestrator
     await orch.startup(enable_watcher=False)
 
+    # Record the silences the pipeline hands to the STT pool (they drive the AFK filter and speech-only upload)
+    stt_silences_seen: list = []
+    original_transcribe = orch.api_pool.transcribe_chunk_cached
+
+    async def _spy_transcribe(*args, **kwargs):
+        stt_silences_seen.append(list(kwargs.get("silences") or []))
+        return await original_transcribe(*args, **kwargs)
+
+    orch.api_pool.transcribe_chunk_cached = _spy_transcribe
+
     try:
         # 1. Verify crash-recovery lease expiration logic
         dummy_ses = orch.db.create_session(title="Crash Lease Check")
@@ -72,6 +82,7 @@ async def test_full_golden_hybrid_pipeline_and_editor_cycle(tmp_path: Path) -> N
         # Wait for background session pipeline task to complete
         ses_task = orch._running_sessions[sid]
         await asyncio.wait_for(ses_task, timeout=180.0)
+        assert stt_silences_seen and any(stt_silences_seen), "El STT debe recibir los silencios de la cámara"
 
         ses_row = orch.db.get_session(sid)
         assert ses_row is not None

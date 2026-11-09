@@ -13,6 +13,7 @@ from clipscore.domain import (
     PreparedMedia,
     SessionState,
     SignalSeries,
+    SilenceSpan,
     SyncResult,
     TranscriptWord,
     Utterance,
@@ -415,6 +416,12 @@ class Orchestrator:
                     raw_utts = json.loads(utts_file.read_text(encoding="utf-8"))
                     return [Utterance.model_validate(u) for u in raw_utts]
 
+                # Speech silences back on the camera timeline (chunks are camera audio): they drive the
+                # AFK pre-filter and the speech-only upload in ApiPool.
+                cam_silences = [
+                    SilenceSpan(start=round(prep.sync.camera_time(s.start), 3), end=round(prep.sync.camera_time(s.end), 3))
+                    for s in prep.speech_silences_master
+                ]
                 chunk_lists = await asyncio.gather(
                     *(
                         self.api_pool.transcribe_chunk_cached(
@@ -423,7 +430,7 @@ class Orchestrator:
                             sync=prep.sync,
                             language=row.get("language") or "es",
                             keyterms=keyterms,
-                            silences=[],
+                            silences=cam_silences,
                             chunks_work_dir=sdir / "media" / "opus_chunks",
                         )
                         for ch in prep.chunks
