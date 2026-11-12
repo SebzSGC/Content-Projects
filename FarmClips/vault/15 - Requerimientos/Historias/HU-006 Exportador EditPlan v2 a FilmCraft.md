@@ -54,6 +54,7 @@ progreso: 100
 ## 📝 Bitácora
 - 2026-11-12 · Sin iniciar → **En progreso** · Definición de especificaciones y creación de la arquitectura de `clipsinterchange`.
 - 2026-11-12 · En progreso → **Hecho** · Paquete `clipsinterchange` implementado y verificado con `filmcraft-cli` oficial (6/6 pruebas aprobadas).
+- 2026-11-12 · Hecho · Corrección de base temporal: los keyframes de `motion` (zoom y seguimiento facial) y ducking de audio se indexan en `mediaTime` (`source_in + offset`) en lugar de tiempo relativo al clip, permitiendo la activación real de los punch zooms dinámicos en FilmCraft NLE. Se reorganizó el orden de capas (V1 Cámara, V2 Gameplay, V3 Overlays) para prevenir desbordes de escala sobre el panel de juego.
 
 ---
 
