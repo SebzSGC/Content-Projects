@@ -8,6 +8,8 @@ import json
 import os
 import re
 import shutil
+import subprocess
+import sys
 import tempfile
 import time
 from contextlib import asynccontextmanager
@@ -1433,6 +1435,38 @@ def create_app(
             "reused_instance": res.reused_instance,
             "warnings": export_info.get("warnings", []),
         }
+
+    @app.get("/clips/{clip_id}/filmcraft/download")
+    def download_filmcraft_project(
+        clip_id: str,
+        format: Literal["filmcraft", "otio"] = "filmcraft",
+    ) -> FileResponse:
+        """Descarga el archivo de proyecto generado para FilmCraft u OTIO."""
+        export_info = export_filmcraft_endpoint(clip_id, format=format)
+        proj_path = Path(export_info["project_path"])
+        if not proj_path.is_file():
+            raise HTTPException(404, "Archivo de proyecto no encontrado")
+        filename = f"{clip_id}.fcproj" if format == "filmcraft" else f"{clip_id}.otio"
+        return FileResponse(
+            path=str(proj_path),
+            filename=filename,
+            media_type="application/octet-stream",
+        )
+
+    @app.post("/clips/{clip_id}/filmcraft/reveal")
+    def reveal_filmcraft_project(clip_id: str) -> Dict[str, Any]:
+        """Abre la carpeta del proyecto en el explorador de archivos del sistema."""
+        export_info = export_filmcraft_endpoint(clip_id, format="filmcraft")
+        proj_path = Path(export_info["project_path"])
+        if not proj_path.is_file():
+            raise HTTPException(404, "Archivo de proyecto no encontrado")
+
+        if sys.platform == "win32":
+            subprocess.Popen(["explorer.exe", f"/select,{proj_path}"])
+        else:
+            subprocess.Popen(["xdg-open", str(proj_path.parent)])
+
+        return {"ok": True, "path": str(proj_path)}
 
     # --- Server-Sent Events (SSE) ------------------------------------------
 

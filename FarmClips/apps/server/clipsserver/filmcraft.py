@@ -9,6 +9,8 @@ import shutil
 import socket
 import subprocess
 import sys
+import threading
+import time
 from fractions import Fraction
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple
@@ -44,6 +46,7 @@ def ensure_control_token() -> str:
     """Obtiene o genera un token seguro de 64 caracteres hex para el FilmCraft control server."""
     env_tok = os.environ.get("FILMCRAFT_CONTROL_TOKEN", "").strip()
     if len(env_tok) == 64 and all(c in "0123456789abcdefABCDEF" for c in env_tok):
+        _persist_user_env_token(env_tok)
         return env_tok
 
     token_file = (
@@ -56,6 +59,7 @@ def ensure_control_token() -> str:
             tok = token_file.read_text(encoding="utf-8").strip()
             if len(tok) == 64 and all(c in "0123456789abcdefABCDEF" for c in tok):
                 os.environ["FILMCRAFT_CONTROL_TOKEN"] = tok
+                _persist_user_env_token(tok)
                 return tok
     except Exception:
         pass
@@ -67,7 +71,139 @@ def ensure_control_token() -> str:
         token_file.write_text(new_tok, encoding="utf-8")
     except Exception:
         pass
+    _persist_user_env_token(new_tok)
     return new_tok
+
+
+def _persist_user_env_token(token: str) -> None:
+    """Registra el token en HKCU\\Environment para que los procesos de ShellExecute lo hereden."""
+    if sys.platform != "win32":
+        return
+    try:
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, r"Environment", 0, winreg.KEY_SET_VALUE
+        ) as key:
+            winreg.SetValueEx(key, "FILMCRAFT_CONTROL_TOKEN", 0, winreg.REG_SZ, token)
+    except Exception:
+        pass
+
+
+def register_windows_association(app_path: Path, bridge_port: int = 9876) -> None:
+    """Asocia la extensión .fcproj con FilmCraft en el registro de Windows del usuario."""
+    if sys.platform != "win32":
+        return
+    try:
+        import winreg
+
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\.fcproj") as k:
+            winreg.SetValueEx(k, "", 0, winreg.REG_SZ, "FilmCraft.Project")
+
+        cmd = f'"{app_path}" --graphics default --control {bridge_port} "%1"'
+        with winreg.CreateKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Classes\FilmCraft.Project\shell\open\command",
+        ) as k:
+            winreg.SetValueEx(k, "", 0, winreg.REG_SZ, cmd)
+    except Exception:
+        pass
+
+
+def has_visible_filmcraft_window() -> bool:
+    """Comprueba si existe al menos una ventana visible de FilmCraft en el escritorio de Windows."""
+    if sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        found = False
+
+        def callback(hwnd: int, _: int) -> bool:
+            nonlocal found
+            if user32.IsWindowVisible(hwnd):
+                length = user32.GetWindowTextLengthW(hwnd)
+                if length > 0:
+                    buff = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buff, length + 1)
+                    title = buff.value.lower()
+                    if "filmcraft" in title:
+                        found = True
+                        return False
+            return True
+
+        cb_type = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+        user32.EnumWindows(cb_type(callback), 0)
+        return found
+    except Exception:
+        return False
+
+
+def kill_filmcraft_processes() -> None:
+    """Termina procesos de FilmCraft (ej. zombies creados en segundo plano sin ventana)."""
+    if sys.platform != "win32":
+        return
+    try:
+        subprocess.run(
+            ["taskkill.exe", "/F", "/IM", "filmcraft.exe", "/T"],
+            capture_output=True,
+            timeout=5,
+        )
+    except Exception:
+        pass
+
+
+def bring_filmcraft_to_front() -> bool:
+    """Trae la ventana de FilmCraft al primer plano en el escritorio de Windows."""
+    if sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        target_hwnd = None
+
+        def callback(hwnd: int, _: int) -> bool:
+            nonlocal target_hwnd
+            if user32.IsWindowVisible(hwnd):
+                length = user32.GetWindowTextLengthW(hwnd)
+                if length > 0:
+                    buff = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buff, length + 1)
+                    title = buff.value.lower()
+                    if "filmcraft" in title:
+                        target_hwnd = hwnd
+                        return False
+            return True
+
+        cb_type = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+        user32.EnumWindows(cb_type(callback), 0)
+
+        if target_hwnd:
+            # Desbloquear y forzar al frente en Windows
+            user32.keybd_event(0x12, 0, 0, 0)  # Alt down
+            user32.ShowWindow(target_hwnd, 9)  # SW_RESTORE
+            user32.SetForegroundWindow(target_hwnd)
+            user32.BringWindowToTop(target_hwnd)
+            user32.keybd_event(0x12, 0, 2, 0)  # Alt up
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _async_bring_to_front(retries: int = 15, delay: float = 0.25) -> None:
+    """Intenta traer la ventana de FilmCraft al frente de forma asíncrona mientras se inicializa."""
+    def runner():
+        for _ in range(retries):
+            time.sleep(delay)
+            if bring_filmcraft_to_front():
+                break
+
+    threading.Thread(target=runner, daemon=True).start()
 
 
 class FilmCraftLauncher:
@@ -206,6 +342,13 @@ class FilmCraftLauncher:
 
         bridge_active = self.is_bridge_listening()
 
+        # Si el bridge responde en Windows pero ninguna ventana es visible (proceso zombie en segundo plano),
+        # cerramos esos procesos para asegurar que se lance una instancia visible en pantalla.
+        if bridge_active and sys.platform == "win32" and not has_visible_filmcraft_window():
+            kill_filmcraft_processes()
+            time.sleep(0.5)
+            bridge_active = False
+
         # Si el bridge está activo y tenemos CLI, reutilizamos la ventana existente
         if bridge_active and cli:
             cmd = [
@@ -221,6 +364,7 @@ class FilmCraftLauncher:
                     cmd, env=child_env, capture_output=True, text=True, timeout=5
                 )
                 if res.returncode == 0:
+                    _async_bring_to_front()
                     return OpenFilmCraftResponse(
                         project_path=str(project_path),
                         launched=False,
@@ -230,18 +374,33 @@ class FilmCraftLauncher:
                 pass
 
         # Si no se pudo reutilizar, lanzamos una nueva instancia en el desktop interactivo.
-        # En Windows usamos CREATE_NEW_PROCESS_GROUP (nunca DETACHED_PROCESS porque aislaría la ventana).
-        creation_flags = 0
+        # En Windows registramos la asociación de .fcproj y delegamos a Shell.Application de Explorer,
+        # lo que garantiza que Windows cree el proceso en la Window Station interactiva del usuario (winsta0\default)
+        # con aceleración Vulkan/DX12, el control loopback activo y su ventana visible en primer plano.
         if sys.platform == "win32":
-            creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP
+            register_windows_association(app, self.bridge_port)
+            opened = False
+            try:
+                os.startfile(str(project_path))
+                opened = True
+            except Exception:
+                pass
+            if not opened:
+                ps_open = f"(New-Object -ComObject Shell.Application).Open('{project_path}')"
+                subprocess.run(
+                    ["powershell.exe", "-NoProfile", "-Command", ps_open],
+                    capture_output=True,
+                    timeout=5,
+                )
+        else:
+            args = [str(app), "--graphics", "default", "--control", str(self.bridge_port), str(project_path)]
+            subprocess.Popen(
+                args,
+                env=child_env,
+                close_fds=True,
+            )
 
-        args = [str(app), "--control", str(self.bridge_port), str(project_path)]
-        subprocess.Popen(
-            args,
-            env=child_env,
-            creationflags=creation_flags,
-            close_fds=(sys.platform != "win32"),
-        )
+        _async_bring_to_front()
 
         return OpenFilmCraftResponse(
             project_path=str(project_path),

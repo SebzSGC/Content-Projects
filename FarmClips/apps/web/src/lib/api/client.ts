@@ -915,3 +915,15 @@ export async function openInFilmCraft(clipId: string): Promise<FilmCraftOpenResu
   }
   return res.json();
 }
+
+export async function revealFilmCraftProject(clipId: string): Promise<{ ok: boolean; path: string }> {
+  const res = await fetch(`${API_PREFIX}/clips/${clipId}/filmcraft/reveal`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error("Error al abrir la carpeta del proyecto");
+  return res.json();
+}
+
+export function getFilmCraftDownloadUrl(clipId: string, format: "filmcraft" | "otio" = "filmcraft"): string {
+  return `${API_PREFIX}/clips/${clipId}/filmcraft/download?format=${format}`;
+}

@@ -29,12 +29,15 @@ import {
   Zap,
   ZoomIn,
   ZoomOut,
+  FolderOpen,
 } from "lucide-react";
 import {
   API_PREFIX,
   fetchClipDetail,
   fetchEmojiCatalog,
   openInFilmCraft,
+  revealFilmCraftProject,
+  getFilmCraftDownloadUrl,
   renderClip,
   retimeClip,
   saveClipEditPlan,
@@ -162,6 +165,7 @@ export default function ClipEditorPage() {
   const [saving, setSaving] = useState(false);
   const [renderingQuality, setRenderingQuality] = useState<"draft" | "final" | null>(null);
   const [openingFilmCraft, setOpeningFilmCraft] = useState(false);
+  const [filmcraftOpened, setFilmcraftOpened] = useState(false);
   const [renderProgress, setRenderProgress] = useState<number | null>(null);
   const [statusMsg, setStatusMsg] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -1090,6 +1094,7 @@ export default function ClipEditorPage() {
         }
       }
       const res = await openInFilmCraft(clipId);
+      setFilmcraftOpened(true);
       const warns = res.warnings?.length ? ` (${res.warnings.length} avisos de compatibilidad resueltos)` : "";
       setStatusMsg(
         res.reused_instance
@@ -1097,6 +1102,7 @@ export default function ClipEditorPage() {
           : `FilmCraft NLE iniciado con el proyecto montado en el timeline${warns}.`
       );
     } catch (err) {
+      setFilmcraftOpened(false);
       setStatusMsg("");
       setError(
         err instanceof Error
@@ -1105,6 +1111,14 @@ export default function ClipEditorPage() {
       );
     } finally {
       setOpeningFilmCraft(false);
+    }
+  }
+
+  async function handleRevealFilmCraft() {
+    try {
+      await revealFilmCraftProject(clipId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -1290,18 +1304,45 @@ export default function ClipEditorPage() {
       )}
 
       {statusMsg && (
-        <div className="flex items-center justify-between rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
           <div className="flex items-center gap-2">
-            <Check className="h-4 w-4 text-emerald-400" />
+            <Check className="h-4 w-4 shrink-0 text-emerald-400" />
             <span>{statusMsg}</span>
           </div>
-          <button
-            type="button"
-            onClick={() => setStatusMsg("")}
-            className="text-xs text-zinc-400 hover:text-white"
-          >
-            Cerrar
-          </button>
+          <div className="flex items-center gap-2">
+            {filmcraftOpened && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleRevealFilmCraft}
+                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-950/60 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/60"
+                  title="Abrir carpeta en el Explorador de Windows y seleccionar el archivo .fcproj"
+                >
+                  <FolderOpen className="h-3.5 w-3.5" />
+                  Abrir carpeta
+                </button>
+                <a
+                  href={getFilmCraftDownloadUrl(clipId)}
+                  download={`${clip?.overlay_title || clip?.post_title || "clip"}.fcproj`}
+                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-950/60 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/60"
+                  title="Descargar archivo .fcproj del proyecto"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Descargar .fcproj
+                </a>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setStatusMsg("");
+                setFilmcraftOpened(false);
+              }}
+              className="text-xs text-zinc-400 hover:text-white"
+            >
+              Cerrar
+            </button>
+          </div>
         </div>
       )}
 

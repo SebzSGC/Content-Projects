@@ -101,3 +101,20 @@ def test_filmcraft_open_endpoint(client):
         data = res.json()
         assert data["launched"] is True
         assert data["reused_instance"] is False
+
+
+def test_filmcraft_download_endpoint(client):
+    res = client.get("/clips/clip_456/filmcraft/download?format=filmcraft")
+    assert res.status_code == 200
+    assert "attachment" in res.headers.get("content-disposition", "") or "clip_456.fcproj" in res.headers.get("content-disposition", "")
+    assert len(res.content) > 0
+
+
+def test_filmcraft_reveal_endpoint(client):
+    with patch("subprocess.Popen") as mock_popen:
+        res = client.post("/clips/clip_456/filmcraft/reveal")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["ok"] is True
+        assert "path" in data
+        assert mock_popen.called
