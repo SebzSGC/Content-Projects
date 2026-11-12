@@ -141,6 +141,9 @@ def test_filmcraft_exporter_e2e(tmp_path: Path):
     assert seq_item["video_tracks"][2]["name"] == "V3 Overlays"
     assert len(seq_item["video_tracks"][0]["items"]) == 2  # 2 rangos en V1 Cámara
     assert len(seq_item["video_tracks"][1]["items"]) == 2  # 2 rangos en V2 Gameplay
+    assert len(seq_item["caption_tracks"]) == 1  # Pista nativa C1 Subtitles
+    assert len(seq_item["caption_tracks"][0]["captions"]) == 2  # 2 subtítulos editables
+    assert seq_item["caption_tracks"][0]["name"] == "Subtitles"
 
     # Verificar que los keyframes de motion de la cámara estén en mediaTime (source_in + offset)
     v1_first_clip = seq_item["video_tracks"][0]["items"][0]

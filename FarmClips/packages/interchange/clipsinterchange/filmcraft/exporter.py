@@ -595,7 +595,7 @@ class FilmCraftExporter:
                         "source_in": 0,
                         "speed": 1.0,
                         "reverse": False,
-                        "enabled": True,
+                        "enabled": False,  # Desactivada por defecto para priorizar la pista de subtítulos interactiva editable C1
                         "link": None,
                         "group": None,
                         "effects": [
@@ -636,21 +636,24 @@ class FilmCraftExporter:
                     )
                 )
 
-        # 4. Marcadores de captions para navegación y edición rápida
+        # 4. Marcadores y pista nativa de subtítulos interactivos (C1)
         markers: List[Dict[str, Any]] = []
+        native_captions_list: List[Dict[str, Any]] = []
+
         if plan.captions and plan.captions.groups:
             for g_idx, group in enumerate(plan.captions.groups):
                 words = getattr(group, "words", [])
                 text = " ".join(getattr(w, "w", getattr(w, "text", "")) for w in words)
                 if not text:
-                    text = f"Caption {g_idx + 1}"
+                    continue
                 g_start = float(words[0].s) if words else float(getattr(group, "start", 0.0))
                 g_end = float(words[-1].e) if words else float(getattr(group, "end", g_start + 1.0))
                 m_start_ticks = seconds_to_ticks(g_start, fps=fps)
                 m_dur_ticks = seconds_to_ticks(max(0.05, g_end - g_start), fps=fps)
 
+                # Marcador de timeline para navegación rápida
                 markers.append({
-                    "id": 800000 + g_idx,
+                    "id": alloc_id(),
                     "start": m_start_ticks,
                     "duration": m_dur_ticks,
                     "name": text[:30],
@@ -658,6 +661,45 @@ class FilmCraftExporter:
                     "kind": "Comment",
                     "color": "Green",
                 })
+
+                # Elemento de subtítulo nativo editable en FilmCraft
+                native_captions_list.append({
+                    "id": alloc_id(),
+                    "start": m_start_ticks,
+                    "duration": m_dur_ticks,
+                    "text": text,
+                    "speaker": None,
+                    "cue_id": None,
+                    "settings": "",
+                })
+
+        caption_tracks: List[Dict[str, Any]] = []
+        if native_captions_list:
+            caption_tracks.append({
+                "id": alloc_id(),
+                "name": "Subtitles",
+                "format": "Subtitle",
+                "language": "es",
+                "style": {
+                    "font": "Inter",
+                    "font_style": "SemiBold",
+                    "size": 54.0,
+                    "color": [255, 255, 255, 255],
+                    "background": True,
+                    "background_color": [0, 0, 0, 191],
+                    "align": "Center",
+                    "anchor": "Bottom",
+                    "margin": 0.08,
+                    "line_spacing": 1.25,
+                    "outline": 0.0,
+                    "outline_color": [0, 0, 0, 255],
+                },
+                "enabled": True,
+                "locked": False,
+                "sync_lock": True,
+                "captions": native_captions_list,
+                "vtt_blocks": [],
+            })
 
         # 5. Secuencia principal (Item de tipo Sequence)
         seq_id = alloc_id()
@@ -798,7 +840,7 @@ class FilmCraftExporter:
                     "master_effects": [],
                     "master_mixer": {"mode": "Read", "output": None, "record_arm": False, "solo_safe": False, "input_map": "Stereo"},
                     "submix_tracks": [],
-                    "caption_tracks": [],
+                    "caption_tracks": caption_tracks,
                 }
             },
             "metadata": {
