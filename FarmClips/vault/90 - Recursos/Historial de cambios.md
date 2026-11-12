@@ -26,10 +26,11 @@ Exportación determinista de clips a proyectos nativos de FilmCraft (`.fcproj`),
 - **Acciones y endpoints adicionales en FastAPI**:
   - `GET /clips/{clip_id}/filmcraft/download`: descarga directa del `.fcproj` u `.otio`.
   - `POST /clips/{clip_id}/filmcraft/reveal`: abre el explorador del sistema operativo seleccionando el archivo de proyecto.
-- **Lanzamiento robusto con aceleración GPU en Windows y solución de visualización**:
+- **Lanzamiento robusto con aceleración GPU en Windows y solución definitiva de visualización interactiva**:
+  - Lanzamiento Win32 explícito en el escritorio físico interactivo del usuario (`lpDesktop = r"WinSta0\Default"`) mediante `CreateProcessW` con desacoplamiento de Job Objects (`CREATE_BREAKAWAY_FROM_JOB`), eliminando cualquier aislamiento de ventana o invisibilidad provocada por estaciones de trabajo virtuales secundarias (`exebox-...`) o consolas en segundo plano.
+  - Detección precisa de ventanas activas mediante `EnumDesktopWindows` sobre el escritorio `Default`, garantizando que si el usuario ya tiene FilmCraft abierto, su sesión jamás sea interrumpida o cerrada forzosamente, trayéndola directamente al frente con `AttachThreadInput` y `SetForegroundWindow`.
   - Eliminación de `--graphics default` forzado en el comando de registro y en el lanzador, permitiendo que FilmCraft seleccione automáticamente su backend gráfico óptimo (`DirectX 12` / `Vulkan`) y evitando bloqueos o cuelgues en equipos con GPU híbrida (Intel UHD + NVIDIA GeForce RTX).
   - Limpieza proactiva de marcadores bloqueantes de pruebas gráficas (`graphics-test.json`, `graphics-start.json`) y carpetas de recuperación (`Recovery`) antes de cada lanzamiento.
-  - Detección precisa de ventana interactiva mediante `FindWindowW` y terminación automática de procesos huérfanos/zombies previos.
   - Corrección en el Web Studio (`/editor/[clipId]`): se eliminó la apertura forzada simultánea del Explorador de Windows al pulsar «Abrir en FilmCraft», manteniendo la ventana de FilmCraft en primer plano (el usuario dispone del botón «Abrir carpeta» si desea explorarla manualmente).
   - Asociación automática de archivos `.fcproj` en el Registro de Windows (`HKCU\Software\Classes\.fcproj`) y gestión de tokens de control de 64 caracteres hex.
 - **Nuevo paquete `packages/interchange/` (`clipsinterchange`)**:
