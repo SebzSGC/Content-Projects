@@ -30,6 +30,7 @@ import {
   ZoomIn,
   ZoomOut,
   FolderOpen,
+  Copy,
 } from "lucide-react";
 import {
   API_PREFIX,
@@ -166,6 +167,8 @@ export default function ClipEditorPage() {
   const [renderingQuality, setRenderingQuality] = useState<"draft" | "final" | null>(null);
   const [openingFilmCraft, setOpeningFilmCraft] = useState(false);
   const [filmcraftOpened, setFilmcraftOpened] = useState(false);
+  const [filmcraftProjectPath, setFilmcraftProjectPath] = useState<string>("");
+  const [copiedPath, setCopiedPath] = useState(false);
   const [renderProgress, setRenderProgress] = useState<number | null>(null);
   const [statusMsg, setStatusMsg] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -1095,6 +1098,9 @@ export default function ClipEditorPage() {
       }
       const res = await openInFilmCraft(clipId);
       setFilmcraftOpened(true);
+      if (res.project_path) {
+        setFilmcraftProjectPath(res.project_path);
+      }
       const warns = res.warnings?.length ? ` (${res.warnings.length} avisos de compatibilidad resueltos)` : "";
       setStatusMsg(
         res.reused_instance
@@ -1117,6 +1123,13 @@ export default function ClipEditorPage() {
     } finally {
       setOpeningFilmCraft(false);
     }
+  }
+
+  function handleCopyFilmCraftPath() {
+    if (!filmcraftProjectPath) return;
+    navigator.clipboard.writeText(filmcraftProjectPath);
+    setCopiedPath(true);
+    setTimeout(() => setCopiedPath(false), 2500);
   }
 
   async function handleRevealFilmCraft() {
@@ -1326,6 +1339,17 @@ export default function ClipEditorPage() {
                   <FolderOpen className="h-3.5 w-3.5" />
                   Abrir carpeta
                 </button>
+                {filmcraftProjectPath && (
+                  <button
+                    type="button"
+                    onClick={handleCopyFilmCraftPath}
+                    className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-950/60 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/60"
+                    title="Copiar ruta absoluta del archivo .fcproj para pegarla en FilmCraft (Ctrl+O)"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    {copiedPath ? "¡Copiada!" : "Copiar ruta"}
+                  </button>
+                )}
                 <a
                   href={getFilmCraftDownloadUrl(clipId)}
                   download={`${clip?.overlay_title || clip?.post_title || "clip"}.fcproj`}

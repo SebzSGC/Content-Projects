@@ -1462,7 +1462,13 @@ def create_app(
             raise HTTPException(404, "Archivo de proyecto no encontrado")
 
         if sys.platform == "win32":
-            subprocess.Popen(["explorer.exe", f"/select,{proj_path}"])
+            try:
+                subprocess.Popen(f'explorer.exe /select,"{proj_path}"', shell=True)
+            except Exception:
+                try:
+                    subprocess.Popen(f'explorer.exe "{proj_path.parent}"', shell=True)
+                except Exception:
+                    os.startfile(str(proj_path.parent))
         else:
             subprocess.Popen(["xdg-open", str(proj_path.parent)])
 
