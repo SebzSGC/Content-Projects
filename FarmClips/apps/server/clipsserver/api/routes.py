@@ -5,8 +5,11 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import json
+import os
 import re
 import shutil
+import subprocess
+import sys
 import tempfile
 import time
 from contextlib import asynccontextmanager
@@ -46,7 +49,12 @@ from ..config import (
     reload_server_settings,
     update_dotenv_values,
 )
+from ..filmcraft import FilmCraftLauncher, FilmCraftStatus, OpenFilmCraftResponse
 from ..orchestrator import Orchestrator, cleanup_temp_media, compute_storage_stats
+from clipsinterchange import ExportContext, SessionClipSpec
+from clipsinterchange.filmcraft.exporter import FilmCraftExporter
+from clipsinterchange.otio.exporter import OtioExporter
+from fractions import Fraction
 
 SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
@@ -92,6 +100,10 @@ class RenderClipBody(BaseModel):
 class CleanupBody(BaseModel):
     ttl_days: Optional[float] = None
     include_inputs: bool = False
+
+
+class SessionFilmCraftExportBody(BaseModel):
+    clip_ids: Optional[List[str]] = None
 
 
 class TestWebhookBody(BaseModel):
@@ -1323,6 +1335,326 @@ def create_app(
             media_type="image/jpeg",
             headers={"Cache-Control": "public, max-age=3600", "X-Frame-Cache": "MISS"},
         )
+
+    # --- FilmCraft NLE Integration -----------------------------------------
+
+    def _build_filmcraft_launcher() -> FilmCraftLauncher:
+        return FilmCraftLauncher(
+            app_path=os.environ.get("CLIPS_FILMCRAFT_PATH"),
+            cli_path=os.environ.get("CLIPS_FILMCRAFT_CLI_PATH"),
+            bridge_port=int(os.environ.get("CLIPS_FILMCRAFT_BRIDGE_PORT", "9876")),
+        )
+
+    def _extract_voice_spans(plan: EditPlan) -> List[tuple[float, float]]:
+        spans: List[tuple[float, float]] = []
+        if plan.captions and plan.captions.groups:
+            for g in plan.captions.groups:
+                if g.words:
+                    spans.append((float(g.words[0].s), float(g.words[-1].e)))
+        return spans
+
+    def _build_session_export_context(
+        srow: Dict[str, Any],
+        *,
+        clip_id: str = "",
+        voice_spans: Optional[List[tuple[float, float]]] = None,
+    ) -> ExportContext:
+        sync_data = json.loads(srow.get("sync_json") or "{}") if srow.get("sync_json") else {}
+        cam_offset = float(sync_data.get("shift_sec") or srow.get("camera_offset_s") or 0.0)
+        prep = json.loads(srow.get("prepared_json") or "{}") if srow.get("prepared_json") else {}
+        gp_info = prep.get("gameplay") or {}
+        cam_info = prep.get("camera") or {}
+
+        raw_fps = gp_info.get("fps") or 60
+        try:
+            fps = Fraction(str(raw_fps)).limit_denominator(1001)
+            if fps <= 0:
+                fps = Fraction(60, 1)
+        except Exception:
+            fps = Fraction(60, 1)
+
+        return ExportContext(
+            gameplay_path=Path(srow["gameplay_path"]),
+            camera_path=Path(srow["camera_path"]),
+            camera_offset_s=cam_offset,
+            source_fps=fps,
+            voice_spans=voice_spans or [],
+            clip_id=clip_id,
+            session_id=srow["id"],
+            captions_mode="overlay",
+            gameplay_duration_s=float(gp_info["duration"]) if gp_info.get("duration") else None,
+            camera_duration_s=float(cam_info["duration"]) if cam_info.get("duration") else None,
+            gameplay_width=int(gp_info["width"]) if gp_info.get("width") else 1920,
+            gameplay_height=int(gp_info["height"]) if gp_info.get("height") else 1080,
+            camera_width=int(cam_info["width"]) if cam_info.get("width") else 1920,
+            camera_height=int(cam_info["height"]) if cam_info.get("height") else 1080,
+            session_title=str(srow.get("title") or ""),
+        )
+
+    def _reveal_in_explorer(proj_path: Path) -> None:
+        if sys.platform == "win32":
+            try:
+                subprocess.Popen(f'explorer.exe /select,"{proj_path}"', shell=True)
+            except Exception:
+                try:
+                    subprocess.Popen(f'explorer.exe "{proj_path.parent}"', shell=True)
+                except Exception:
+                    os.startfile(str(proj_path.parent))
+        else:
+            subprocess.Popen(["xdg-open", str(proj_path.parent)])
+
+    @app.get("/integrations/filmcraft/status")
+    def get_filmcraft_status() -> Dict[str, Any]:
+        """Consulta el estado de instalación, versión y bridge de FilmCraft."""
+        return _build_filmcraft_launcher().get_status().model_dump(mode="json")
+
+    @app.post("/clips/{clip_id}/filmcraft/export")
+    def export_filmcraft_endpoint(
+        clip_id: str,
+        format: Literal["filmcraft", "otio"] = "filmcraft",
+    ) -> Dict[str, Any]:
+        """Exporta el EditPlan del clip a un proyecto nativo FilmCraft (.fcproj) u OTIO."""
+        crow = orch.db.get_clip(clip_id)
+        if not crow:
+            raise HTTPException(404, "Clip no encontrado")
+        srow = orch.db.get_session(crow["session_id"])
+        if not srow:
+            raise HTTPException(404, "Sesión asociada no encontrada")
+
+        plan_raw = crow.get("editplan_json")
+        if not plan_raw:
+            raise HTTPException(400, "El clip no tiene un EditPlan generado")
+
+        if isinstance(plan_raw, str):
+            plan = EditPlan.model_validate_json(plan_raw)
+        else:
+            plan = EditPlan.model_validate(plan_raw)
+
+        voice_spans = _extract_voice_spans(plan)
+        out_dir = Path(cfg.data_dir) / "exports" / "filmcraft" / srow["id"] / clip_id
+        ctx = _build_session_export_context(srow, clip_id=clip_id, voice_spans=voice_spans)
+
+        if format == "otio":
+            exporter = OtioExporter()
+        else:
+            exporter = FilmCraftExporter()
+
+        res = exporter.export(plan, ctx, out_dir)
+
+        orch.events.publish(
+            "filmcraft.export.finished",
+            session_id=srow["id"],
+            clip_id=clip_id,
+            project_path=str(res.project_path),
+            format=format,
+        )
+
+        return {
+            "project_path": str(res.project_path),
+            "exporter": res.exporter,
+            "exporter_version": res.exporter_version,
+            "plan_hash": res.plan_hash,
+            "duration_s": res.duration_s,
+            "warnings": [
+                {"field": w.field, "message": w.message, "severity": w.severity}
+                for w in res.warnings
+            ],
+        }
+
+    @app.post("/clips/{clip_id}/filmcraft/open")
+    def open_filmcraft_endpoint(clip_id: str) -> Dict[str, Any]:
+        """Exporta el clip si hace falta y abre FilmCraft con el proyecto montado."""
+        export_info = export_filmcraft_endpoint(clip_id, format="filmcraft")
+        proj_path = Path(export_info["project_path"])
+
+        launcher = _build_filmcraft_launcher()
+        try:
+            res = launcher.open_project(proj_path)
+        except FileNotFoundError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(500, f"Error al abrir FilmCraft: {exc}") from exc
+
+        return {
+            "project_path": res.project_path,
+            "launched": res.launched,
+            "reused_instance": res.reused_instance,
+            "warnings": export_info.get("warnings", []),
+        }
+
+    @app.get("/clips/{clip_id}/filmcraft/download")
+    def download_filmcraft_project(
+        clip_id: str,
+        format: Literal["filmcraft", "otio"] = "filmcraft",
+    ) -> FileResponse:
+        """Descarga el archivo de proyecto generado para FilmCraft u OTIO."""
+        export_info = export_filmcraft_endpoint(clip_id, format=format)
+        proj_path = Path(export_info["project_path"])
+        if not proj_path.is_file():
+            raise HTTPException(404, "Archivo de proyecto no encontrado")
+        filename = f"{clip_id}.fcproj" if format == "filmcraft" else f"{clip_id}.otio"
+        return FileResponse(
+            path=str(proj_path),
+            filename=filename,
+            media_type="application/octet-stream",
+        )
+
+    @app.post("/clips/{clip_id}/filmcraft/reveal")
+    def reveal_filmcraft_project(clip_id: str) -> Dict[str, Any]:
+        """Abre la carpeta del proyecto en el explorador de archivos del sistema."""
+        export_info = export_filmcraft_endpoint(clip_id, format="filmcraft")
+        proj_path = Path(export_info["project_path"])
+        if not proj_path.is_file():
+            raise HTTPException(404, "Archivo de proyecto no encontrado")
+
+        _reveal_in_explorer(proj_path)
+        return {"ok": True, "path": str(proj_path)}
+
+    def _run_session_filmcraft_export(
+        session_id: str,
+        clip_ids: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        srow = orch.db.get_session(session_id)
+        if not srow:
+            raise HTTPException(404, "Sesión no encontrada")
+
+        all_clips = orch.db.list_clips(session_id)
+        if clip_ids is not None:
+            if len(clip_ids) == 0:
+                raise HTTPException(400, "Selecciona al menos un clip para exportar a FilmCraft.")
+            wanted = set(clip_ids)
+            selected_rows = [c for c in all_clips if c["id"] in wanted]
+            if not selected_rows:
+                raise HTTPException(404, "Ninguno de los clips seleccionados pertenece a la sesión.")
+        else:
+            selected_rows = all_clips
+
+        clip_specs: List[SessionClipSpec] = []
+        for crow in selected_rows:
+            plan_raw = crow.get("editplan_json")
+            if not plan_raw:
+                continue
+            if isinstance(plan_raw, str):
+                plan = EditPlan.model_validate_json(plan_raw)
+            else:
+                plan = EditPlan.model_validate(plan_raw)
+            clip_specs.append(
+                SessionClipSpec(
+                    clip_id=crow["id"],
+                    plan=plan,
+                    title=str(crow.get("post_title") or crow.get("overlay_title") or crow["id"]),
+                    rank_order=int(crow.get("rank_order") or 0),
+                    score=float(crow.get("final_score") or 0.0),
+                    reason=str(crow.get("reason") or ""),
+                    start_s=float(crow.get("start_sec") or 0.0),
+                    end_s=float(crow.get("end_sec") or 0.0),
+                    voice_spans=_extract_voice_spans(plan),
+                )
+            )
+
+        if not clip_specs:
+            raise HTTPException(400, "Los clips seleccionados no tienen un EditPlan generado todavía.")
+
+        out_dir = Path(cfg.data_dir) / "exports" / "filmcraft" / session_id / "session"
+        ctx = _build_session_export_context(srow)
+        res = FilmCraftExporter().export_session(clip_specs, ctx, out_dir)
+
+        exported_ids = [c.clip_id for c in clip_specs]
+        orch.events.publish(
+            "filmcraft.session_export.finished",
+            session_id=session_id,
+            clip_ids=exported_ids,
+            project_path=str(res.project_path),
+        )
+
+        return {
+            "project_path": str(res.project_path),
+            "exporter": res.exporter,
+            "exporter_version": res.exporter_version,
+            "plan_hash": res.plan_hash,
+            "duration_s": res.duration_s,
+            "clips_count": len(clip_specs),
+            "clip_ids": exported_ids,
+            "warnings": [
+                {"field": w.field, "message": w.message, "severity": w.severity}
+                for w in res.warnings
+            ],
+        }
+
+    @app.post("/sessions/{session_id}/filmcraft/export")
+    def export_session_filmcraft_endpoint(
+        session_id: str,
+        body: Optional[SessionFilmCraftExportBody] = None,
+    ) -> Dict[str, Any]:
+        """Exporta la sesión completa (VOD Master + sub-secuencias 9:16 por clip) a FilmCraft."""
+        return _run_session_filmcraft_export(
+            session_id,
+            clip_ids=body.clip_ids if body else None,
+        )
+
+    @app.post("/sessions/{session_id}/filmcraft/open")
+    def open_session_filmcraft_endpoint(
+        session_id: str,
+        body: Optional[SessionFilmCraftExportBody] = None,
+    ) -> Dict[str, Any]:
+        """Exporta el proyecto global de la sesión y lo abre en FilmCraft NLE."""
+        export_info = _run_session_filmcraft_export(
+            session_id,
+            clip_ids=body.clip_ids if body else None,
+        )
+        proj_path = Path(export_info["project_path"])
+
+        launcher = _build_filmcraft_launcher()
+        try:
+            res = launcher.open_project(proj_path)
+        except FileNotFoundError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(500, f"Error al abrir FilmCraft: {exc}") from exc
+
+        return {
+            "project_path": res.project_path,
+            "launched": res.launched,
+            "reused_instance": res.reused_instance,
+            "clips_count": export_info["clips_count"],
+            "clip_ids": export_info["clip_ids"],
+            "warnings": export_info.get("warnings", []),
+        }
+
+    @app.get("/sessions/{session_id}/filmcraft/download")
+    def download_session_filmcraft_project(
+        session_id: str,
+        clip_ids: Optional[str] = Query(default=None, description="IDs de clips separados por coma"),
+    ) -> FileResponse:
+        """Descarga el archivo .fcproj global de la sesión."""
+        parsed_ids: Optional[List[str]] = None
+        if clip_ids is not None:
+            parsed_ids = [cid.strip() for cid in clip_ids.split(",") if cid.strip()]
+        export_info = _run_session_filmcraft_export(session_id, clip_ids=parsed_ids)
+        proj_path = Path(export_info["project_path"])
+        if not proj_path.is_file():
+            raise HTTPException(404, "Archivo de proyecto no encontrado")
+        return FileResponse(
+            path=str(proj_path),
+            filename=f"{session_id}_master.fcproj",
+            media_type="application/octet-stream",
+        )
+
+    @app.post("/sessions/{session_id}/filmcraft/reveal")
+    def reveal_session_filmcraft_project(
+        session_id: str,
+        body: Optional[SessionFilmCraftExportBody] = None,
+    ) -> Dict[str, Any]:
+        """Genera (si hace falta) y muestra el proyecto global .fcproj en el explorador."""
+        export_info = _run_session_filmcraft_export(
+            session_id,
+            clip_ids=body.clip_ids if body else None,
+        )
+        proj_path = Path(export_info["project_path"])
+        if not proj_path.is_file():
+            raise HTTPException(404, "Archivo de proyecto no encontrado")
+        _reveal_in_explorer(proj_path)
+        return {"ok": True, "path": str(proj_path)}
 
     # --- Server-Sent Events (SSE) ------------------------------------------
 

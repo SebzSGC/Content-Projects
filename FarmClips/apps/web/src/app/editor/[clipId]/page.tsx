@@ -29,11 +29,16 @@ import {
   Zap,
   ZoomIn,
   ZoomOut,
+  FolderOpen,
+  Copy,
 } from "lucide-react";
 import {
   API_PREFIX,
   fetchClipDetail,
   fetchEmojiCatalog,
+  openInFilmCraft,
+  revealFilmCraftProject,
+  getFilmCraftDownloadUrl,
   renderClip,
   retimeClip,
   saveClipEditPlan,
@@ -160,6 +165,10 @@ export default function ClipEditorPage() {
   const [clipTime, setClipTime] = useState(0);
   const [saving, setSaving] = useState(false);
   const [renderingQuality, setRenderingQuality] = useState<"draft" | "final" | null>(null);
+  const [openingFilmCraft, setOpeningFilmCraft] = useState(false);
+  const [filmcraftOpened, setFilmcraftOpened] = useState(false);
+  const [filmcraftProjectPath, setFilmcraftProjectPath] = useState<string>("");
+  const [copiedPath, setCopiedPath] = useState(false);
   const [renderProgress, setRenderProgress] = useState<number | null>(null);
   const [statusMsg, setStatusMsg] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -1072,6 +1081,60 @@ export default function ClipEditorPage() {
     }
   }
 
+  async function handleOpenInFilmCraft() {
+    if (!plan) return;
+    setError(null);
+    setOpeningFilmCraft(true);
+    setStatusMsg("Exportando proyecto nativo y abriendo FilmCraft NLE...");
+    try {
+      if (dirty) {
+        setStatusMsg("Guardando cambios del EditPlan antes de exportar...");
+        const saved = await handleSave();
+        if (!saved) {
+          setError("No se pudieron guardar los cambios antes de abrir FilmCraft.");
+          setStatusMsg("");
+          return;
+        }
+      }
+      const res = await openInFilmCraft(clipId);
+      setFilmcraftOpened(true);
+      if (res.project_path) {
+        setFilmcraftProjectPath(res.project_path);
+      }
+      const warns = res.warnings?.length ? ` (${res.warnings.length} avisos de compatibilidad resueltos)` : "";
+      setStatusMsg(
+        res.reused_instance
+          ? `Proyecto abierto en la ventana activa de FilmCraft NLE${warns}.`
+          : `FilmCraft NLE iniciado con el proyecto montado en el timeline${warns}.`
+      );
+    } catch (err) {
+      setFilmcraftOpened(false);
+      setStatusMsg("");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo abrir FilmCraft. Verifica que esté instalado o configúralo en Ajustes."
+      );
+    } finally {
+      setOpeningFilmCraft(false);
+    }
+  }
+
+  function handleCopyFilmCraftPath() {
+    if (!filmcraftProjectPath) return;
+    navigator.clipboard.writeText(filmcraftProjectPath);
+    setCopiedPath(true);
+    setTimeout(() => setCopiedPath(false), 2500);
+  }
+
+  async function handleRevealFilmCraft() {
+    try {
+      await revealFilmCraftProject(clipId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   function addImpactZoomAtPlayhead() {
     if (!plan) return;
     const total = getTotalClipDuration(plan);
@@ -1192,6 +1255,21 @@ export default function ClipEditorPage() {
 
           <button
             type="button"
+            onClick={handleOpenInFilmCraft}
+            disabled={openingFilmCraft || renderingQuality !== null}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-sky-500/40 bg-sky-500/10 px-3.5 py-2 text-xs font-bold text-sky-400 hover:bg-sky-500/20 disabled:opacity-50"
+            title="Exporta y abre el clip como proyecto nativo en FilmCraft"
+          >
+            {openingFilmCraft ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Sliders className="h-3.5 w-3.5" />
+            )}
+            {openingFilmCraft ? "Abriendo..." : "Abrir en FilmCraft"}
+          </button>
+
+          <button
+            type="button"
             onClick={() => handleRender("draft")}
             disabled={renderingQuality !== null}
             className="inline-flex items-center gap-1.5 rounded-xl border border-[#39FF14]/40 bg-[#39FF14]/10 px-3.5 py-2 text-xs font-bold text-[#39FF14] hover:bg-[#39FF14]/20 disabled:opacity-50"
@@ -1238,9 +1316,70 @@ export default function ClipEditorPage() {
         </div>
       )}
 
+      {statusMsg && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+          <div className="flex items-center gap-2">
+            <Check className="h-4 w-4 shrink-0 text-emerald-400" />
+            <span>{statusMsg}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {filmcraftOpened && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleRevealFilmCraft}
+                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-950/60 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/60"
+                  title="Abrir carpeta en el Explorador de Windows y seleccionar el archivo .fcproj"
+                >
+                  <FolderOpen className="h-3.5 w-3.5" />
+                  Abrir carpeta
+                </button>
+                {filmcraftProjectPath && (
+                  <button
+                    type="button"
+                    onClick={handleCopyFilmCraftPath}
+                    className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-950/60 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/60"
+                    title="Copiar ruta absoluta del archivo .fcproj para pegarla en FilmCraft (Ctrl+O)"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    {copiedPath ? "¡Copiada!" : "Copiar ruta"}
+                  </button>
+                )}
+                <a
+                  href={getFilmCraftDownloadUrl(clipId)}
+                  download={`${clip?.overlay_title || clip?.post_title || "clip"}.fcproj`}
+                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-950/60 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/60"
+                  title="Descargar archivo .fcproj del proyecto"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Descargar .fcproj
+                </a>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setStatusMsg("");
+                setFilmcraftOpened(false);
+              }}
+              className="text-xs text-zinc-400 hover:text-white"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+
       {error && (
-        <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-          {error}
+        <div className="flex items-center justify-between rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="text-xs text-zinc-400 hover:text-white"
+          >
+            Cerrar
+          </button>
         </div>
       )}
 

@@ -4,7 +4,7 @@ tipo: cambios
 estado: vigente
 audiencia: [todos]
 responsable: Equipo FarmClips
-actualizado: 2026-11-09
+actualizado: 2026-11-12
 etiquetas: [tipo/cambios, area/general]
 ---
 
@@ -13,7 +13,87 @@ etiquetas: [tipo/cambios, area/general]
 > [!abstract] En pocas palabras
 > Registro cronológico de las versiones de FarmClips, nuevas funcionalidades, optimizaciones de rendimiento y ajustes en la arquitectura del sistema.
 
-## [2.6.0] — 2026-11-09 (Versión actual)
+## [2.8.0] — 2026-11-12 (Versión actual)
+
+### 🧩 Exportación Global de Sesión a FilmCraft (Master VOD + Sub-secuencias anidadas)
+
+En lugar de abrir y editar clip por clip en proyectos separados, ahora puedes exportar **toda la sesión en un único proyecto `.fcproj`** eligiendo exactamente qué clips incluir.
+
+#### Qué cambió
+- **Exportador multi-secuencia (`FilmCraftExporter.export_session` en `packages/interchange/clipsinterchange/filmcraft/exporter.py`)**:
+  - Registra una sola vez las fuentes compartidas (`gameplay` y `camera`) en el bin `Footage`.
+  - Genera una **secuencia principal `Master · <Sesión>` (16:9)** con el VOD completo (`V1 VOD Gameplay`, `V2 VOD Cámara (Ref)` desactivada por defecto, `A1 Mic (VOD)` y `A2 Juego (VOD)` sincronizados), marcadores en cada momento destacado y pistas **`V3 Clips (Sub-secuencias)`** (y carriles adicionales si hay solapamientos) donde cada clip seleccionado aparece anidado en sus marcas de tiempo exactas (respetando tramos de *jump cuts*).
+  - Crea dentro de `Sequences/Clips (9:16)` una **sub-secuencia vertical 1080×1920 completa por cada clip** elegido (con cámara, gameplay, ducking, overlays en `clips/<clip_id>/` y subtítulos nativos `C1`) abierta como pestaña en `view.open_sequences`.
+- **Nuevos endpoints en FastAPI (`apps/server/clipsserver/api/routes.py`)**:
+  - `POST /sessions/{session_id}/filmcraft/export`, `POST /sessions/{session_id}/filmcraft/open`, `GET /sessions/{session_id}/filmcraft/download` y `POST /sessions/{session_id}/filmcraft/reveal`, todos con soporte de filtrado opcional `clip_ids`.
+- **Selector de clips y exportación global en `/sessions/[id]` (`apps/web/src/app/sessions/[id]/page.tsx`, `apps/web/src/lib/api/client.ts`)**:
+  - Botones **Incluido / Incluir** en cada tarjeta de clip, atajos **Todos / Ninguno**, botón **«Abrir proyecto en FilmCraft (N)»** y descarga directa `.fcproj`.
+- **Pruebas y contratos**:
+  - Pruebas unitarias e inspección real con `filmcraft-cli.exe` en `tests/test_interchange.py` y pruebas de API en `tests/test_filmcraft_api.py`.
+  - Contratos OpenAPI regenerados en `apps/web/src/lib/api/openapi.json`.
+  - Historia de usuario [[HU-011 Exportación global de sesión a FilmCraft con sub-secuencias|HU-011]] en [[EP-03 Edición profesional en FilmCraft con copiloto MCP]].
+
+#### Por qué
+- Evitar la gestión fragmentada de proyectos 1 a 1 cuando se quieren revisar y editar varios Shorts de una misma grabación dentro del contexto completo del VOD en FilmCraft.
+
+> [!warning] ⚠️ Cambia para ti
+> - En la página de cada sesión (`/sessions/[id]`) ahora puedes marcar o desmarcar los clips que quieras y pulsar **«Abrir proyecto en FilmCraft»** para abrir todo en un solo `.fcproj`.
+> - Dentro de FilmCraft verás la línea completa de tu grabación como secuencia principal, los clips colocados sobre sus marcas de tiempo y una pestaña 9:16 lista para editar por cada clip (también accesible con doble clic sobre el bloque en `V3`).
+
+---
+
+## [2.7.0] — 2026-11-12
+
+### 🎬 Integración FilmCraft NLE y Copiloto Conversacional MCP
+
+Exportación determinista de clips a proyectos nativos de FilmCraft (`.fcproj`), apertura en 1 clic desde el Web Studio, fallback OpenTimelineIO (`.otio`) y servidor `farmclips-mcp` para asistencia en lenguaje natural con Claude Desktop y Antigravity.
+
+#### Qué cambió
+- **Nuevo botón «Abrir en FilmCraft» y banner interactivo** en `/editor/[clipId]`:
+  - Guarda automáticamente los cambios pendientes y abre la aplicación con el proyecto montado (reutilizando la ventana activa vía bridge TCP loopback `127.0.0.1:9876` o iniciando una nueva instancia en el escritorio del usuario).
+  - Banner con accesos rápidos: **«Abrir carpeta»** para revelar y seleccionar el `.fcproj` en el Explorador de Windows, y **«Descargar .fcproj»** para descarga directa del proyecto.
+- **Acciones y endpoints adicionales en FastAPI**:
+  - `GET /clips/{clip_id}/filmcraft/download`: descarga directa del `.fcproj` u `.otio`.
+  - `POST /clips/{clip_id}/filmcraft/reveal`: abre el explorador del sistema operativo seleccionando el archivo de proyecto.
+- **Lanzamiento robusto con aceleración GPU en Windows y solución definitiva de visualización interactiva**:
+  - Lanzamiento Win32 explícito en el escritorio físico interactivo del usuario (`lpDesktop = r"WinSta0\Default"`) mediante `CreateProcessW` con desacoplamiento de Job Objects (`CREATE_BREAKAWAY_FROM_JOB`), eliminando cualquier aislamiento de ventana o invisibilidad provocada por estaciones de trabajo virtuales secundarias (`exebox-...`) o consolas en segundo plano.
+  - Detección precisa de ventanas activas mediante `EnumDesktopWindows` sobre el escritorio `Default`, garantizando que si el usuario ya tiene FilmCraft abierto, su sesión jamás sea interrumpida o cerrada forzosamente, trayéndola directamente al frente con `AttachThreadInput` y `SetForegroundWindow`.
+  - Eliminación de `--graphics default` forzado en el comando de registro y en el lanzador, permitiendo que FilmCraft seleccione automáticamente su backend gráfico óptimo (`DirectX 12` / `Vulkan`) y evitando bloqueos o cuelgues en equipos con GPU híbrida (Intel UHD + NVIDIA GeForce RTX).
+  - Limpieza proactiva de marcadores bloqueantes de pruebas gráficas (`graphics-test.json`, `graphics-start.json`) y carpetas de recuperación (`Recovery`) antes de cada lanzamiento.
+  - Corrección en el Web Studio (`/editor/[clipId]`): se eliminó la apertura forzada simultánea del Explorador de Windows al pulsar «Abrir en FilmCraft», manteniendo la ventana de FilmCraft en primer plano (el usuario dispone del botón «Abrir carpeta» si desea explorarla manualmente).
+  - Asociación automática de archivos `.fcproj` en el Registro de Windows (`HKCU\Software\Classes\.fcproj`) y gestión de tokens de control de 64 caracteres hex.
+- **Nuevo paquete `packages/interchange/` (`clipsinterchange`)**:
+  - `TimelineExporter` (Protocolo desacoplado de exportación).
+  - `FilmCraftExporter`: genera deterministamente proyectos `.fcproj` (`schema_version: 17`) con pistas `V1 Gameplay`, `V2 Cámara`, `V3 Overlays`, `A1 Mic`, `A2 Juego` (con ducking automático) y `A3 SFX`.
+  - `OtioExporter`: fallback en formato universal OpenTimelineIO (`.otio`) para DaVinci Resolve y Premiere Pro.
+  - `timebase.py`: base de tiempo en ticks exactos (`254,016,000,000` ticks/segundo) con cálculo racional en `fractions.Fraction` (0 deriva temporal).
+  - `geometry.py`: proyección matemática continua de encuadres `(cx, cy, zoom)` a transformaciones de `motion` (posición, escala, ancla) 100% compatibles con `fast_compositor.py`.
+- **Nuevos endpoints en FastAPI**:
+  - `GET /integrations/filmcraft/status`: diagnóstico de binarios (`filmcraft.exe`, `filmcraft-cli.exe`), versión fijada (`0.20.1`) y estado del bridge.
+  - `POST /clips/{clip_id}/filmcraft/export`: genera el proyecto en disco y emite evento SSE `filmcraft.export.finished`.
+  - `POST /clips/{clip_id}/filmcraft/open`: ejecuta el lanzador seguro.
+- **Servidor MCP stdio (`farmclips-mcp`)**:
+  - Servidor en `clipsserver/mcp/` con 9 herramientas oficiales (`list_sessions`, `list_clips`, `get_clip`, `get_transcript`, `update_editplan`, `export_to_filmcraft`, `open_in_filmcraft`, `render_clip`, `get_render_status`).
+  - Comando `python -m clipsserver.main mcp-config` que genera el bloque listo para `claude_desktop_config.json` con rutas detectadas automáticamente en la máquina.
+- **Panel de Ajustes (`/settings`)**:
+  - Nueva tarjeta «FilmCraft NLE & Copiloto MCP» con estado de instalación, versión, ruta y botón de comprobación.
+- **Documentación & Backlog**:
+  - Épica [[EP-03 Edición profesional en FilmCraft con copiloto MCP]] y 6 historias de usuario ([[HU-005 Spike entender FilmCraft en Windows|HU-005]] a [[HU-010 Copiloto en Claude Desktop y Antigravity|HU-010]]) completadas al 100%.
+  - Nota de decisión [[ADR-006 Integración con FilmCraft y copiloto MCP]].
+  - Nuevas guías: [[Cómo abrir un clip en FilmCraft]] y [[Cómo usar el copiloto con Claude Desktop y Antigravity]].
+
+#### Por qué
+- Brindar a los creadores una vía de escape profesional a un editor no lineal (NLE) de escritorio sin perder los cortes sincronizados ni el seguimiento facial ya calculados.
+- Aprovechar el servidor MCP de FilmCraft y FarmClips para ofrecer asistencia conversacional inteligente sin gastar tokens en el montaje inicial.
+
+> [!warning] ⚠️ Cambia para ti
+> - En la barra del editor web ahora verás el botón **Abrir en FilmCraft** junto a «Guardar cambios».
+> - En **Ajustes** verás si FilmCraft está detectado en tu PC y el estado de su bridge de control.
+> - Puedes conectar Claude Desktop ejecutando `python -m clipsserver.main mcp-config` y pedirle cambios al proyecto en lenguaje natural.
+
+---
+
+## [2.6.0] — 2026-11-09
 
 ### ✂️ Editor confiable, tramos del clip, guardado automático y render rápido en Mac
 

@@ -4,7 +4,7 @@ tipo: guia
 estado: vigente
 audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
-actualizado: 2026-11-07
+actualizado: 2026-11-12
 etiquetas: [tipo/guia, area/tutorial]
 ---
 
@@ -41,7 +41,7 @@ py -3 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
 
 # 3. Instalar los paquetes del monorepo en modo editable
-.\.venv\Scripts\pip install -e packages/styles -e packages/editplan -e packages/core -e packages/media -e packages/providers -e packages/tracking -e packages/render-engine -e apps/server
+.\.venv\Scripts\pip install -e packages/styles -e packages/editplan -e packages/core -e packages/media -e packages/providers -e packages/tracking -e packages/render-engine -e packages/interchange -e apps/server
 
 # 4. Instalar dependencias del frontend web
 npm --prefix apps/web install

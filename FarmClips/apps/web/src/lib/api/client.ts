@@ -858,3 +858,132 @@ export function useServerEvents(
     return sseManager.subscribe(listener);
   }, [sessionId]);
 }
+
+// --- Integración FilmCraft NLE -------------------------------------------
+
+export interface FilmCraftStatus {
+  installed: boolean;
+  path: string | null;
+  cli_path: string | null;
+  version: string | null;
+  supported_version: string;
+  version_ok: boolean;
+  bridge_up: boolean;
+  mcp_available: boolean;
+}
+
+export interface FilmCraftExportResult {
+  project_path: string;
+  exporter: string;
+  exporter_version: string;
+  plan_hash: string;
+  duration_s: number;
+  warnings: Array<{ field: string; message: string; severity: string }>;
+}
+
+export interface FilmCraftOpenResult {
+  project_path: string;
+  launched: boolean;
+  reused_instance: boolean;
+  warnings: Array<{ field: string; message: string; severity: string }>;
+}
+
+export async function fetchFilmCraftStatus(): Promise<FilmCraftStatus> {
+  const res = await fetch(`${API_PREFIX}/integrations/filmcraft/status`);
+  if (!res.ok) throw new Error("Error al consultar estado de FilmCraft");
+  return res.json();
+}
+
+export async function exportToFilmCraft(
+  clipId: string,
+  format: "filmcraft" | "otio" = "filmcraft"
+): Promise<FilmCraftExportResult> {
+  const res = await fetch(`${API_PREFIX}/clips/${clipId}/filmcraft/export?format=${format}`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error("Error al exportar a FilmCraft");
+  return res.json();
+}
+
+export async function openInFilmCraft(clipId: string): Promise<FilmCraftOpenResult> {
+  const res = await fetch(`${API_PREFIX}/clips/${clipId}/filmcraft/open`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Error desconocido" }));
+    throw new Error(err.detail || "Error al abrir FilmCraft");
+  }
+  return res.json();
+}
+
+export async function revealFilmCraftProject(clipId: string): Promise<{ ok: boolean; path: string }> {
+  const res = await fetch(`${API_PREFIX}/clips/${clipId}/filmcraft/reveal`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error("Error al abrir la carpeta del proyecto");
+  return res.json();
+}
+
+export function getFilmCraftDownloadUrl(clipId: string, format: "filmcraft" | "otio" = "filmcraft"): string {
+  return `${API_PREFIX}/clips/${clipId}/filmcraft/download?format=${format}`;
+}
+
+export interface SessionFilmCraftExportResult extends FilmCraftExportResult {
+  clips_count: number;
+  clip_ids: string[];
+}
+
+export interface SessionFilmCraftOpenResult extends FilmCraftOpenResult {
+  clips_count: number;
+  clip_ids: string[];
+}
+
+export async function exportSessionToFilmCraft(
+  sessionId: string,
+  clipIds?: string[]
+): Promise<SessionFilmCraftExportResult> {
+  const res = await fetch(`${API_PREFIX}/sessions/${sessionId}/filmcraft/export`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(clipIds ? { clip_ids: clipIds } : {}),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Error al exportar sesión a FilmCraft" }));
+    throw new Error(err.detail || "Error al exportar sesión a FilmCraft");
+  }
+  return res.json();
+}
+
+export async function openSessionInFilmCraft(
+  sessionId: string,
+  clipIds?: string[]
+): Promise<SessionFilmCraftOpenResult> {
+  const res = await fetch(`${API_PREFIX}/sessions/${sessionId}/filmcraft/open`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(clipIds ? { clip_ids: clipIds } : {}),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Error al abrir proyecto en FilmCraft" }));
+    throw new Error(err.detail || "Error al abrir proyecto en FilmCraft");
+  }
+  return res.json();
+}
+
+export async function revealSessionFilmCraftProject(
+  sessionId: string,
+  clipIds?: string[]
+): Promise<{ ok: boolean; path: string }> {
+  const res = await fetch(`${API_PREFIX}/sessions/${sessionId}/filmcraft/reveal`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(clipIds ? { clip_ids: clipIds } : {}),
+  });
+  if (!res.ok) throw new Error("Error al abrir la carpeta del proyecto");
+  return res.json();
+}
+
+export function getSessionFilmCraftDownloadUrl(sessionId: string, clipIds?: string[]): string {
+  const query = clipIds && clipIds.length > 0 ? `?clip_ids=${encodeURIComponent(clipIds.join(","))}` : "";
+  return `${API_PREFIX}/sessions/${sessionId}/filmcraft/download${query}`;
+}

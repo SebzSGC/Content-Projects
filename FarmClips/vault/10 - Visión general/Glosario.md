@@ -4,7 +4,7 @@ tipo: glosario
 estado: vigente
 audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
-actualizado: 2026-11-09
+actualizado: 2026-11-12
 etiquetas: [tipo/glosario, area/general]
 ---
 
@@ -125,6 +125,21 @@ Técnica de procesamiento de audio donde el volumen de una señal secundaria (el
 
 ### Jump Cut
 Técnica de montaje de video donde se eliminan fragmentos muertos o pausas de silencio prolongadas uniendo directamente los momentos hablados, logrando un ritmo dinámico e ininterrumpido en el video vertical final.
+
+### FilmCraft
+Editor de video no lineal (NLE) profesional de escritorio compatible con proyectos `.fcproj` (`schema_version: 17`), pistas multicapa, subtítulos nativos editables y control automatizado mediante CLI y protocolo MCP.
+
+### Master
+Secuencia principal en formato panorámico (16:9) generada al exportar una sesión completa a FilmCraft. Contiene la grabación íntegra de principio a fin (`gameplay` y `camara` sincronizados) junto a marcadores y pistas donde se ubican las sub-secuencias de cada clip en sus marcas de tiempo exactas.
+
+### Sub-secuencia
+Secuencia vertical independiente ($1080 \times 1920$) contenida dentro de un mismo `.fcproj` y anidada sobre la secuencia **Master**. Permite abrir y editar cada Short con todas sus pistas y subtítulos sin salir del proyecto global.
+
+### OTIO
+*OpenTimelineIO*. Estándar abierto de intercambio de líneas de tiempo usado como formato alternativo (`.otio`) para importar ediciones en editores externos como DaVinci Resolve o Premiere Pro.
+
+### MCP
+*Model Context Protocol*. Protocolo estándar que conecta asistentes de IA (como Claude Desktop o Antigravity) con herramientas locales (`farmclips-mcp` y `filmcraft-cli mcp`) para consultar transcripciones y ajustar timelines en lenguaje natural.
 
 ---
 

@@ -4,7 +4,7 @@ tipo: api
 estado: vigente
 audiencia: [tecnico]
 responsable: Equipo FarmClips
-actualizado: 2026-11-09
+actualizado: 2026-11-12
 etiquetas: [tipo/api, area/backend]
 ---
 
@@ -76,6 +76,31 @@ etiquetas: [tipo/api, area/backend]
 | `POST` | `/drive/auth/disconnect` | Revoca la sesión OAuth local y elimina `data/drive_oauth_token.json`. | Sin cuerpo |
 | `GET` | `/drive/files` | Explora carpetas y videos en Drive con migas de pan y par auto-detectado (`detected_pair`). | `?folder_id=...&q=...` |
 | `POST` | `/drive/sessions` | Descarga `gameplay` + `cámara` en `ApiPool` con progreso SSE y lanza la sesión. | JSON: `gameplay_file_id, camera_file_id, recording_name?, game_hint?, auto_run?` |
+
+---
+
+## 🎬 6. Integración FilmCraft NLE (`/integrations/filmcraft`, `/clips/{id}/filmcraft` y `/sessions/{id}/filmcraft`)
+
+| Método | Endpoint | Descripción | Parámetros / Cuerpo |
+|---|---|---|---|
+| `GET`  | `/integrations/filmcraft/status` | Estado de instalación, versión fijada (`0.20.1`), bridge y CLI. | JSON de diagnóstico |
+| `POST` | `/clips/{clip_id}/filmcraft/export` | Exporta el EditPlan de un clip a proyecto nativo `.fcproj` o fallback OTIO. | Query: `format=filmcraft\|otio` |
+| `POST` | `/clips/{clip_id}/filmcraft/open` | Exporta si hace falta y abre FilmCraft montando el timeline del clip. | Sin cuerpo |
+| `GET`  | `/clips/{clip_id}/filmcraft/download` | Descarga directa del archivo de proyecto del clip (`.fcproj` u `.otio`). | Query: `format=filmcraft\|otio` |
+| `POST` | `/clips/{clip_id}/filmcraft/reveal` | Revela y selecciona el archivo `.fcproj` del clip en el Explorador. | Sin cuerpo |
+| `POST` | `/sessions/{session_id}/filmcraft/export` | Exporta la sesión completa (`data/exports/filmcraft/<session_id>/session/session.fcproj`) con Master VOD + sub-secuencias 9:16 anidadas por marcas de tiempo. | JSON opcional: `{ "clip_ids": [...] }` |
+| `POST` | `/sessions/{session_id}/filmcraft/open` | Exporta el proyecto global de la sesión y lo abre en FilmCraft NLE. | JSON opcional: `{ "clip_ids": [...] }` |
+| `GET`  | `/sessions/{session_id}/filmcraft/download` | Genera (si hace falta) `session.fcproj` y lo descarga renombrado como `<session_id>_master.fcproj`. | Query opcional: `clip_ids=id1,id2` |
+| `POST` | `/sessions/{session_id}/filmcraft/reveal` | Genera (si hace falta) y revela `session.fcproj` en el Explorador. | JSON opcional: `{ "clip_ids": [...] }` |
+
+> [!note] Contratos y casos de borde en `/sessions/{session_id}/filmcraft/*`
+> - **Omitir `clip_ids`:** exporta todos los clips de la sesión que ya cuenten con `EditPlan`.
+> - **Respuesta JSON (`/export` y `/open`):** incluye `project_path`, `clips_count`, `clip_ids` y `warnings` (más `launched` y `reused_instance` en `/open`).
+> - **Errores:** `400` si se envía `clip_ids: []` o ningún clip seleccionado tiene `EditPlan`; `404` si la sesión no existe o ningún `clip_id` pertenece a ella.
+
+### Eventos SSE emitidos
+- `filmcraft.export.finished`: Notifica la finalización de la exportación de un clip con la ruta absoluta del archivo generado.
+- `filmcraft.session_export.finished`: Notifica la finalización de la exportación global de sesión con `clip_ids` y `project_path`.
 
 ---
 

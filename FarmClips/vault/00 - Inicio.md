@@ -4,9 +4,9 @@ tipo: inicio
 estado: vigente
 audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
-actualizado: 2026-11-09
+actualizado: 2026-11-12
 etiquetas: [tipo/inicio]
-commit_codigo: f9e5146
+commit_codigo: 8d009ee
 ---
 
 # 🏠 FarmClips — Arquitectura Híbrida
@@ -16,7 +16,7 @@ commit_codigo: f9e5146
 
 | 📌 Estado | 👤 Responsable | 🗓️ Actualizado | 🔗 Repositorio / Código |
 |---|---|---|---|
-| En producción (v2.6.0) | Equipo FarmClips | 2026-11-09 | `ClipsApp` (Monorepo unificado) |
+| En producción (v2.8.0) | Equipo FarmClips | 2026-11-12 | `ClipsApp` (Monorepo unificado) |
 
 ---
 
@@ -66,6 +66,8 @@ flowchart LR
 
 ---
 
+- **2026-11-12 (v2.8.0)**: Exportación global de sesiones a FilmCraft en un único `.fcproj` con secuencia **Master** del VOD completo, selector de clips en `/sessions/[id]` y sub-secuencias 9:16 anidadas por marcas de tiempo → [[Historial de cambios]].
+- **2026-11-12 (v2.7.0)**: Integración directa con FilmCraft NLE (`.fcproj`, fallback `.otio`), apertura en 1 clic desde `/editor/[clipId]` y copiloto MCP (`farmclips-mcp`) → [[Historial de cambios]].
 - **2026-11-09 (v2.6.0)**: Editor más confiable (Espacio pausa, deshacer correcto, el visor se actualiza en pausa), corrección de frases completas, inicio/final del clip y cortes desde el editor, guardado automático, y render casi el doble de rápido en Mac con VideoToolbox (Windows sin cambios) → [[Historial de cambios]].
 - **2026-11-09 (v2.5.1)**: Transcripción solo de voz (silencios largos recortados antes de pagar la API, mismos tiempos y texto) y costo real de Gemini con tokens de razonamiento → [[Historial de cambios]].
 - **2026-11-07 (v2.3.0)**: Optimización integral de fluidez en Web Studio (`SharedSseManager` singleton, GPU compositing), carga instantánea de `/settings` (< 10 ms) y lenguaje claro y digerible en toda la interfaz → [[Historial de cambios]].

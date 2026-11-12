@@ -4,7 +4,7 @@ tipo: resumen
 estado: vigente
 audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
-actualizado: 2026-11-07
+actualizado: 2026-11-12
 etiquetas: [tipo/resumen, area/negocio]
 ---
 
@@ -68,7 +68,7 @@ A diferencia de los editores automáticos tradicionales que suben gigabytes de v
 
 | Indicador | Valor actual | Objetivo |
 |---|---|---|
-| **Versión** | 2.0.0 (Monorepo unificado) | Producción estable v2 |
+| **Versión** | 2.8.0 (Monorepo unificado + FilmCraft NLE) | Producción estable v2 |
 | **Tiempo de entrega por clip** | 35 – 50 segundos (NVENC) | < 60 segundos |
 | **Consumo de ancho de banda** | ~7 MB por hora de grabación | < 10 MB/h |
 | **Precisión de sincronización** | $\pm 10\text{ ms}$ (XCorr FFT) | < 25 ms |
