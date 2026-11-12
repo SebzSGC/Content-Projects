@@ -92,24 +92,28 @@ def create_mcp_server() -> MCPServer:
                 "id": s.get("id"),
                 "title": s.get("title"),
                 "state": s.get("state"),
-                "clips_count": len(s.get("clips", [])),
+                "clips_count": s.get("clips_count", 0),
+                "rendered_count": s.get("rendered_count", 0),
                 "duration_min": round(s.get("duration_sec", 0) / 60, 1),
             })
         return json.dumps(summary, indent=2, ensure_ascii=False)
 
     @server.tool(name="list_clips", description="Lista los clips generados para una sesión específica.")
     def list_clips(session_id: str) -> str:
-        sdata = _api_get(f"/sessions/{session_id}")
-        clips = sdata.get("clips", [])
+        clips = _api_get(f"/sessions/{session_id}/clips")
         result = []
         for c in clips:
+            start = float(c.get("start") or 0.0)
+            end = float(c.get("end") or 0.0)
+            duration_s = round(end - start, 2) if end > start else c.get("duration_s")
             result.append({
                 "clip_id": c.get("id"),
                 "title": c.get("post_title") or c.get("overlay_title") or "Sin título",
                 "score": c.get("final_score"),
-                "duration_s": c.get("duration_s"),
+                "duration_s": duration_s,
                 "state": c.get("state"),
-                "has_final_render": bool(c.get("final_mp4_path")),
+                "has_final_render": bool(c.get("has_final")),
+                "has_draft_render": bool(c.get("has_draft")),
             })
         return json.dumps(result, indent=2, ensure_ascii=False)
 
@@ -118,11 +122,14 @@ def create_mcp_server() -> MCPServer:
         data = _api_get(f"/clips/{clip_id}")
         clip = data.get("clip", {})
         plan = clip.get("editplan")
+        start = float(clip.get("start") or 0.0)
+        end = float(clip.get("end") or 0.0)
+        duration_s = round(end - start, 2) if end > start else clip.get("duration_s")
         return json.dumps({
             "clip_id": clip_id,
             "title": clip.get("post_title") or clip.get("overlay_title"),
             "session_id": clip.get("session_id"),
-            "duration_s": clip.get("duration_s"),
+            "duration_s": duration_s,
             "score": clip.get("final_score"),
             "editplan": plan,
         }, indent=2, ensure_ascii=False)
@@ -132,16 +139,25 @@ def create_mcp_server() -> MCPServer:
         description="Obtiene las palabras y frases de la transcripción de una sesión dentro de un rango de tiempo en segundos.",
     )
     def get_transcript(session_id: str, start_sec: float = 0.0, end_sec: float = 3600.0) -> str:
-        sdata = _api_get(f"/sessions/{session_id}")
-        transcript = sdata.get("transcript") or []
+        utterances = _api_get(f"/sessions/{session_id}/utterances")
         filtered = []
-        for word in transcript:
-            w_start = word.get("start", 0.0)
-            if start_sec <= w_start <= end_sec:
+        for u in utterances:
+            u_start = float(u.get("start", 0.0))
+            u_end = float(u.get("end", 0.0))
+            if (u_start <= end_sec) and (u_end >= start_sec):
+                words = u.get("words") or []
+                matching_words = [
+                    {"word": w.get("text", ""), "start": w.get("start"), "end": w.get("end")}
+                    for w in words
+                    if start_sec <= float(w.get("start", 0.0)) <= end_sec
+                ]
                 filtered.append({
-                    "word": word.get("word") or word.get("punctuated_word"),
-                    "start": word.get("start"),
-                    "end": word.get("end"),
+                    "utterance_id": u.get("id"),
+                    "speaker": u.get("speaker"),
+                    "start": u_start,
+                    "end": u_end,
+                    "text": u.get("text"),
+                    "words": matching_words if matching_words else None,
                 })
         return json.dumps(filtered, indent=2, ensure_ascii=False)
 
@@ -191,17 +207,16 @@ def create_mcp_server() -> MCPServer:
 
     @server.tool(
         name="get_render_status",
-        description="Consulta si un clip ya fue renderizado y obtiene las rutas de sus archivos MP4.",
+        description="Consulta si un clip ya fue renderizado y su estado de procesamiento.",
     )
     def get_render_status(clip_id: str) -> str:
         data = _api_get(f"/clips/{clip_id}")
         clip = data.get("clip", {})
         return json.dumps({
             "clip_id": clip_id,
-            "draft_mp4": clip.get("draft_mp4_path"),
-            "final_mp4": clip.get("final_mp4_path"),
-            "has_final": bool(clip.get("final_mp4_path")),
-            "has_draft": bool(clip.get("draft_mp4_path")),
+            "state": clip.get("state"),
+            "has_final": bool(clip.get("has_final")),
+            "has_draft": bool(clip.get("has_draft")),
         }, indent=2, ensure_ascii=False)
 
     return server
