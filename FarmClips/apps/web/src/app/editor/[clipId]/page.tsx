@@ -1107,11 +1107,6 @@ export default function ClipEditorPage() {
           ? `Proyecto abierto en la ventana activa de FilmCraft NLE${warns}.`
           : `FilmCraft NLE iniciado con el proyecto montado en el timeline${warns}.`
       );
-      try {
-        await revealFilmCraftProject(clipId);
-      } catch {
-        // Ignorar si no se puede revelar automáticamente
-      }
     } catch (err) {
       setFilmcraftOpened(false);
       setStatusMsg("");

@@ -100,7 +100,7 @@ def register_windows_association(app_path: Path, bridge_port: int = 9876) -> Non
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\.fcproj") as k:
             winreg.SetValueEx(k, "", 0, winreg.REG_SZ, "FilmCraft.Project")
 
-        cmd = f'"{app_path}" --graphics default --no-recover --control {bridge_port} "%1"'
+        cmd = f'"{app_path}" --no-recover --control {bridge_port} "%1"'
         with winreg.CreateKey(
             winreg.HKEY_CURRENT_USER,
             r"Software\Classes\FilmCraft.Project\shell\open\command",
@@ -110,10 +110,35 @@ def register_windows_association(app_path: Path, bridge_port: int = 9876) -> Non
         pass
 
 
+def is_filmcraft_process_running() -> bool:
+    """Comprueba si hay procesos filmcraft.exe en ejecución."""
+    if sys.platform != "win32":
+        return False
+    try:
+        res = subprocess.run(
+            ["tasklist.exe", "/FI", "IMAGENAME eq filmcraft.exe", "/NH"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        return "filmcraft.exe" in res.stdout.lower()
+    except Exception:
+        return False
+
+
 def has_visible_filmcraft_window() -> bool:
     """Comprueba si existe al menos una ventana visible de FilmCraft en el escritorio de Windows."""
     if sys.platform != "win32":
         return False
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        hwnd = user32.FindWindowW(None, "FilmCraft")
+        if hwnd and user32.IsWindow(hwnd):
+            return True
+    except Exception:
+        pass
+
     try:
         import ctypes
         from ctypes import wintypes
@@ -142,7 +167,7 @@ def has_visible_filmcraft_window() -> bool:
 
 
 def cleanup_orphaned_recovery() -> None:
-    """Elimina carpetas de Recovery huérfanas en FilmCraft para evitar popups de confirmación bloqueantes."""
+    """Elimina carpetas de Recovery y estados de prueba gráfica huérfanos para evitar popups o bloqueos."""
     if sys.platform != "win32":
         return
     try:
@@ -153,6 +178,20 @@ def cleanup_orphaned_recovery() -> None:
                 for item in rec_dir.iterdir():
                     if item.is_dir():
                         shutil.rmtree(item, ignore_errors=True)
+
+            # Limpiar marcadores gráficos si quedaron en estado fallido tras un cierre previo
+            gt = Path(appdata) / "FilmCraft" / "graphics-test.json"
+            if gt.is_file():
+                try:
+                    gt.unlink()
+                except Exception:
+                    pass
+            gs = Path(appdata) / "FilmCraft" / "graphics-start.json"
+            if gs.is_file():
+                try:
+                    gs.unlink()
+                except Exception:
+                    pass
     except Exception:
         pass
 
@@ -177,6 +216,18 @@ def bring_filmcraft_to_front() -> bool:
         return False
     try:
         import ctypes
+        user32 = ctypes.windll.user32
+        hwnd = user32.FindWindowW(None, "FilmCraft")
+        if hwnd:
+            user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            user32.SetForegroundWindow(hwnd)
+            user32.BringWindowToTop(hwnd)
+            return True
+    except Exception:
+        pass
+
+    try:
+        import ctypes
         from ctypes import wintypes
 
         user32 = ctypes.windll.user32
@@ -199,12 +250,9 @@ def bring_filmcraft_to_front() -> bool:
         user32.EnumWindows(cb_type(callback), 0)
 
         if target_hwnd:
-            # Desbloquear y forzar al frente en Windows
-            user32.keybd_event(0x12, 0, 0, 0)  # Alt down
             user32.ShowWindow(target_hwnd, 9)  # SW_RESTORE
             user32.SetForegroundWindow(target_hwnd)
             user32.BringWindowToTop(target_hwnd)
-            user32.keybd_event(0x12, 0, 2, 0)  # Alt up
             return True
     except Exception:
         pass
@@ -401,7 +449,7 @@ class FilmCraftLauncher:
             time.sleep(0.5)
             bridge_active = False
 
-        # Si el bridge está activo y tenemos CLI, reutilizamos la ventana existente
+        # Si el bridge está activo y tenemos CLI, intentamos reutilizar la ventana existente
         if bridge_active and cli:
             cmd = [
                 str(cli),
@@ -426,24 +474,55 @@ class FilmCraftLauncher:
             except Exception:
                 pass
 
-        # Si no se pudo reutilizar, lanzamos una nueva instancia en el desktop interactivo.
+        # Si el bridge no respondió o no se pudo reutilizar, y hay procesos zombie de FilmCraft colgados en Windows,
+        # los limpiamos para que la nueva instancia pueda abrir su interfaz gráfica sin bloqueos de GPU o archivos.
+        if sys.platform == "win32" and is_filmcraft_process_running():
+            kill_filmcraft_processes()
+            time.sleep(0.5)
+
         cleanup_orphaned_recovery()
+
+        # Lanzar la nueva instancia en el desktop interactivo
         if sys.platform == "win32":
             register_windows_association(app, self.bridge_port)
             ps_cmd = (
                 f"$env:FILMCRAFT_CONTROL_TOKEN='{token}'; "
-                f"Start-Process -FilePath '{app}' -WindowStyle Normal -ArgumentList @('--graphics', 'default', '--no-recover', '--control', '{self.bridge_port}', '{project_path}')"
+                f"Start-Process -FilePath '{app}' -WindowStyle Normal -ArgumentList @('--no-recover', '--control', '{self.bridge_port}', '{project_path}')"
             )
-            subprocess.Popen(
-                [
-                    "powershell.exe",
-                    "-NoProfile",
-                    "-Command",
-                    ps_cmd,
-                ]
-            )
+            launched_ok = False
+            try:
+                subprocess.Popen(
+                    ["powershell.exe", "-NoProfile", "-Command", ps_cmd],
+                    env=child_env,
+                )
+                launched_ok = True
+            except Exception:
+                pass
+
+            if not launched_ok:
+                try:
+                    os.startfile(str(project_path))
+                except Exception:
+                    args = [
+                        str(app),
+                        "--no-recover",
+                        "--control",
+                        str(self.bridge_port),
+                        str(project_path),
+                    ]
+                    subprocess.Popen(
+                        args,
+                        env=child_env,
+                        creationflags=0x00000008,
+                    )
         else:
-            args = [str(app), "--graphics", "default", "--no-recover", "--control", str(self.bridge_port), str(project_path)]
+            args = [
+                str(app),
+                "--no-recover",
+                "--control",
+                str(self.bridge_port),
+                str(project_path),
+            ]
             subprocess.Popen(
                 args,
                 env=child_env,

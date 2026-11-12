@@ -2057,6 +2057,100 @@
         }
       }
     },
+    "/clips/{clip_id}/filmcraft/download": {
+      "get": {
+        "summary": "Download Filmcraft Project",
+        "description": "Descarga el archivo de proyecto generado para FilmCraft u OTIO.",
+        "operationId": "download_filmcraft_project_clips__clip_id__filmcraft_download_get",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Clip Id"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "filmcraft",
+                "otio"
+              ],
+              "type": "string",
+              "default": "filmcraft",
+              "title": "Format"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clips/{clip_id}/filmcraft/reveal": {
+      "post": {
+        "summary": "Reveal Filmcraft Project",
+        "description": "Abre la carpeta del proyecto en el explorador de archivos del sistema.",
+        "operationId": "reveal_filmcraft_project_clips__clip_id__filmcraft_reveal_post",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Clip Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Reveal Filmcraft Project Clips  Clip Id  Filmcraft Reveal Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/events": {
       "get": {
         "summary": "Sse Events",
