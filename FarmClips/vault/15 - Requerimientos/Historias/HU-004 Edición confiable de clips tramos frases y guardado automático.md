@@ -19,6 +19,8 @@ afecta:
   - "[[Referencia API REST y SSE]]"
 actualizado: 2026-11-09
 etiquetas: [requerimientos, historia, area/frontend, area/render, editor]
+estado_historia: en-revision
+inicio: 2026-11-09
 progreso: 86
 ---
 

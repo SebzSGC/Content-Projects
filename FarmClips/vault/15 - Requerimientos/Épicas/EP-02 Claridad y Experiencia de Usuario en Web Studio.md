@@ -2,12 +2,12 @@
 id: EP-02
 titulo: Claridad y Experiencia de Usuario en Web Studio
 tipo: epica
-estado: hecho
+estado: en-progreso
 audiencia: [todos]
 responsable: Equipo FarmClips
 prioridad: alta
-avance: 100
-actualizado: 2026-11-07
+avance: 95
+actualizado: 2026-11-09
 etiquetas: [requerimientos, epica, area/frontend]
 progreso: 95
 ---

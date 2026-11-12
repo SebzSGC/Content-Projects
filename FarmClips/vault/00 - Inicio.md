@@ -6,7 +6,7 @@ audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
 actualizado: 2026-11-09
 etiquetas: [tipo/inicio]
-commit_codigo: 507ee06
+commit_codigo: f9e5146
 ---
 
 # 🏠 FarmClips — Arquitectura Híbrida
@@ -16,7 +16,7 @@ commit_codigo: 507ee06
 
 | 📌 Estado | 👤 Responsable | 🗓️ Actualizado | 🔗 Repositorio / Código |
 |---|---|---|---|
-| En producción (v2.0.0) | Equipo FarmClips | 2026-11-07 | `ClipsApp` (Monorepo unificado) |
+| En producción (v2.6.0) | Equipo FarmClips | 2026-11-09 | `ClipsApp` (Monorepo unificado) |
 
 ---
 
