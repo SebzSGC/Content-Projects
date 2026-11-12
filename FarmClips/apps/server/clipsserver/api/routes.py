@@ -1373,14 +1373,17 @@ def create_app(
                     voice_spans.append((float(g.words[0].s), float(g.words[-1].e)))
 
         out_dir = Path(cfg.data_dir) / "exports" / "filmcraft" / srow["id"] / clip_id
+        sync_data = json.loads(srow.get("sync_json") or "{}") if srow.get("sync_json") else {}
+        cam_offset = float(sync_data.get("shift_sec") or srow.get("camera_offset_s") or 0.0)
         ctx = ExportContext(
             gameplay_path=Path(srow["gameplay_path"]),
             camera_path=Path(srow["camera_path"]),
-            camera_offset_s=float(srow.get("camera_offset_s") or 0.0),
+            camera_offset_s=cam_offset,
             source_fps=Fraction(60, 1),
             voice_spans=voice_spans,
             clip_id=clip_id,
             session_id=srow["id"],
+            captions_mode="overlay",
         )
 
         if format == "otio":

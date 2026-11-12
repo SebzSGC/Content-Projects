@@ -222,6 +222,42 @@ def _async_bring_to_front(retries: int = 15, delay: float = 0.25) -> None:
     threading.Thread(target=runner, daemon=True).start()
 
 
+def _async_import_captions(project_path: Path, cli: Optional[Path], token: str, port: int) -> None:
+    """Importa captions.srt en FilmCraft de manera no bloqueante si el archivo existe."""
+    if not cli or not cli.is_file():
+        return
+    srt_path = project_path.parent / "captions.srt"
+    if not srt_path.is_file():
+        return
+
+    def _worker():
+        env = os.environ.copy()
+        env["FILMCRAFT_CONTROL_TOKEN"] = token
+        for _ in range(12):
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(0.3)
+                    if s.connect_ex(("127.0.0.1", port)) == 0:
+                        break
+            except Exception:
+                pass
+            time.sleep(0.5)
+
+        time.sleep(0.5)
+        try:
+            subprocess.run(
+                [str(cli), "--bridge", f"127.0.0.1:{port}", "exec", "captions.import", f"path={srt_path.resolve()}"],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except Exception:
+            pass
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
 class FilmCraftLauncher:
     """Detecta, consulta y controla la aplicación de escritorio FilmCraft."""
 
@@ -381,6 +417,7 @@ class FilmCraftLauncher:
                 )
                 if res.returncode == 0:
                     _async_bring_to_front()
+                    _async_import_captions(project_path, cli, token, self.bridge_port)
                     return OpenFilmCraftResponse(
                         project_path=str(project_path),
                         launched=False,
@@ -414,6 +451,7 @@ class FilmCraftLauncher:
             )
 
         _async_bring_to_front()
+        _async_import_captions(project_path, cli, token, self.bridge_port)
 
         return OpenFilmCraftResponse(
             project_path=str(project_path),

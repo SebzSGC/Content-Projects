@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from fractions import Fraction
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -14,9 +15,35 @@ from ..base import ExportContext, ExportResult, FidelityWarning
 from ..geometry import compute_motion_transform, get_layout_regions
 from ..timebase import TICKS_PER_SECOND, seconds_to_ticks, ticks_to_seconds
 
-EXPORTER_VERSION = "0.1.0"
+EXPORTER_VERSION = "0.2.0"
 FILMCRAFT_SCHEMA_VERSION = 17
 FILMCRAFT_GENERATOR = "FilmCraft 0.20.1"
+
+
+def generate_srt(plan: EditPlan) -> str:
+    """Genera subtítulos en formato SubRip (.srt) a partir de los grupos de captions del EditPlan."""
+    lines = []
+    if not plan.captions or not plan.captions.groups:
+        return ""
+    for idx, group in enumerate(plan.captions.groups, start=1):
+        words = getattr(group, "words", [])
+        if not words:
+            continue
+        g_start = float(words[0].s)
+        g_end = float(words[-1].e)
+        text = " ".join(getattr(w, "w", getattr(w, "text", "")) for w in words).strip()
+        if not text:
+            continue
+
+        def srt_time(s: float) -> str:
+            ms = int(round(max(0.0, s) * 1000))
+            h, rem = divmod(ms, 3600000)
+            m, rem = divmod(rem, 60000)
+            sec, mill = divmod(rem, 1000)
+            return f"{h:02d}:{m:02d}:{sec:02d},{mill:03d}"
+
+        lines.append(f"{idx}\n{srt_time(g_start)} --> {srt_time(g_end)}\n{text}\n")
+    return "\n".join(lines)
 
 
 class FilmCraftExporter:
@@ -144,6 +171,7 @@ class FilmCraftExporter:
         # 2. Construcción de pistas y clips para la secuencia
         v1_items: List[Dict[str, Any]] = []
         v2_items: List[Dict[str, Any]] = []
+        v3_items: List[Dict[str, Any]] = []
         a1_items: List[Dict[str, Any]] = []
         a2_items: List[Dict[str, Any]] = []
         a3_items: List[Dict[str, Any]] = []
@@ -437,7 +465,133 @@ class FilmCraftExporter:
 
             timeline_acc_s += dur_s
 
-        # 3. Marcadores de captions para navegación y edición rápida
+        # 3. Generación de capa de overlays y subtítulos (RF-09 & RF-10)
+        has_overlays_or_caps = bool(
+            (plan.captions and plan.captions.groups) or getattr(plan, "overlays", None)
+        )
+        if has_overlays_or_caps:
+            try:
+                from clipsrender.ass_compiler import compile_ass
+                from clipsstyles import load_preset
+
+                preset = ctx.style if getattr(ctx, "style", None) else load_preset("hormozi-gaming")
+                ass_content = compile_ass(plan, preset, 1080, 1920)
+                ass_file = out_dir / "captions.ass"
+                ass_file.write_text(ass_content, encoding="utf-8")
+
+                srt_content = generate_srt(plan)
+                if srt_content:
+                    (out_dir / "captions.srt").write_text(srt_content, encoding="utf-8")
+
+                # Generar capa de video con canal alfa si se solicita o por defecto
+                overlay_mov = out_dir / "captions_overlay.mov"
+                total_dur_s = timeline_acc_s
+                if not overlay_mov.is_file() or overlay_mov.stat().st_size == 0:
+                    escaped_ass = str(ass_file.resolve()).replace("\\", "/").replace(":", r"\:")
+                    cmd = [
+                        "ffmpeg", "-y",
+                        "-f", "lavfi", "-i", f"color=c=black@0.0:s=1080x1920:r=60:d={total_dur_s:.3f},format=yuva444p10le",
+                        "-vf", f"ass='{escaped_ass}':alpha=1",
+                        "-c:v", "prores_ks", "-profile:v", "4444",
+                        "-pix_fmt", "yuva444p10le",
+                        str(overlay_mov),
+                    ]
+                    subprocess.run(cmd, check=True, capture_output=True, timeout=120)
+
+                if overlay_mov.is_file() and overlay_mov.stat().st_size > 0:
+                    overlay_id = alloc_id()
+                    total_dur_ticks = seconds_to_ticks(total_dur_s, fps=fps)
+                    items[str(overlay_id)] = {
+                        "id": overlay_id,
+                        "name": "captions_overlay.mov",
+                        "label": "Lavender",
+                        "kind": {
+                            "Media": {
+                                "media": {"File": {"path": str(overlay_mov.resolve())}},
+                                "info": {
+                                    "name": "captions_overlay.mov",
+                                    "kind": "Movie",
+                                    "duration": total_dur_ticks,
+                                    "video": {
+                                        "width": 1080,
+                                        "height": 1920,
+                                        "frame_rate": {"num": int(fps.numerator), "den": int(fps.denominator)},
+                                        "par": [1, 1],
+                                        "codec": "Apple ProRes 4444",
+                                        "pixel_format": "YUVA 4:4:4 12-bit",
+                                        "color": {"matrix": "Bt709", "transfer": "Bt709", "primaries": "Bt709", "range": "Limited"},
+                                        "has_alpha": True,
+                                        "bitrate": None,
+                                    },
+                                    "audio_streams": [],
+                                    "container": "QuickTime",
+                                    "start_timecode": None,
+                                    "file_size": overlay_mov.stat().st_size,
+                                },
+                                "interpret": {"frame_rate": None, "par": None, "ignore_alpha": False, "invert_alpha": False},
+                                "mark_in": None,
+                                "mark_out": None,
+                                "markers": [],
+                                "offline": False,
+                                "proxy": None,
+                            }
+                        },
+                        "metadata": {},
+                        "created": overlay_id,
+                    }
+                    v3_clip_id = alloc_id()
+                    v3_items.append({
+                        "id": v3_clip_id,
+                        "item": overlay_id,
+                        "name": "Captions & Overlays (Hormozi)",
+                        "label": "Lavender",
+                        "start": 0,
+                        "duration": total_dur_ticks,
+                        "source_in": 0,
+                        "speed": 1.0,
+                        "reverse": False,
+                        "enabled": True,
+                        "link": None,
+                        "group": None,
+                        "effects": [
+                            {
+                                "effect": "motion",
+                                "enabled": True,
+                                "params": {
+                                    "anchor": {"value": {"Vec2": {"x": 540.0, "y": 960.0}}},
+                                    "anti_flicker": {"value": {"Float": 0.0}},
+                                    "position": {"value": {"Vec2": {"x": 540.0, "y": 960.0}}},
+                                    "rotation": {"value": {"Float": 0.0}},
+                                    "scale": {"value": {"Float": 100.0}},
+                                    "scale_width": {"value": {"Float": 100.0}},
+                                    "uniform_scale": {"value": {"Bool": True}},
+                                },
+                            },
+                            {
+                                "effect": "opacity",
+                                "enabled": True,
+                                "params": {
+                                    "blend": {"value": {"Choice": 0}},
+                                    "opacity": {"value": {"Float": 100.0}},
+                                },
+                            },
+                            {"effect": "time_remap", "enabled": True, "params": {"speed": {"value": {"Float": 100.0}}}},
+                        ],
+                        "markers": [],
+                        "gain_db": 0.0,
+                        "frame_hold": None,
+                        "scale_to_frame": False,
+                    })
+            except Exception as exc:
+                warnings.append(
+                    FidelityWarning(
+                        field="captions.overlay",
+                        message=f"No se pudo renderizar la capa con canal alfa: {exc}",
+                        severity="warning",
+                    )
+                )
+
+        # 4. Marcadores de captions para navegación y edición rápida
         markers: List[Dict[str, Any]] = []
         if plan.captions and plan.captions.groups:
             for g_idx, group in enumerate(plan.captions.groups):
@@ -460,7 +614,7 @@ class FilmCraftExporter:
                     "color": "Green",
                 })
 
-        # 4. Secuencia principal (Item de tipo Sequence)
+        # 5. Secuencia principal (Item de tipo Sequence)
         seq_id = alloc_id()
         items[str(seq_id)] = {
             "id": seq_id,
@@ -523,7 +677,7 @@ class FilmCraftExporter:
                             "id": 103,
                             "kind": "Video",
                             "name": "V3 Overlays",
-                            "items": [],
+                            "items": v3_items,
                             "transitions": [],
                             "locked": False,
                             "sync_lock": True,
