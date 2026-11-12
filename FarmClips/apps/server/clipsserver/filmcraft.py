@@ -100,7 +100,7 @@ def register_windows_association(app_path: Path, bridge_port: int = 9876) -> Non
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\.fcproj") as k:
             winreg.SetValueEx(k, "", 0, winreg.REG_SZ, "FilmCraft.Project")
 
-        cmd = f'"{app_path}" --graphics default --control {bridge_port} "%1"'
+        cmd = f'"{app_path}" --graphics default --no-recover --control {bridge_port} "%1"'
         with winreg.CreateKey(
             winreg.HKEY_CURRENT_USER,
             r"Software\Classes\FilmCraft.Project\shell\open\command",
@@ -139,6 +139,22 @@ def has_visible_filmcraft_window() -> bool:
         return found
     except Exception:
         return False
+
+
+def cleanup_orphaned_recovery() -> None:
+    """Elimina carpetas de Recovery huérfanas en FilmCraft para evitar popups de confirmación bloqueantes."""
+    if sys.platform != "win32":
+        return
+    try:
+        appdata = os.environ.get("APPDATA", "")
+        if appdata:
+            rec_dir = Path(appdata) / "FilmCraft" / "Recovery"
+            if rec_dir.is_dir():
+                for item in rec_dir.iterdir():
+                    if item.is_dir():
+                        shutil.rmtree(item, ignore_errors=True)
+    except Exception:
+        pass
 
 
 def kill_filmcraft_processes() -> None:
@@ -374,26 +390,23 @@ class FilmCraftLauncher:
                 pass
 
         # Si no se pudo reutilizar, lanzamos una nueva instancia en el desktop interactivo.
-        # En Windows registramos la asociación de .fcproj y delegamos a Shell.Application de Explorer,
-        # lo que garantiza que Windows cree el proceso en la Window Station interactiva del usuario (winsta0\default)
-        # con aceleración Vulkan/DX12, el control loopback activo y su ventana visible en primer plano.
+        cleanup_orphaned_recovery()
         if sys.platform == "win32":
             register_windows_association(app, self.bridge_port)
-            opened = False
-            try:
-                os.startfile(str(project_path))
-                opened = True
-            except Exception:
-                pass
-            if not opened:
-                ps_open = f"(New-Object -ComObject Shell.Application).Open('{project_path}')"
-                subprocess.run(
-                    ["powershell.exe", "-NoProfile", "-Command", ps_open],
-                    capture_output=True,
-                    timeout=5,
-                )
+            ps_cmd = (
+                f"$env:FILMCRAFT_CONTROL_TOKEN='{token}'; "
+                f"Start-Process -FilePath '{app}' -WindowStyle Normal -ArgumentList @('--graphics', 'default', '--no-recover', '--control', '{self.bridge_port}', '{project_path}')"
+            )
+            subprocess.Popen(
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-Command",
+                    ps_cmd,
+                ]
+            )
         else:
-            args = [str(app), "--graphics", "default", "--control", str(self.bridge_port), str(project_path)]
+            args = [str(app), "--graphics", "default", "--no-recover", "--control", str(self.bridge_port), str(project_path)]
             subprocess.Popen(
                 args,
                 env=child_env,
