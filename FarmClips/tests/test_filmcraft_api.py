@@ -118,3 +118,28 @@ def test_filmcraft_reveal_endpoint(client):
         assert data["ok"] is True
         assert "path" in data
         assert mock_popen.called
+
+
+def test_filmcraft_launcher_windows_helpers(tmp_path):
+    from clipsserver.filmcraft import (
+        find_filmcraft_hwnd_windows,
+        has_visible_filmcraft_window,
+        launch_filmcraft_windows,
+        bring_filmcraft_to_front,
+    )
+
+    # find_filmcraft_hwnd_windows & has_visible_filmcraft_window can be called safely
+    hwnd = find_filmcraft_hwnd_windows()
+    assert hwnd is None or isinstance(hwnd, int)
+    assert isinstance(has_visible_filmcraft_window(), bool)
+
+    # launch_filmcraft_windows mock test
+    dummy_app = tmp_path / "filmcraft.exe"
+    dummy_app.write_text("dummy")
+    dummy_proj = tmp_path / "test.fcproj"
+    dummy_proj.write_text("{}")
+
+    with patch("os.startfile", return_value=None) as mock_startfile:
+        # If CreateProcess fails, it falls back to os.startfile
+        ok = launch_filmcraft_windows(dummy_app, dummy_proj)
+        assert ok is True or mock_startfile.called

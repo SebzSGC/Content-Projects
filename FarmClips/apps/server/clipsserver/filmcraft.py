@@ -126,44 +126,57 @@ def is_filmcraft_process_running() -> bool:
         return False
 
 
-def has_visible_filmcraft_window() -> bool:
-    """Comprueba si existe al menos una ventana visible de FilmCraft en el escritorio de Windows."""
+def find_filmcraft_hwnd_windows() -> Optional[int]:
+    """Busca el HWND de la ventana de FilmCraft en el escritorio Default o en el actual."""
     if sys.platform != "win32":
-        return False
-    try:
-        import ctypes
-        user32 = ctypes.windll.user32
-        hwnd = user32.FindWindowW(None, "FilmCraft")
-        if hwnd and user32.IsWindow(hwnd):
-            return True
-    except Exception:
-        pass
-
+        return None
     try:
         import ctypes
         from ctypes import wintypes
-
         user32 = ctypes.windll.user32
-        found = False
 
-        def callback(hwnd: int, _: int) -> bool:
-            nonlocal found
+        target_hwnd = None
+        def check_window(hwnd: int, _: int) -> bool:
+            nonlocal target_hwnd
             if user32.IsWindowVisible(hwnd):
                 length = user32.GetWindowTextLengthW(hwnd)
                 if length > 0:
-                    buff = ctypes.create_unicode_buffer(length + 1)
-                    user32.GetWindowTextW(hwnd, buff, length + 1)
-                    title = buff.value.lower()
-                    if "filmcraft" in title:
-                        found = True
+                    buf = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buf, length + 1)
+                    title = buf.value.strip().lower()
+                    if title == "filmcraft" or title.startswith("filmcraft –") or title.startswith("filmcraft -"):
+                        target_hwnd = hwnd
                         return False
             return True
 
         cb_type = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
-        user32.EnumWindows(cb_type(callback), 0)
-        return found
+        cb = cb_type(check_window)
+
+        # 1. Probar en el escritorio Default interactivo del usuario
+        hdesk = user32.OpenDesktopW("Default", 0, False, 0x01FF)
+        if hdesk:
+            try:
+                user32.EnumDesktopWindows(hdesk, cb, 0)
+            finally:
+                user32.CloseDesktop(hdesk)
+
+        if target_hwnd:
+            return target_hwnd
+
+        # 2. Fallback al escritorio del hilo actual
+        hwnd = user32.FindWindowW(None, "FilmCraft")
+        if hwnd and user32.IsWindow(hwnd) and user32.IsWindowVisible(hwnd):
+            return hwnd
+
+        user32.EnumWindows(cb, 0)
+        return target_hwnd
     except Exception:
-        return False
+        return None
+
+
+def has_visible_filmcraft_window() -> bool:
+    """Comprueba si existe al menos una ventana visible de FilmCraft en el escritorio de Windows."""
+    return find_filmcraft_hwnd_windows() is not None
 
 
 def cleanup_orphaned_recovery() -> None:
@@ -214,49 +227,127 @@ def bring_filmcraft_to_front() -> bool:
     """Trae la ventana de FilmCraft al primer plano en el escritorio de Windows."""
     if sys.platform != "win32":
         return False
+    hwnd = find_filmcraft_hwnd_windows()
+    if not hwnd:
+        return False
     try:
         import ctypes
         user32 = ctypes.windll.user32
-        hwnd = user32.FindWindowW(None, "FilmCraft")
-        if hwnd:
-            user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+        kernel32 = ctypes.windll.kernel32
+
+        cur_thread = kernel32.GetCurrentThreadId()
+        win_thread = user32.GetWindowThreadProcessId(hwnd, None)
+        user32.AttachThreadInput(cur_thread, win_thread, True)
+        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+        user32.SetForegroundWindow(hwnd)
+        user32.BringWindowToTop(hwnd)
+        user32.AttachThreadInput(cur_thread, win_thread, False)
+        return True
+    except Exception:
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            user32.ShowWindow(hwnd, 9)
             user32.SetForegroundWindow(hwnd)
             user32.BringWindowToTop(hwnd)
             return True
-    except Exception:
-        pass
+        except Exception:
+            return False
 
+
+def launch_filmcraft_windows(app_path: Path, project_path: Path) -> bool:
+    """Lanza FilmCraft explícitamente en el escritorio interactivo WinSta0\\Default."""
+    if sys.platform != "win32":
+        return False
     try:
         import ctypes
         from ctypes import wintypes
 
-        user32 = ctypes.windll.user32
-        target_hwnd = None
+        class STARTUPINFO(ctypes.Structure):
+            _fields_ = [
+                ("cb", wintypes.DWORD),
+                ("lpReserved", wintypes.LPWSTR),
+                ("lpDesktop", wintypes.LPWSTR),
+                ("lpTitle", wintypes.LPWSTR),
+                ("dwX", wintypes.DWORD),
+                ("dwY", wintypes.DWORD),
+                ("dwXSize", wintypes.DWORD),
+                ("dwYSize", wintypes.DWORD),
+                ("dwXCountChars", wintypes.DWORD),
+                ("dwYCountChars", wintypes.DWORD),
+                ("dwFillAttribute", wintypes.DWORD),
+                ("dwFlags", wintypes.DWORD),
+                ("wShowWindow", wintypes.WORD),
+                ("cbReserved2", wintypes.WORD),
+                ("lpReserved2", ctypes.POINTER(wintypes.BYTE)),
+                ("hStdInput", wintypes.HANDLE),
+                ("hStdOutput", wintypes.HANDLE),
+                ("hStdError", wintypes.HANDLE),
+            ]
 
-        def callback(hwnd: int, _: int) -> bool:
-            nonlocal target_hwnd
-            if user32.IsWindowVisible(hwnd):
-                length = user32.GetWindowTextLengthW(hwnd)
-                if length > 0:
-                    buff = ctypes.create_unicode_buffer(length + 1)
-                    user32.GetWindowTextW(hwnd, buff, length + 1)
-                    title = buff.value.lower()
-                    if "filmcraft" in title:
-                        target_hwnd = hwnd
-                        return False
-            return True
+        class PROCESS_INFORMATION(ctypes.Structure):
+            _fields_ = [
+                ("hProcess", wintypes.HANDLE),
+                ("hThread", wintypes.HANDLE),
+                ("dwProcessId", wintypes.DWORD),
+                ("dwThreadId", wintypes.DWORD),
+            ]
 
-        cb_type = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
-        user32.EnumWindows(cb_type(callback), 0)
+        si = STARTUPINFO()
+        si.cb = ctypes.sizeof(STARTUPINFO)
+        si.lpDesktop = r"WinSta0\Default"
 
-        if target_hwnd:
-            user32.ShowWindow(target_hwnd, 9)  # SW_RESTORE
-            user32.SetForegroundWindow(target_hwnd)
-            user32.BringWindowToTop(target_hwnd)
+        pi = PROCESS_INFORMATION()
+        kernel32 = ctypes.windll.kernel32
+
+        cmd = f'"{app_path}" "{project_path}"'
+        CREATE_BREAKAWAY_FROM_JOB = 0x01000000
+
+        # Primero intentar romper la atadura a job objects para que el proceso sobreviva autónomo
+        res = kernel32.CreateProcessW(
+            None,
+            cmd,
+            None,
+            None,
+            False,
+            CREATE_BREAKAWAY_FROM_JOB,
+            None,
+            None,
+            ctypes.byref(si),
+            ctypes.byref(pi),
+        )
+        if not res:
+            # Fallback a creación normal conservando lpDesktop en WinSta0\Default
+            res = kernel32.CreateProcessW(
+                None,
+                cmd,
+                None,
+                None,
+                False,
+                0,
+                None,
+                None,
+                ctypes.byref(si),
+                ctypes.byref(pi),
+            )
+
+        if res:
+            kernel32.CloseHandle(pi.hProcess)
+            kernel32.CloseHandle(pi.hThread)
             return True
     except Exception:
         pass
-    return False
+
+    # Fallback con ShellExecute interactivo de Windows
+    try:
+        os.startfile(str(app_path), arguments=f'"{project_path}"')
+        return True
+    except Exception:
+        try:
+            os.startfile(str(project_path))
+            return True
+        except Exception:
+            return False
 
 
 def _async_bring_to_front(retries: int = 15, delay: float = 0.25) -> None:
@@ -474,32 +565,23 @@ class FilmCraftLauncher:
             except Exception:
                 pass
 
-        # Si el bridge no respondió o no se pudo reutilizar, y hay procesos zombie de FilmCraft colgados en Windows,
-        # los limpiamos para que la nueva instancia pueda abrir su interfaz gráfica sin bloqueos de GPU o archivos.
-        if sys.platform == "win32" and is_filmcraft_process_running():
-            kill_filmcraft_processes()
-            time.sleep(0.5)
+        # Si el bridge no respondió o no se pudo reutilizar, y hay procesos zombie de FilmCraft colgados en Windows
+        # SIN ventana visible en pantalla, los limpiamos (nunca matamos una ventana visible del usuario).
+        if sys.platform == "win32":
+            if is_filmcraft_process_running() and not has_visible_filmcraft_window():
+                kill_filmcraft_processes()
+                time.sleep(0.5)
 
         cleanup_orphaned_recovery()
 
         # Lanzar la nueva instancia en el desktop interactivo
         if sys.platform == "win32":
             register_windows_association(app, self.bridge_port)
-            launched_ok = False
-            # Mecanismo principal: apertura estándar a través del Shell de Windows (ShellExecute)
-            try:
-                os.startfile(str(project_path))
-                launched_ok = True
-            except Exception:
-                pass
-
+            launched_ok = launch_filmcraft_windows(app, project_path)
             if not launched_ok:
                 try:
-                    DETACHED = 0x00000008
-                    BREAKAWAY = 0x01000000
                     subprocess.Popen(
                         [str(app), str(project_path)],
-                        creationflags=DETACHED | BREAKAWAY,
                     )
                 except Exception:
                     subprocess.Popen(
