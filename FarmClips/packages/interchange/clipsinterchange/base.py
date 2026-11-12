@@ -19,6 +19,20 @@ class FidelityWarning:
 
 
 @dataclass
+class SessionClipSpec:
+    """Especificación de un clip incluido en la exportación global de sesión."""
+    clip_id: str
+    plan: EditPlan
+    title: str = ""
+    rank_order: int = 0
+    score: float = 0.0
+    reason: str = ""
+    start_s: float = 0.0
+    end_s: float = 0.0
+    voice_spans: List[Tuple[float, float]] = field(default_factory=list)
+
+
+@dataclass
 class ExportContext:
     """Contexto y medios necesarios para la exportación."""
     gameplay_path: Path
@@ -30,6 +44,13 @@ class ExportContext:
     session_id: str = ""
     captions_mode: str = "native"         # "native" | "overlay"
     assets_dir: Optional[Path] = None
+    gameplay_duration_s: Optional[float] = None
+    camera_duration_s: Optional[float] = None
+    gameplay_width: int = 1920
+    gameplay_height: int = 1080
+    camera_width: int = 1920
+    camera_height: int = 1080
+    session_title: str = ""
 
 
 @dataclass

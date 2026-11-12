@@ -54,6 +54,31 @@ def client(tmp_path: Path):
         editplan_json=json.dumps(dummy_plan),
     )
 
+    dummy_plan_2 = {
+        "version": 2,
+        "clip_id": "clip_789",
+        "source": {"session": srow["id"], "ranges": [(12.0, 18.0)]},
+        "layout": [{"t": 0.0, "kind": "split", "camera_ratio": 0.40}],
+    }
+    orch.db.upsert_clip(
+        clip_id="clip_789",
+        session_id=srow["id"],
+        rank_order=2,
+        start_sec=12.0,
+        end_sec=18.0,
+        overlay_title="Clip Dos",
+        post_title="Post Dos",
+        hashtags=["#clutch"],
+        reason="Test 2",
+        llm_score=75.0,
+        signal_score=80.0,
+        final_score=78.0,
+        curated_json="{}",
+        editplan_json=json.dumps(dummy_plan_2),
+    )
+
+    app.state.test_session_id = srow["id"]
+
     with TestClient(app) as test_client:
         yield test_client
 
@@ -143,3 +168,58 @@ def test_filmcraft_launcher_windows_helpers(tmp_path):
         # If CreateProcess fails, it falls back to os.startfile
         ok = launch_filmcraft_windows(dummy_app, dummy_proj)
         assert ok is True or mock_startfile.called
+
+
+def test_session_filmcraft_export_all_and_filtered(client):
+    sid = client.app.state.test_session_id
+
+    # 1. Exportar todos los clips de la sesión
+    res_all = client.post(f"/sessions/{sid}/filmcraft/export")
+    assert res_all.status_code == 200
+    data_all = res_all.json()
+    assert data_all["clips_count"] == 2
+    assert set(data_all["clip_ids"]) == {"clip_456", "clip_789"}
+    assert data_all["project_path"].endswith("session.fcproj")
+    assert Path(data_all["project_path"]).exists()
+
+    # 2. Exportar solo 1 clip elegido por el usuario
+    res_one = client.post(f"/sessions/{sid}/filmcraft/export", json={"clip_ids": ["clip_789"]})
+    assert res_one.status_code == 200
+    data_one = res_one.json()
+    assert data_one["clips_count"] == 1
+    assert data_one["clip_ids"] == ["clip_789"]
+
+    # 3. Selección vacía debe retornar 400
+    res_empty = client.post(f"/sessions/{sid}/filmcraft/export", json={"clip_ids": []})
+    assert res_empty.status_code == 400
+
+
+def test_session_filmcraft_open_download_reveal(client):
+    sid = client.app.state.test_session_id
+
+    with patch.object(
+        FilmCraftLauncher,
+        "open_project",
+        return_value=OpenFilmCraftResponse(
+            project_path="mock/path/session.fcproj",
+            launched=True,
+            reused_instance=False,
+        ),
+    ):
+        res_open = client.post(f"/sessions/{sid}/filmcraft/open", json={"clip_ids": ["clip_456"]})
+        assert res_open.status_code == 200
+        d = res_open.json()
+        assert d["launched"] is True
+        assert d["clips_count"] == 1
+        assert d["clip_ids"] == ["clip_456"]
+
+    res_dl = client.get(f"/sessions/{sid}/filmcraft/download?clip_ids=clip_456,clip_789")
+    assert res_dl.status_code == 200
+    assert f"{sid}_master.fcproj" in res_dl.headers.get("content-disposition", "")
+    assert len(res_dl.content) > 0
+
+    with patch("subprocess.Popen") as mock_popen:
+        res_rev = client.post(f"/sessions/{sid}/filmcraft/reveal", json={"clip_ids": ["clip_456"]})
+        assert res_rev.status_code == 200
+        assert res_rev.json()["ok"] is True
+        assert mock_popen.called

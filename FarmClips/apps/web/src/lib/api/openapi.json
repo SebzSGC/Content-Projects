@@ -2151,6 +2151,239 @@
         }
       }
     },
+    "/sessions/{session_id}/filmcraft/export": {
+      "post": {
+        "summary": "Export Session Filmcraft Endpoint",
+        "description": "Exporta la sesión completa (VOD Master + sub-secuencias 9:16 por clip) a FilmCraft.",
+        "operationId": "export_session_filmcraft_endpoint_sessions__session_id__filmcraft_export_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SessionFilmCraftExportBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Export Session Filmcraft Endpoint Sessions  Session Id  Filmcraft Export Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/filmcraft/open": {
+      "post": {
+        "summary": "Open Session Filmcraft Endpoint",
+        "description": "Exporta el proyecto global de la sesión y lo abre en FilmCraft NLE.",
+        "operationId": "open_session_filmcraft_endpoint_sessions__session_id__filmcraft_open_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SessionFilmCraftExportBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Open Session Filmcraft Endpoint Sessions  Session Id  Filmcraft Open Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/filmcraft/download": {
+      "get": {
+        "summary": "Download Session Filmcraft Project",
+        "description": "Descarga el archivo .fcproj global de la sesión.",
+        "operationId": "download_session_filmcraft_project_sessions__session_id__filmcraft_download_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "clip_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "IDs de clips separados por coma",
+              "title": "Clip Ids"
+            },
+            "description": "IDs de clips separados por coma"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/filmcraft/reveal": {
+      "post": {
+        "summary": "Reveal Session Filmcraft Project",
+        "description": "Genera (si hace falta) y muestra el proyecto global .fcproj en el explorador.",
+        "operationId": "reveal_session_filmcraft_project_sessions__session_id__filmcraft_reveal_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SessionFilmCraftExportBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Reveal Session Filmcraft Project Sessions  Session Id  Filmcraft Reveal Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/events": {
       "get": {
         "summary": "Sse Events",
@@ -2882,6 +3115,26 @@
           "end"
         ],
         "title": "RetimeClipBody"
+      },
+      "SessionFilmCraftExportBody": {
+        "properties": {
+          "clip_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Ids"
+          }
+        },
+        "type": "object",
+        "title": "SessionFilmCraftExportBody"
       },
       "SfxCue": {
         "properties": {

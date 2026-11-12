@@ -1,16 +1,35 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Activity, ArrowLeft, CheckCircle2, Download, Flame, Play, RefreshCw, Scissors, Sparkles, StopCircle, Wrench } from "lucide-react";
+import {
+  Activity,
+  ArrowLeft,
+  Check,
+  CheckCircle2,
+  Copy,
+  Download,
+  Flame,
+  FolderOpen,
+  Layers,
+  Play,
+  RefreshCw,
+  Scissors,
+  Sparkles,
+  StopCircle,
+  Wrench,
+} from "lucide-react";
 import {
   API_PREFIX,
   cancelSession,
   fetchSessionClips,
   fetchSessionDetail,
   fetchSessionSignals,
+  getSessionFilmCraftDownloadUrl,
+  openSessionInFilmCraft,
   rerunSession,
+  revealSessionFilmCraftProject,
   updateManualSync,
   useServerEvents,
   type ClipItem,
@@ -56,6 +75,12 @@ export default function SessionDetailPage() {
   const [manualShift, setManualShift] = useState<string>("0.00");
   const [savingSync, setSavingSync] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedClipIds, setSelectedClipIds] = useState<Set<string>>(new Set());
+  const selectionInitRef = useRef(false);
+  const [openingFilmCraft, setOpeningFilmCraft] = useState(false);
+  const [filmcraftMsg, setFilmcraftMsg] = useState<string>("");
+  const [filmcraftProjectPath, setFilmcraftProjectPath] = useState<string>("");
+  const [copiedFcPath, setCopiedFcPath] = useState(false);
 
   const reload = useCallback(async () => {
     if (!sessionId) return;
@@ -68,6 +93,15 @@ export default function SessionDetailPage() {
       setSession(ses);
       setClips(cl);
       setSignals(sig);
+      if (cl.length > 0) {
+        if (!selectionInitRef.current) {
+          setSelectedClipIds(new Set(cl.map((c) => c.id)));
+          selectionInitRef.current = true;
+        } else {
+          const valid = new Set(cl.map((c) => c.id));
+          setSelectedClipIds((prev) => new Set([...prev].filter((id) => valid.has(id))));
+        }
+      }
       if (ses.sync) {
         setManualShift(ses.sync.shift_sec.toFixed(3));
       }
@@ -75,6 +109,54 @@ export default function SessionDetailPage() {
       setError(err instanceof Error ? err.message : String(err));
     }
   }, [sessionId]);
+
+  const selectedIdsList = clips.filter((c) => selectedClipIds.has(c.id)).map((c) => c.id);
+
+  function toggleClipSelection(clipId: string) {
+    setSelectedClipIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(clipId)) next.delete(clipId);
+      else next.add(clipId);
+      return next;
+    });
+  }
+
+  async function handleOpenSessionInFilmCraft() {
+    if (!sessionId || selectedIdsList.length === 0) return;
+    setOpeningFilmCraft(true);
+    setError(null);
+    setFilmcraftMsg("");
+    try {
+      const res = await openSessionInFilmCraft(sessionId, selectedIdsList);
+      setFilmcraftProjectPath(res.project_path || "");
+      const warns = res.warnings && res.warnings.length > 0 ? ` (${res.warnings.length} avisos)` : "";
+      setFilmcraftMsg(
+        res.reused_instance
+          ? `Proyecto global (${res.clips_count} clips + VOD completo) abierto en tu ventana activa de FilmCraft${warns}.`
+          : `FilmCraft iniciado con el proyecto global (${res.clips_count} clips + VOD completo)${warns}.`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo abrir FilmCraft.");
+    } finally {
+      setOpeningFilmCraft(false);
+    }
+  }
+
+  async function handleRevealSessionFilmCraft() {
+    if (!sessionId || selectedIdsList.length === 0) return;
+    try {
+      await revealSessionFilmCraftProject(sessionId, selectedIdsList);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo abrir la carpeta del proyecto.");
+    }
+  }
+
+  function handleCopySessionFilmCraftPath() {
+    if (!filmcraftProjectPath) return;
+    navigator.clipboard.writeText(filmcraftProjectPath);
+    setCopiedFcPath(true);
+    setTimeout(() => setCopiedFcPath(false), 2000);
+  }
 
   useEffect(() => {
     reload();
@@ -260,14 +342,100 @@ export default function SessionDetailPage() {
 
       {/* Clips ------------------------------------------------------------ */}
       <section className="space-y-5">
-        <div>
-          <h2 className="flex items-center gap-2 text-xl font-black text-slate-50">
-            <Flame className="h-5 w-5 text-amber-300" /> Mejores momentos seleccionados ({clips.length})
-          </h2>
-          <p className="text-sm text-slate-400">
-            Ordenados del más viral al más tranquilo, con la explicación de por qué funcionan para Shorts.
-          </p>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="flex items-center gap-2 text-xl font-black text-slate-50">
+              <Flame className="h-5 w-5 text-amber-300" /> Mejores momentos seleccionados ({clips.length})
+            </h2>
+            <p className="text-sm text-slate-400">
+              Elige los clips que quieras incluir para abrir todo el proyecto (VOD completo + sub-secuencias) en FilmCraft, o edita uno a uno.
+            </p>
+          </div>
+
+          {clips.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-slate-900/70 px-3 py-1.5 text-xs font-semibold text-slate-300">
+                <span>
+                  {selectedIdsList.length} de {clips.length} elegidos
+                </span>
+                <span className="text-slate-600">·</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedClipIds(new Set(clips.map((c) => c.id)))}
+                  className="text-amber-300 hover:text-amber-200 cursor-pointer"
+                >
+                  Todos
+                </button>
+                <span className="text-slate-600">/</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedClipIds(new Set())}
+                  className="text-slate-400 hover:text-slate-200 cursor-pointer"
+                >
+                  Ninguno
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleOpenSessionInFilmCraft}
+                disabled={openingFilmCraft || selectedIdsList.length === 0}
+                className="inline-flex items-center gap-2 rounded-full border border-sky-400/40 bg-sky-500/15 px-4 py-2 text-xs font-extrabold text-sky-300 shadow-lg shadow-sky-500/10 transition-all hover:bg-sky-500/25 disabled:cursor-not-allowed disabled:opacity-45 cursor-pointer"
+                title="Exporta un único .fcproj con el VOD completo y sub-secuencias 9:16 para los clips seleccionados"
+              >
+                {openingFilmCraft ? <SoftSpinner className="h-4 w-4" /> : <Layers className="h-4 w-4" />}
+                {openingFilmCraft
+                  ? "Montando proyecto..."
+                  : `Abrir proyecto en FilmCraft (${selectedIdsList.length})`}
+              </button>
+
+              {selectedIdsList.length > 0 && (
+                <a
+                  href={getSessionFilmCraftDownloadUrl(session.id, selectedIdsList)}
+                  download={`${session.id}_master.fcproj`}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-bold text-slate-200 transition-all hover:bg-white/10"
+                  title="Descargar proyecto .fcproj global sin abrir FilmCraft"
+                >
+                  <Download className="h-3.5 w-3.5" /> .fcproj
+                </a>
+              )}
+            </div>
+          )}
         </div>
+
+        {filmcraftMsg && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+            <div className="flex items-center gap-2">
+              <Check className="h-4 w-4 shrink-0 text-emerald-400" />
+              <span>{filmcraftMsg}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleRevealSessionFilmCraft}
+                className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-950/60 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/60 cursor-pointer"
+              >
+                <FolderOpen className="h-3.5 w-3.5" /> Abrir carpeta
+              </button>
+              {filmcraftProjectPath && (
+                <button
+                  type="button"
+                  onClick={handleCopySessionFilmCraftPath}
+                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-950/60 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/60 cursor-pointer"
+                >
+                  <Copy className="h-3.5 w-3.5" /> {copiedFcPath ? "¡Copiada!" : "Copiar ruta"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setFilmcraftMsg("")}
+                className="text-xs text-slate-400 hover:text-white cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        )}
 
         {clips.length === 0 ? (
           <GlassCard className="flex flex-col items-center gap-3 p-12 text-center text-sm text-slate-400">
@@ -290,9 +458,17 @@ export default function SessionDetailPage() {
                   ? `${API_PREFIX}/clips/${clip.id}/file?quality=draft&t=${Math.floor(clip.updated_at)}`
                   : null;
               const score = Math.round(clip.final_score);
+              const isSelected = selectedClipIds.has(clip.id);
 
               return (
-                <GlassCard key={clip.id} as="article" interactive className="flex flex-col overflow-hidden">
+                <GlassCard
+                  key={clip.id}
+                  as="article"
+                  interactive
+                  className={`flex flex-col overflow-hidden transition-all ${
+                    isSelected ? "ring-2 ring-sky-400/60" : "opacity-80"
+                  }`}
+                >
                   <div className="group relative aspect-[9/16] max-h-[440px] w-full overflow-hidden rounded-t-xl bg-slate-950">
                     {videoUrl ? (
                       <video src={videoUrl} controls preload="metadata" className="h-full w-full object-contain" />
@@ -360,6 +536,27 @@ export default function SessionDetailPage() {
                         </span>
                       )}
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleClipSelection(clip.id)}
+                      aria-pressed={isSelected}
+                      title={isSelected ? "Quitar clip de la exportación global a FilmCraft" : "Incluir clip en la exportación global a FilmCraft"}
+                      className={`absolute top-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold backdrop-blur-md transition-all cursor-pointer ${
+                        isSelected
+                          ? "border-sky-400/70 bg-sky-500/85 text-slate-950 shadow-lg shadow-sky-500/25"
+                          : "border-white/20 bg-slate-950/75 text-slate-300 hover:border-white/40"
+                      }`}
+                    >
+                      <span
+                        className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${
+                          isSelected ? "border-slate-950 bg-slate-950 text-sky-300" : "border-slate-400"
+                        }`}
+                      >
+                        {isSelected && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                      </span>
+                      {isSelected ? "Incluido" : "Incluir"}
+                    </button>
                   </div>
 
                   <div className="flex flex-1 flex-col gap-3 p-5">
