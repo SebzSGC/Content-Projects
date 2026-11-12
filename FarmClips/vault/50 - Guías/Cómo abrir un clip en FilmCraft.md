@@ -39,8 +39,8 @@ etiquetas: [guia, nle, filmcraft, exportacion]
 |---|---|---|
 | **V1** | `V1 Cámara` | Video del streamer (capa base vertical), con seguimiento facial continuo y punch zooms dinámicos sincronizados en `mediaTime`. |
 | **V2** | `V2 Gameplay` | Video del juego (capa superior vertical `[768..1920]`), que delimita nítidamente el panel inferior tapando cualquier desborde del zoom de cámara en el corte exacto a $y=768$. |
-| **V3** | `V3 Overlays` | Titulares y subtítulos animados con canal alfa transparente (Apple ProRes 4444). |
-| **C1** | `C1 Subtitles` | Pista nativa de subtítulos SRT importada de forma automática vía bridge. |
+| **V3** | `V3 Overlays` | Titulares y subtítulos animados con canal alfa transparente (Apple ProRes 4444, desactivada por defecto para dar paso a la edición nativa). |
+| **C1** | `C1 Subtitles` | Pista nativa de subtítulos interactivos y editables (puedes hacer doble clic sobre cualquier palabra en el visor o en el panel Captions para cambiar el texto en tiempo real). |
 | **A1** | `A1 Mic` | Audio de la voz del streamer con la ganancia configurada. |
 | **A2** | `A2 Juego` | Audio del juego con keyframes automáticos de ducking en `mediaTime` (atenuación al hablar). |
 | **A3** | `A3 SFX` | Efectos de sonido colocados en sus instantes exactos. |
