@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import shutil
 import socket
 import subprocess
@@ -37,6 +38,36 @@ class OpenFilmCraftResponse(BaseModel):
     launched: bool
     reused_instance: bool
     warnings: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+def ensure_control_token() -> str:
+    """Obtiene o genera un token seguro de 64 caracteres hex para el FilmCraft control server."""
+    env_tok = os.environ.get("FILMCRAFT_CONTROL_TOKEN", "").strip()
+    if len(env_tok) == 64 and all(c in "0123456789abcdefABCDEF" for c in env_tok):
+        return env_tok
+
+    token_file = (
+        Path(os.environ.get("LOCALAPPDATA", str(Path.home())))
+        / "FilmCraft"
+        / ".farmclips_control_token"
+    )
+    try:
+        if token_file.is_file():
+            tok = token_file.read_text(encoding="utf-8").strip()
+            if len(tok) == 64 and all(c in "0123456789abcdefABCDEF" for c in tok):
+                os.environ["FILMCRAFT_CONTROL_TOKEN"] = tok
+                return tok
+    except Exception:
+        pass
+
+    new_tok = secrets.token_hex(32)
+    os.environ["FILMCRAFT_CONTROL_TOKEN"] = new_tok
+    try:
+        token_file.parent.mkdir(parents=True, exist_ok=True)
+        token_file.write_text(new_tok, encoding="utf-8")
+    except Exception:
+        pass
+    return new_tok
 
 
 class FilmCraftLauncher:
@@ -169,6 +200,10 @@ class FilmCraftLauncher:
         if not project_path.is_file():
             raise FileNotFoundError(f"El archivo de proyecto no existe: {project_path}")
 
+        token = ensure_control_token()
+        child_env = os.environ.copy()
+        child_env["FILMCRAFT_CONTROL_TOKEN"] = token
+
         bridge_active = self.is_bridge_listening()
 
         # Si el bridge está activo y tenemos CLI, reutilizamos la ventana existente
@@ -182,7 +217,9 @@ class FilmCraftLauncher:
                 f"path={project_path}",
             ]
             try:
-                res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                res = subprocess.run(
+                    cmd, env=child_env, capture_output=True, text=True, timeout=5
+                )
                 if res.returncode == 0:
                     return OpenFilmCraftResponse(
                         project_path=str(project_path),
@@ -192,15 +229,16 @@ class FilmCraftLauncher:
             except Exception:
                 pass
 
-        # Si no se pudo reutilizar, lanzamos una nueva instancia desacoplada
-        # Con Windows DETACHED_PROCESS para que sobreviva independientemente del backend
+        # Si no se pudo reutilizar, lanzamos una nueva instancia en el desktop interactivo.
+        # En Windows usamos CREATE_NEW_PROCESS_GROUP (nunca DETACHED_PROCESS porque aislaría la ventana).
         creation_flags = 0
         if sys.platform == "win32":
-            creation_flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+            creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP
 
         args = [str(app), "--control", str(self.bridge_port), str(project_path)]
         subprocess.Popen(
             args,
+            env=child_env,
             creationflags=creation_flags,
             close_fds=(sys.platform != "win32"),
         )

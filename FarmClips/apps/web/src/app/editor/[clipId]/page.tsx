@@ -1078,18 +1078,26 @@ export default function ClipEditorPage() {
     if (!plan) return;
     setError(null);
     setOpeningFilmCraft(true);
+    setStatusMsg("Exportando proyecto nativo y abriendo FilmCraft NLE...");
     try {
       if (dirty) {
+        setStatusMsg("Guardando cambios del EditPlan antes de exportar...");
         const saved = await handleSave();
-        if (!saved) return;
+        if (!saved) {
+          setError("No se pudieron guardar los cambios antes de abrir FilmCraft.");
+          setStatusMsg("");
+          return;
+        }
       }
       const res = await openInFilmCraft(clipId);
+      const warns = res.warnings?.length ? ` (${res.warnings.length} avisos de compatibilidad resueltos)` : "";
       setStatusMsg(
         res.reused_instance
-          ? "Proyecto abierto en la ventana activa de FilmCraft."
-          : "FilmCraft iniciado con el proyecto montado."
+          ? `Proyecto abierto en la ventana activa de FilmCraft NLE${warns}.`
+          : `FilmCraft NLE iniciado con el proyecto montado en el timeline${warns}.`
       );
     } catch (err) {
+      setStatusMsg("");
       setError(
         err instanceof Error
           ? err.message
@@ -1230,7 +1238,7 @@ export default function ClipEditorPage() {
             ) : (
               <Sliders className="h-3.5 w-3.5" />
             )}
-            Abrir en FilmCraft
+            {openingFilmCraft ? "Abriendo..." : "Abrir en FilmCraft"}
           </button>
 
           <button
@@ -1281,9 +1289,32 @@ export default function ClipEditorPage() {
         </div>
       )}
 
+      {statusMsg && (
+        <div className="flex items-center justify-between rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+          <div className="flex items-center gap-2">
+            <Check className="h-4 w-4 text-emerald-400" />
+            <span>{statusMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setStatusMsg("")}
+            className="text-xs text-zinc-400 hover:text-white"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
+
       {error && (
-        <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-          {error}
+        <div className="flex items-center justify-between rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="text-xs text-zinc-400 hover:text-white"
+          >
+            Cerrar
+          </button>
         </div>
       )}
 
