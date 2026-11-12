@@ -42,10 +42,34 @@ class OpenFilmCraftResponse(BaseModel):
     warnings: List[Dict[str, Any]] = Field(default_factory=list)
 
 
+def _is_valid_control_token(token: str) -> bool:
+    """Valida que el token de control sea una cadena hexadecimal de 64 caracteres."""
+    return len(token) == 64 and all(c in "0123456789abcdefABCDEF" for c in token)
+
+
+def _read_user_env_token() -> Optional[str]:
+    """Lee FILMCRAFT_CONTROL_TOKEN desde HKCU\\Environment si existe y es válido."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, r"Environment", 0, winreg.KEY_READ
+        ) as key:
+            val, _ = winreg.QueryValueEx(key, "FILMCRAFT_CONTROL_TOKEN")
+            tok = str(val).strip()
+            if _is_valid_control_token(tok):
+                return tok
+    except Exception:
+        pass
+    return None
+
+
 def ensure_control_token() -> str:
     """Obtiene o genera un token seguro de 64 caracteres hex para el FilmCraft control server."""
     env_tok = os.environ.get("FILMCRAFT_CONTROL_TOKEN", "").strip()
-    if len(env_tok) == 64 and all(c in "0123456789abcdefABCDEF" for c in env_tok):
+    if _is_valid_control_token(env_tok):
         _persist_user_env_token(env_tok)
         return env_tok
 
@@ -57,12 +81,22 @@ def ensure_control_token() -> str:
     try:
         if token_file.is_file():
             tok = token_file.read_text(encoding="utf-8").strip()
-            if len(tok) == 64 and all(c in "0123456789abcdefABCDEF" for c in tok):
+            if _is_valid_control_token(tok):
                 os.environ["FILMCRAFT_CONTROL_TOKEN"] = tok
                 _persist_user_env_token(tok)
                 return tok
     except Exception:
         pass
+
+    reg_tok = _read_user_env_token()
+    if reg_tok:
+        os.environ["FILMCRAFT_CONTROL_TOKEN"] = reg_tok
+        try:
+            token_file.parent.mkdir(parents=True, exist_ok=True)
+            token_file.write_text(reg_tok, encoding="utf-8")
+        except Exception:
+            pass
+        return reg_tok
 
     new_tok = secrets.token_hex(32)
     os.environ["FILMCRAFT_CONTROL_TOKEN"] = new_tok
@@ -255,10 +289,22 @@ def bring_filmcraft_to_front() -> bool:
             return False
 
 
-def launch_filmcraft_windows(app_path: Path, project_path: Path) -> bool:
+def _build_launch_args(project_path: Path, bridge_port: Optional[int] = 9876) -> List[str]:
+    """Construye los argumentos CLI para iniciar FilmCraft con bridge de control habilitado."""
+    if bridge_port and bridge_port > 0:
+        return ["--control", str(bridge_port), str(project_path)]
+    return [str(project_path)]
+
+
+def launch_filmcraft_windows(
+    app_path: Path,
+    project_path: Path,
+    bridge_port: Optional[int] = 9876,
+) -> bool:
     """Lanza FilmCraft explícitamente en el escritorio interactivo WinSta0\\Default."""
     if sys.platform != "win32":
         return False
+    launch_args = _build_launch_args(project_path, bridge_port)
     try:
         import ctypes
         from ctypes import wintypes
@@ -300,7 +346,7 @@ def launch_filmcraft_windows(app_path: Path, project_path: Path) -> bool:
         pi = PROCESS_INFORMATION()
         kernel32 = ctypes.windll.kernel32
 
-        cmd = f'"{app_path}" "{project_path}"'
+        cmd = subprocess.list2cmdline([str(app_path), *launch_args])
         CREATE_BREAKAWAY_FROM_JOB = 0x01000000
 
         # Primero intentar romper la atadura a job objects para que el proceso sobreviva autónomo
@@ -340,7 +386,7 @@ def launch_filmcraft_windows(app_path: Path, project_path: Path) -> bool:
 
     # Fallback con ShellExecute interactivo de Windows
     try:
-        os.startfile(str(app_path), arguments=f'"{project_path}"')
+        os.startfile(str(app_path), arguments=subprocess.list2cmdline(launch_args))
         return True
     except Exception:
         try:
@@ -574,27 +620,28 @@ class FilmCraftLauncher:
 
         cleanup_orphaned_recovery()
 
-        # Lanzar la nueva instancia en el desktop interactivo
+        # Lanzar la nueva instancia en el desktop interactivo con el bridge habilitado
+        launch_args = _build_launch_args(project_path, self.bridge_port)
         if sys.platform == "win32":
             register_windows_association(app, self.bridge_port)
-            launched_ok = launch_filmcraft_windows(app, project_path)
+            launched_ok = launch_filmcraft_windows(
+                app, project_path, bridge_port=self.bridge_port
+            )
             if not launched_ok:
                 try:
                     subprocess.Popen(
-                        [str(app), str(project_path)],
+                        [str(app), *launch_args],
+                        env=child_env,
                     )
                 except Exception:
                     subprocess.Popen(
-                        ["cmd.exe", "/c", "start", '""', str(app), str(project_path)],
+                        ["cmd.exe", "/c", "start", '""', str(app), *launch_args],
+                        env=child_env,
                         shell=True,
                     )
         else:
-            args = [
-                str(app),
-                str(project_path),
-            ]
             subprocess.Popen(
-                args,
+                [str(app), *launch_args],
                 env=child_env,
                 close_fds=True,
             )
