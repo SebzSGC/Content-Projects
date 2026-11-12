@@ -136,8 +136,20 @@ def test_filmcraft_exporter_e2e(tmp_path: Path):
     assert len(seq_item["video_tracks"]) == 3
     assert len(seq_item["audio_tracks"]) == 3
     assert len(seq_item["markers"]) == 2
-    assert len(seq_item["video_tracks"][0]["items"]) == 2  # 2 rangos en V1
-    assert len(seq_item["video_tracks"][1]["items"]) == 2  # 2 rangos en V2
+    assert seq_item["video_tracks"][0]["name"] == "V1 Cámara"
+    assert seq_item["video_tracks"][1]["name"] == "V2 Gameplay"
+    assert seq_item["video_tracks"][2]["name"] == "V3 Overlays"
+    assert len(seq_item["video_tracks"][0]["items"]) == 2  # 2 rangos en V1 Cámara
+    assert len(seq_item["video_tracks"][1]["items"]) == 2  # 2 rangos en V2 Gameplay
+
+    # Verificar que los keyframes de motion de la cámara estén en mediaTime (source_in + offset)
+    v1_first_clip = seq_item["video_tracks"][0]["items"][0]
+    src_in = v1_first_clip["source_in"]
+    motion_eff = next(e for e in v1_first_clip["effects"] if e["effect"] == "motion")
+    pos_kfs = motion_eff["params"]["position"]["keyframes"]
+    assert len(pos_kfs) > 0
+    # Cada keyframe debe ser >= source_in
+    assert pos_kfs[0]["time"] >= src_in
 
 
 def test_filmcraft_cli_inspection(tmp_path: Path):

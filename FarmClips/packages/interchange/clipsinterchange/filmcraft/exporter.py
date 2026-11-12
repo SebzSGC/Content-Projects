@@ -169,6 +169,9 @@ class FilmCraftExporter:
         }
 
         # 2. Construcción de pistas y clips para la secuencia
+        # V1: Cámara (capa base vertical)
+        # V2: Gameplay (capa superior vertical [768..1920], cubre limpiamente el desborde de zoom de la cámara)
+        # V3: Overlays (títulos y subtítulos animados con canal alfa)
         v1_items: List[Dict[str, Any]] = []
         v2_items: List[Dict[str, Any]] = []
         v3_items: List[Dict[str, Any]] = []
@@ -207,61 +210,10 @@ class FilmCraftExporter:
             camera_in_s = max(0.0, r_start + ctx.camera_offset_s)
             camera_in_ticks = seconds_to_ticks(camera_in_s, fps=fps)
 
-            # Efectos de geometría para Gameplay (V1)
-            game_xform = compute_motion_transform(
-                source_w=1920,
-                source_h=1080,
-                region=regions.gameplay,
-                cx=0.5,
-                cy=0.5,
-                zoom=1.0,
-            )
-            v1_motion = {
-                "effect": "motion",
-                "enabled": True,
-                "params": {
-                    "anchor": {"value": {"Vec2": {"x": game_xform.anchor_x, "y": game_xform.anchor_y}}},
-                    "anti_flicker": {"value": {"Float": 0.0}},
-                    "position": {"value": {"Vec2": {"x": game_xform.position_x, "y": game_xform.position_y}}},
-                    "rotation": {"value": {"Float": 0.0}},
-                    "scale": {"value": {"Float": game_xform.scale_pct}},
-                    "scale_width": {"value": {"Float": 100.0}},
-                    "uniform_scale": {"value": {"Bool": True}},
-                },
-            }
-            v1_opacity = {
-                "effect": "opacity",
-                "enabled": True,
-                "params": {
-                    "blend": {"value": {"Choice": 0}},
-                    "opacity": {"value": {"Float": game_xform.opacity_pct}},
-                },
-            }
-            v1_clip_id = alloc_id()
-            v1_items.append({
-                "id": v1_clip_id,
-                "item": gameplay_id,
-                "name": f"Gameplay_seg{seg_idx + 1}",
-                "label": "Iris",
-                "start": clip_start_ticks,
-                "duration": clip_dur_ticks,
-                "source_in": gameplay_in_ticks,
-                "speed": 1.0,
-                "reverse": False,
-                "enabled": True,
-                "link": None,
-                "group": None,
-                "effects": [v1_motion, v1_opacity, {"effect": "time_remap", "enabled": True, "params": {"speed": {"value": {"Float": 100.0}}}}],
-                "markers": [],
-                "gain_db": 0.0,
-                "frame_hold": None,
-                "scale_to_frame": False,
-            })
-
-            # Efectos de geometría para Cámara (V2) con keyframes
+            # --- PISTA V1: CÁMARA (Capa base vertical [0..768]) ---
+            # Construcción de keyframes de motion en mediaTime (ticks absolutos del archivo de origen)
             cam_kfs: List[CropKeyframe] = []
             if plan.camera_crop:
-                # Filtrar keyframes que caigan dentro del rango de tiempo de este segmento en el timeline
                 seg_clip_start = timeline_acc_s
                 seg_clip_end = timeline_acc_s + dur_s
                 cam_kfs = [k for k in plan.camera_crop if seg_clip_start <= k.t <= seg_clip_end]
@@ -276,7 +228,6 @@ class FilmCraftExporter:
                 anchor_y=0.44,
             )
 
-            # Construir keyframes de motion si existen
             pos_param: Dict[str, Any] = {"value": {"Vec2": {"x": cam_xform.position_x, "y": cam_xform.position_y}}}
             scale_param: Dict[str, Any] = {"value": {"Float": cam_xform.scale_pct}}
 
@@ -285,7 +236,8 @@ class FilmCraftExporter:
                 scale_keyframes: List[Dict[str, Any]] = []
                 for k in cam_kfs:
                     k_rel_s = max(0.0, k.t - timeline_acc_s)
-                    k_ticks = seconds_to_ticks(k_rel_s, fps=fps)
+                    # FilmCraft evalúa los keyframes en mediaTime (tiempo absoluto del archivo de vídeo)
+                    k_media_ticks = camera_in_ticks + seconds_to_ticks(k_rel_s, fps=fps)
                     kf_xform = compute_motion_transform(
                         source_w=1920,
                         source_h=1080,
@@ -305,14 +257,14 @@ class FilmCraftExporter:
                             )
                         )
                     pos_keyframes.append({
-                        "time": k_ticks,
+                        "time": k_media_ticks,
                         "value": {"Vec2": {"x": kf_xform.position_x, "y": kf_xform.position_y}},
                         "interp": interp_mode,
                         "out_influence": 0.3333333333333333,
                         "in_influence": 0.3333333333333333,
                     })
                     scale_keyframes.append({
-                        "time": k_ticks,
+                        "time": k_media_ticks,
                         "value": {"Float": kf_xform.scale_pct},
                         "interp": interp_mode,
                         "out_influence": 0.3333333333333333,
@@ -321,7 +273,7 @@ class FilmCraftExporter:
                 pos_param["keyframes"] = pos_keyframes
                 scale_param["keyframes"] = scale_keyframes
 
-            v2_motion = {
+            v1_motion = {
                 "effect": "motion",
                 "enabled": True,
                 "params": {
@@ -334,7 +286,7 @@ class FilmCraftExporter:
                     "uniform_scale": {"value": {"Bool": True}},
                 },
             }
-            v2_opacity = {
+            v1_opacity = {
                 "effect": "opacity",
                 "enabled": True,
                 "params": {
@@ -342,15 +294,108 @@ class FilmCraftExporter:
                     "opacity": {"value": {"Float": cam_xform.opacity_pct}},
                 },
             }
-            v2_clip_id = alloc_id()
-            v2_items.append({
-                "id": v2_clip_id,
+            v1_clip_id = alloc_id()
+            v1_items.append({
+                "id": v1_clip_id,
                 "item": camera_id,
                 "name": f"Camara_seg{seg_idx + 1}",
                 "label": "Iris",
                 "start": clip_start_ticks,
                 "duration": clip_dur_ticks,
                 "source_in": camera_in_ticks,
+                "speed": 1.0,
+                "reverse": False,
+                "enabled": True,
+                "link": None,
+                "group": None,
+                "effects": [v1_motion, v1_opacity, {"effect": "time_remap", "enabled": True, "params": {"speed": {"value": {"Float": 100.0}}}}],
+                "markers": [],
+                "gain_db": 0.0,
+                "frame_hold": None,
+                "scale_to_frame": False,
+            })
+
+            # --- PISTA V2: GAMEPLAY (Capa superior vertical [768..1920]) ---
+            # Al estar en V2 (encima de la cámara), el gameplay opaco cubre cualquier desborde
+            # vertical del zoom dinámico de la cámara en el borde y=768 con exactitud de 1 píxel.
+            game_kfs: List[Any] = []
+            if getattr(plan, "gameplay_crop", None):
+                seg_clip_start = timeline_acc_s
+                seg_clip_end = timeline_acc_s + dur_s
+                game_kfs = [k for k in plan.gameplay_crop if seg_clip_start <= k.t <= seg_clip_end]
+
+            game_xform = compute_motion_transform(
+                source_w=1920,
+                source_h=1080,
+                region=regions.gameplay,
+                cx=0.5,
+                cy=0.5,
+                zoom=1.0,
+            )
+            g_pos_param: Dict[str, Any] = {"value": {"Vec2": {"x": game_xform.position_x, "y": game_xform.position_y}}}
+            g_scale_param: Dict[str, Any] = {"value": {"Float": game_xform.scale_pct}}
+
+            if game_kfs:
+                g_pos_keyframes: List[Dict[str, Any]] = []
+                g_scale_keyframes: List[Dict[str, Any]] = []
+                for k in game_kfs:
+                    k_rel_s = max(0.0, k.t - timeline_acc_s)
+                    k_media_ticks = gameplay_in_ticks + seconds_to_ticks(k_rel_s, fps=fps)
+                    kf_g_xform = compute_motion_transform(
+                        source_w=1920,
+                        source_h=1080,
+                        region=regions.gameplay,
+                        cx=float(k.cx),
+                        cy=float(k.cy),
+                        zoom=float(k.zoom),
+                    )
+                    g_pos_keyframes.append({
+                        "time": k_media_ticks,
+                        "value": {"Vec2": {"x": kf_g_xform.position_x, "y": kf_g_xform.position_y}},
+                        "interp": "Linear",
+                        "out_influence": 0.3333333333333333,
+                        "in_influence": 0.3333333333333333,
+                    })
+                    g_scale_keyframes.append({
+                        "time": k_media_ticks,
+                        "value": {"Float": kf_g_xform.scale_pct},
+                        "interp": "Linear",
+                        "out_influence": 0.3333333333333333,
+                        "in_influence": 0.3333333333333333,
+                    })
+                g_pos_param["keyframes"] = g_pos_keyframes
+                g_scale_param["keyframes"] = g_scale_keyframes
+
+            v2_motion = {
+                "effect": "motion",
+                "enabled": True,
+                "params": {
+                    "anchor": {"value": {"Vec2": {"x": game_xform.anchor_x, "y": game_xform.anchor_y}}},
+                    "anti_flicker": {"value": {"Float": 0.0}},
+                    "position": g_pos_param,
+                    "rotation": {"value": {"Float": 0.0}},
+                    "scale": g_scale_param,
+                    "scale_width": {"value": {"Float": 100.0}},
+                    "uniform_scale": {"value": {"Bool": True}},
+                },
+            }
+            v2_opacity = {
+                "effect": "opacity",
+                "enabled": True,
+                "params": {
+                    "blend": {"value": {"Choice": 0}},
+                    "opacity": {"value": {"Float": game_xform.opacity_pct}},
+                },
+            }
+            v2_clip_id = alloc_id()
+            v2_items.append({
+                "id": v2_clip_id,
+                "item": gameplay_id,
+                "name": f"Gameplay_seg{seg_idx + 1}",
+                "label": "Iris",
+                "start": clip_start_ticks,
+                "duration": clip_dur_ticks,
+                "source_in": gameplay_in_ticks,
                 "speed": 1.0,
                 "reverse": False,
                 "enabled": True,
@@ -404,12 +449,12 @@ class FilmCraftExporter:
                 "scale_to_frame": False,
             })
 
-            # Audio A2: Juego (gameplay) con keyframes de ducking
+            # Audio A2: Juego (gameplay) con keyframes de ducking en mediaTime
             seg_start_ticks = clip_start_ticks
             seg_end_ticks = clip_start_ticks + clip_dur_ticks
             clip_duck_kfs = [
                 {
-                    "time": k.time_ticks - seg_start_ticks,
+                    "time": gameplay_in_ticks + (k.time_ticks - seg_start_ticks),
                     "value": {"Float": k.level_db},
                     "interp": k.interp,
                     "out_influence": 0.3333333333333333,
@@ -642,7 +687,7 @@ class FilmCraftExporter:
                         {
                             "id": 101,
                             "kind": "Video",
-                            "name": "V1 Gameplay",
+                            "name": "V1 Cámara",
                             "items": v1_items,
                             "transitions": [],
                             "locked": False,
@@ -659,7 +704,7 @@ class FilmCraftExporter:
                         {
                             "id": 102,
                             "kind": "Video",
-                            "name": "V2 Cámara",
+                            "name": "V2 Gameplay",
                             "items": v2_items,
                             "transitions": [],
                             "locked": False,
