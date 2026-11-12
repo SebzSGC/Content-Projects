@@ -51,6 +51,8 @@ Además, los subtítulos de cada frase aparecen como **marcadores** en el timeli
   - Entra a `/settings`.
   - Verifica la sección **FilmCraft NLE & Copiloto MCP**.
   - Si instalaste FilmCraft en una carpeta personalizada, puedes configurar la variable `CLIPS_FILMCRAFT_PATH`.
+- **Control server y token:** FilmCraft requiere `FILMCRAFT_CONTROL_TOKEN` (64 caracteres hexadecimales) para su servidor de control loopback (puerto 9876). FarmClips lo genera y persiste automáticamente en `%LOCALAPPDATA%\FilmCraft\.farmclips_control_token`.
+- **Ventana en Windows:** FarmClips lanza el proceso en el grupo de procesos interactivo del usuario (`CREATE_NEW_PROCESS_GROUP`), garantizando que la ventana se dibuje de inmediato en primer plano sin quedar aislada en segundo plano.
 
 ---
 
