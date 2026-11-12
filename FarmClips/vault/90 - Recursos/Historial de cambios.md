@@ -13,7 +13,47 @@ etiquetas: [tipo/cambios, area/general]
 > [!abstract] En pocas palabras
 > Registro cronológico de las versiones de FarmClips, nuevas funcionalidades, optimizaciones de rendimiento y ajustes en la arquitectura del sistema.
 
-## [2.6.0] — 2026-11-09 (Versión actual)
+## [2.7.0] — 2026-11-12 (Versión actual)
+
+### 🎬 Integración FilmCraft NLE y Copiloto Conversacional MCP
+
+Exportación determinista de clips a proyectos nativos de FilmCraft (`.fcproj`), apertura en 1 clic desde el Web Studio, fallback OpenTimelineIO (`.otio`) y servidor `farmclips-mcp` para asistencia en lenguaje natural con Claude Desktop y Antigravity.
+
+#### Qué cambió
+- **Nuevo botón «Abrir en FilmCraft»** en `/editor/[clipId]`:
+  - Guarda automáticamente los cambios pendientes y abre la aplicación con el proyecto montado (reutilizando la ventana activa vía bridge TCP loopback `127.0.0.1:9876` o iniciando una nueva instancia desacoplada).
+- **Nuevo paquete `packages/interchange/` (`clipsinterchange`)**:
+  - `TimelineExporter` (Protocolo desacoplado de exportación).
+  - `FilmCraftExporter`: genera deterministamente proyectos `.fcproj` (`schema_version: 17`) con pistas `V1 Gameplay`, `V2 Cámara`, `V3 Overlays`, `A1 Mic`, `A2 Juego` (con ducking automático) y `A3 SFX`.
+  - `OtioExporter`: fallback en formato universal OpenTimelineIO (`.otio`) para DaVinci Resolve y Premiere Pro.
+  - `timebase.py`: base de tiempo en ticks exactos (`254,016,000,000` ticks/segundo) con cálculo racional en `fractions.Fraction` (0 deriva temporal).
+  - `geometry.py`: proyección matemática continua de encuadres `(cx, cy, zoom)` a transformaciones de `motion` (posición, escala, ancla) 100% compatibles con `fast_compositor.py`.
+- **Nuevos endpoints en FastAPI**:
+  - `GET /integrations/filmcraft/status`: diagnóstico de binarios (`filmcraft.exe`, `filmcraft-cli.exe`), versión fijada (`0.20.1`) y estado del bridge.
+  - `POST /clips/{clip_id}/filmcraft/export`: genera el proyecto en disco y emite evento SSE `filmcraft.export.finished`.
+  - `POST /clips/{clip_id}/filmcraft/open`: ejecuta el lanzador seguro.
+- **Servidor MCP stdio (`farmclips-mcp`)**:
+  - Servidor en `clipsserver/mcp/` con 9 herramientas oficiales (`list_sessions`, `list_clips`, `get_clip`, `get_transcript`, `update_editplan`, `export_to_filmcraft`, `open_in_filmcraft`, `render_clip`, `get_render_status`).
+  - Comando `python -m clipsserver.main mcp-config` que genera el bloque listo para `claude_desktop_config.json` con rutas detectadas automáticamente en la máquina.
+- **Panel de Ajustes (`/settings`)**:
+  - Nueva tarjeta «FilmCraft NLE & Copiloto MCP» con estado de instalación, versión, ruta y botón de comprobación.
+- **Documentación & Backlog**:
+  - Épica [[EP-03 Edición profesional en FilmCraft con copiloto MCP]] y 6 historias de usuario ([[HU-005 Spike entender FilmCraft en Windows|HU-005]] a [[HU-010 Copiloto en Claude Desktop y Antigravity|HU-010]]) completadas al 100%.
+  - Nota de decisión [[ADR-006 Integración con FilmCraft y copiloto MCP]].
+  - Nuevas guías: [[Cómo abrir un clip en FilmCraft]] y [[Cómo usar el copiloto con Claude Desktop y Antigravity]].
+
+#### Por qué
+- Brindar a los creadores una vía de escape profesional a un editor no lineal (NLE) de escritorio sin perder los cortes sincronizados ni el seguimiento facial ya calculados.
+- Aprovechar el servidor MCP de FilmCraft y FarmClips para ofrecer asistencia conversacional inteligente sin gastar tokens en el montaje inicial.
+
+> [!warning] ⚠️ Cambia para ti
+> - En la barra del editor web ahora verás el botón **Abrir en FilmCraft** junto a «Guardar cambios».
+> - En **Ajustes** verás si FilmCraft está detectado en tu PC y el estado de su bridge de control.
+> - Puedes conectar Claude Desktop ejecutando `python -m clipsserver.main mcp-config` y pedirle cambios al proyecto en lenguaje natural.
+
+---
+
+## [2.6.0] — 2026-11-09
 
 ### ✂️ Editor confiable, tramos del clip, guardado automático y render rápido en Mac
 

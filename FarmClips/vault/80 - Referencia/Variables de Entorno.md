@@ -94,6 +94,17 @@ etiquetas: [tipo/guia, area/configuracion]
 
 ---
 
+## 🎬 7. Integración FilmCraft NLE
+
+| Variable | Valor por defecto | Descripción |
+|---|:---:|---|
+| `CLIPS_FILMCRAFT_PATH` | *(auto-detectado)* | Ruta al binario `filmcraft.exe` en Windows. |
+| `CLIPS_FILMCRAFT_CLI_PATH` | *(auto-detectado)* | Ruta al binario `filmcraft-cli.exe` para control y MCP. |
+| `CLIPS_FILMCRAFT_BRIDGE_PORT` | `9876` | Puerto loopback TCP para el control bridge (`127.0.0.1:9876`). |
+| `CLIPS_FILMCRAFT_CAPTIONS_MODE` | `native` | Modo de exportación de subtítulos (`native` o `overlay`). |
+
+---
+
 ## 🔗 Relacionado
 - [[Referencia API REST y SSE]]
 - [[Motor de Renderizado y Subtítulos]]

@@ -80,6 +80,21 @@ npm --prefix apps/web run start
 
 ---
 
+## 🤖 5. Copiloto MCP (Model Context Protocol)
+
+### Generar configuración para Claude Desktop y Antigravity
+```powershell
+.\.venv\Scripts\python.exe -m clipsserver.main mcp-config
+```
+Detecta las rutas reales del entorno virtual y del CLI de FilmCraft en Windows y genera el bloque JSON para `%APPDATA%\Claude\claude_desktop_config.json`.
+
+### Arranque del servidor MCP por stdio
+```powershell
+.\.venv\Scripts\python.exe -m clipsserver.mcp
+```
+
+---
+
 ## 🔗 Relacionado
 - [[Primeros pasos]]
 - [[Motor de Renderizado y Subtítulos]]

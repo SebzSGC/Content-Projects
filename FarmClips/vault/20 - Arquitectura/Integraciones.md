@@ -117,6 +117,19 @@ Al concluir el renderizado de los clips en 1080p, el sistema despacha una petici
 
 ---
 
+## 🎬 5. FilmCraft NLE & Copiloto MCP
+
+FarmClips se integra nativamente con el editor no lineal de escritorio **FilmCraft** y clientes MCP (Claude Desktop, Antigravity, Cursor):
+
+1. **Exportación determinista de proyectos:**
+   - Transforma el `EditPlan v2` a un proyecto `.fcproj` (`schema_version: 17`) con pistas multicapa (`V1 Gameplay`, `V2 Cámara`, `V3 Overlays`, `A1 Mic`, `A2 Juego`, `A3 SFX`), base de tiempo en ticks racionales (`254,016,000,000` ticks/seg) y marcadores para cada frase.
+2. **Control Loopback y Lanzador:**
+   - La API de FarmClips lanza FilmCraft con `--control 9876` o reutiliza la instancia abierta comunicándose vía `filmcraft-cli --bridge 127.0.0.1:9876`.
+3. **Servidor MCP stdio (`farmclips-mcp`):**
+   - Expone 9 herramientas semánticas para que Claude entienda el contexto de la grabación (transcripción con marcas de tiempo, metadatos y cortes) y opere sobre el proyecto abierto en FilmCraft.
+
+---
+
 ## 🔗 Relacionado
 - [[Arquitectura general]]
 - [[Proveedores de IA y Resiliencia]]

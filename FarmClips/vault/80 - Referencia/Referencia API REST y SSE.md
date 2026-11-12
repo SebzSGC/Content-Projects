@@ -79,6 +79,19 @@ etiquetas: [tipo/api, area/backend]
 
 ---
 
+## 🎬 6. Integración FilmCraft NLE (`/integrations/filmcraft` y `/clips/{id}/filmcraft`)
+
+| Método | Endpoint | Descripción | Parámetros / Cuerpo |
+|---|---|---|---|
+| `GET`  | `/integrations/filmcraft/status` | Estado de instalación, versión fijada (`0.20.1`), bridge y CLI. | JSON de diagnóstico |
+| `POST` | `/clips/{clip_id}/filmcraft/export` | Exporta el EditPlan a proyecto nativo `.fcproj` o fallback OTIO. | Query: `format=filmcraft\|otio` |
+| `POST` | `/clips/{clip_id}/filmcraft/open` | Exporta si hace falta y abre FilmCraft montando el timeline. | Sin cuerpo |
+
+### Eventos SSE emitidos
+- `filmcraft.export.finished`: Notifica la finalización de la exportación con la ruta absoluta del archivo generado.
+
+---
+
 ## 🔗 Relacionado
 - [[FastAPI y Orquestador]]
 - [[Motor de Renderizado y Subtítulos]]

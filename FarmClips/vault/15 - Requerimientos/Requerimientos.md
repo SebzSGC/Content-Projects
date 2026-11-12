@@ -40,12 +40,14 @@ flowchart LR
 | Épica | Avance | Ítems |
 |---|---|---|
 | [[EP-02 Claridad y Experiencia de Usuario en Web Studio\|EP-02]] Claridad y Experiencia de Usuario en Web Studio | `██████████ 95 %` | 3 |
+| [[EP-03 Edición profesional en FilmCraft con copiloto MCP\|EP-03]] Edición profesional en FilmCraft con copiloto MCP | `██████████ 100 %` | 6 |
 
 ## 🗒️ Notas de origen
 
 - [[2026-11-07 Editor interactivo WYSIWYG reencuadre visual y rendimiento 60 fps]]
 - [[2026-11-07 Textos claros y digeribles en la plataforma]]
 - [[2026-11-09 Mejoras del editor de clips]]
+- [[2026-11-12 Plan de integracion FilmCraft y copiloto MCP]]
 
 <!-- fin:indice-automatico -->
 
