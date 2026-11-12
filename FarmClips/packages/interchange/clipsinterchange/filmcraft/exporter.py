@@ -681,17 +681,17 @@ class FilmCraftExporter:
                 "format": "Subtitle",
                 "language": "es",
                 "style": {
-                    "font": "Inter",
-                    "font_style": "SemiBold",
-                    "size": 54.0,
-                    "color": [255, 255, 255, 255],
-                    "background": True,
-                    "background_color": [0, 0, 0, 191],
+                    "font": "Montserrat",
+                    "font_style": "ExtraBold",
+                    "size": 80.0,
+                    "color": [255, 212, 0, 255],  # Amarillo Hormozi (#FFD400)
+                    "background": False,
+                    "background_color": [0, 0, 0, 0],
                     "align": "Center",
-                    "anchor": "Bottom",
-                    "margin": 0.08,
-                    "line_spacing": 1.25,
-                    "outline": 0.0,
+                    "anchor": "Middle",  # Centrado en el tercio superior del gameplay (y ≈ 932-1020)
+                    "margin": 0.032,
+                    "line_spacing": 1.2,
+                    "outline": 8.0,  # Contorno negro grueso característico de Hormozi
                     "outline_color": [0, 0, 0, 255],
                 },
                 "enabled": True,

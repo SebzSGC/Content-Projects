@@ -144,6 +144,11 @@ def test_filmcraft_exporter_e2e(tmp_path: Path):
     assert len(seq_item["caption_tracks"]) == 1  # Pista nativa C1 Subtitles
     assert len(seq_item["caption_tracks"][0]["captions"]) == 2  # 2 subtítulos editables
     assert seq_item["caption_tracks"][0]["name"] == "Subtitles"
+    assert seq_item["caption_tracks"][0]["style"]["font"] == "Montserrat"
+    assert seq_item["caption_tracks"][0]["style"]["size"] == 80.0
+    assert seq_item["caption_tracks"][0]["style"]["outline"] == 8.0
+    assert seq_item["caption_tracks"][0]["style"]["align"] == "Center"
+    assert seq_item["caption_tracks"][0]["style"]["anchor"] == "Middle"
 
     # Verificar que los keyframes de motion de la cámara estén en mediaTime (source_in + offset)
     v1_first_clip = seq_item["video_tracks"][0]["items"][0]
