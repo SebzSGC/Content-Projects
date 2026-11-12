@@ -15,6 +15,25 @@ etiquetas: [tipo/cambios, area/general]
 
 ## [2.8.0] — 2026-11-12 (Versión actual)
 
+### 🔧 Corrección: Bridge de control (`--control 9876`) habilitado al abrir FilmCraft
+
+Se restauró el paso del parámetro `--control <puerto>` y la herencia de `FILMCRAFT_CONTROL_TOKEN` al lanzar FilmCraft desde FarmClips, permitiendo que el servidor MCP `filmcraft` y la reutilización de ventana se conecten automáticamente.
+
+#### Qué cambió
+- **Lanzador de FilmCraft (`apps/server/clipsserver/filmcraft.py`)**:
+  - `launch_filmcraft_windows` (y sus fallbacks de apertura) vuelven a incluir `--control <bridge_port>` (`9876` por defecto) sobre `WinSta0\Default` mediante `CreateProcessW` heredando `FILMCRAFT_CONTROL_TOKEN`.
+  - `ensure_control_token()` adopta un token válido ya configurado en `HKCU\Environment` antes de generar uno nuevo si aún no existe `.farmclips_control_token`.
+- **Pruebas unitarias (`tests/test_filmcraft_api.py`)**:
+  - Verificación de argumentos `--control` en `launch_filmcraft_windows`, `FilmCraftLauncher.open_project` y lectura de token desde `HKCU\Environment`.
+
+#### Por qué
+- Al simplificar el lanzamiento nativo en Windows, el argumento `--control` había quedado omitido, por lo que `filmcraft.exe` abría sin escuchar en `127.0.0.1:9876` y rechazaba las conexiones del MCP `filmcraft` (`os error 10061`).
+
+> [!warning] ⚠️ Cambia para ti
+> - Cada vez que abras un clip o una sesión en FilmCraft desde FarmClips, el puente de control (`127.0.0.1:9876`) quedará activo automáticamente para que tu copiloto MCP pueda leer y editar el proyecto abierto en vivo.
+
+---
+
 ### 🧩 Exportación Global de Sesión a FilmCraft (Master VOD + Sub-secuencias anidadas)
 
 En lugar de abrir y editar clip por clip en proyectos separados, ahora puedes exportar **toda la sesión en un único proyecto `.fcproj`** eligiendo exactamente qué clips incluir.
