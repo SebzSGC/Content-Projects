@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import json
+import os
 import re
 import shutil
 import tempfile
@@ -46,7 +47,12 @@ from ..config import (
     reload_server_settings,
     update_dotenv_values,
 )
+from ..filmcraft import FilmCraftLauncher, FilmCraftStatus, OpenFilmCraftResponse
 from ..orchestrator import Orchestrator, cleanup_temp_media, compute_storage_stats
+from clipsinterchange import ExportContext
+from clipsinterchange.filmcraft.exporter import FilmCraftExporter
+from clipsinterchange.otio.exporter import OtioExporter
+from fractions import Fraction
 
 SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
@@ -1323,6 +1329,110 @@ def create_app(
             media_type="image/jpeg",
             headers={"Cache-Control": "public, max-age=3600", "X-Frame-Cache": "MISS"},
         )
+
+    # --- FilmCraft NLE Integration -----------------------------------------
+
+    @app.get("/integrations/filmcraft/status")
+    def get_filmcraft_status() -> Dict[str, Any]:
+        """Consulta el estado de instalación, versión y bridge de FilmCraft."""
+        launcher = FilmCraftLauncher(
+            app_path=os.environ.get("CLIPS_FILMCRAFT_PATH"),
+            cli_path=os.environ.get("CLIPS_FILMCRAFT_CLI_PATH"),
+            bridge_port=int(os.environ.get("CLIPS_FILMCRAFT_BRIDGE_PORT", "9876")),
+        )
+        return launcher.get_status().model_dump(mode="json")
+
+    @app.post("/clips/{clip_id}/filmcraft/export")
+    def export_filmcraft_endpoint(
+        clip_id: str,
+        format: Literal["filmcraft", "otio"] = "filmcraft",
+    ) -> Dict[str, Any]:
+        """Exporta el EditPlan del clip a un proyecto nativo FilmCraft (.fcproj) u OTIO."""
+        crow = orch.db.get_clip(clip_id)
+        if not crow:
+            raise HTTPException(404, "Clip no encontrado")
+        srow = orch.db.get_session(crow["session_id"])
+        if not srow:
+            raise HTTPException(404, "Sesión asociada no encontrada")
+
+        plan_raw = crow.get("editplan_json")
+        if not plan_raw:
+            raise HTTPException(400, "El clip no tiene un EditPlan generado")
+
+        if isinstance(plan_raw, str):
+            plan = EditPlan.model_validate_json(plan_raw)
+        else:
+            plan = EditPlan.model_validate(plan_raw)
+
+        voice_spans: List[Tuple[float, float]] = []
+        if plan.captions and plan.captions.groups:
+            for g in plan.captions.groups:
+                if g.words:
+                    voice_spans.append((float(g.words[0].s), float(g.words[-1].e)))
+
+        out_dir = Path(cfg.data_dir) / "exports" / "filmcraft" / srow["id"] / clip_id
+        ctx = ExportContext(
+            gameplay_path=Path(srow["gameplay_path"]),
+            camera_path=Path(srow["camera_path"]),
+            camera_offset_s=float(srow.get("camera_offset_s") or 0.0),
+            source_fps=Fraction(60, 1),
+            voice_spans=voice_spans,
+            clip_id=clip_id,
+            session_id=srow["id"],
+        )
+
+        if format == "otio":
+            exporter = OtioExporter()
+        else:
+            exporter = FilmCraftExporter()
+
+        res = exporter.export(plan, ctx, out_dir)
+
+        orch.events.publish(
+            "filmcraft.export.finished",
+            session_id=srow["id"],
+            clip_id=clip_id,
+            project_path=str(res.project_path),
+            format=format,
+        )
+
+        return {
+            "project_path": str(res.project_path),
+            "exporter": res.exporter,
+            "exporter_version": res.exporter_version,
+            "plan_hash": res.plan_hash,
+            "duration_s": res.duration_s,
+            "warnings": [
+                {"field": w.field, "message": w.message, "severity": w.severity}
+                for w in res.warnings
+            ],
+        }
+
+    @app.post("/clips/{clip_id}/filmcraft/open")
+    def open_filmcraft_endpoint(clip_id: str) -> Dict[str, Any]:
+        """Exporta el clip si hace falta y abre FilmCraft con el proyecto montado."""
+        export_info = export_filmcraft_endpoint(clip_id, format="filmcraft")
+        proj_path = Path(export_info["project_path"])
+
+        launcher = FilmCraftLauncher(
+            app_path=os.environ.get("CLIPS_FILMCRAFT_PATH"),
+            cli_path=os.environ.get("CLIPS_FILMCRAFT_CLI_PATH"),
+            bridge_port=int(os.environ.get("CLIPS_FILMCRAFT_BRIDGE_PORT", "9876")),
+        )
+
+        try:
+            res = launcher.open_project(proj_path)
+        except FileNotFoundError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(500, f"Error al abrir FilmCraft: {exc}") from exc
+
+        return {
+            "project_path": res.project_path,
+            "launched": res.launched,
+            "reused_instance": res.reused_instance,
+            "warnings": export_info.get("warnings", []),
+        }
 
     # --- Server-Sent Events (SSE) ------------------------------------------
 

@@ -858,3 +858,60 @@ export function useServerEvents(
     return sseManager.subscribe(listener);
   }, [sessionId]);
 }
+
+// --- Integración FilmCraft NLE -------------------------------------------
+
+export interface FilmCraftStatus {
+  installed: boolean;
+  path: string | null;
+  cli_path: string | null;
+  version: string | null;
+  supported_version: string;
+  version_ok: boolean;
+  bridge_up: boolean;
+  mcp_available: boolean;
+}
+
+export interface FilmCraftExportResult {
+  project_path: string;
+  exporter: string;
+  exporter_version: string;
+  plan_hash: string;
+  duration_s: number;
+  warnings: Array<{ field: string; message: string; severity: string }>;
+}
+
+export interface FilmCraftOpenResult {
+  project_path: string;
+  launched: boolean;
+  reused_instance: boolean;
+  warnings: Array<{ field: string; message: string; severity: string }>;
+}
+
+export async function fetchFilmCraftStatus(): Promise<FilmCraftStatus> {
+  const res = await fetch(`${API_PREFIX}/integrations/filmcraft/status`);
+  if (!res.ok) throw new Error("Error al consultar estado de FilmCraft");
+  return res.json();
+}
+
+export async function exportToFilmCraft(
+  clipId: string,
+  format: "filmcraft" | "otio" = "filmcraft"
+): Promise<FilmCraftExportResult> {
+  const res = await fetch(`${API_PREFIX}/clips/${clipId}/filmcraft/export?format=${format}`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error("Error al exportar a FilmCraft");
+  return res.json();
+}
+
+export async function openInFilmCraft(clipId: string): Promise<FilmCraftOpenResult> {
+  const res = await fetch(`${API_PREFIX}/clips/${clipId}/filmcraft/open`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Error desconocido" }));
+    throw new Error(err.detail || "Error al abrir FilmCraft");
+  }
+  return res.json();
+}

@@ -17,6 +17,7 @@ import {
   RefreshCw,
   Save,
   ShieldCheck,
+  Sliders,
   Sparkles,
   Unlink,
   Wifi,
@@ -25,12 +26,14 @@ import {
   type AppSettings,
   type BudgetSummary,
   type DriveStatus,
+  type FilmCraftStatus,
   type TestConnectionResult,
   completeDriveAuthCallback,
   disconnectDriveAuth,
   fetchBudget,
   fetchDriveAuthUrl,
   fetchDriveStatus,
+  fetchFilmCraftStatus,
   getSettings,
   saveSettings,
   testSettingsConnection,
@@ -63,6 +66,8 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [budget, setBudget] = useState<BudgetSummary | null>(null);
   const [driveStatus, setDriveStatus] = useState<DriveStatus | null>(null);
+  const [filmcraftStatus, setFilmcraftStatus] = useState<FilmCraftStatus | null>(null);
+  const [checkingFilmcraft, setCheckingFilmcraft] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingDrive, setLoadingDrive] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -162,6 +167,10 @@ export default function SettingsPage() {
         .then((d) => setDriveStatus(d))
         .catch(() => null)
         .finally(() => setLoadingDrive(false));
+
+      fetchFilmCraftStatus()
+        .then((fc) => setFilmcraftStatus(fc))
+        .catch(() => null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo cargar la configuración del servidor.");
       setLoading(false);
@@ -225,12 +234,31 @@ export default function SettingsPage() {
 
       // Refrescar diagnósticos externos en segundo plano
       fetchDriveStatus().then((d) => setDriveStatus(d)).catch(() => null);
+      fetchFilmCraftStatus().then((fc) => setFilmcraftStatus(fc)).catch(() => null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error al guardar la configuración";
       setError(msg);
       showToast("err", msg);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCheckFilmcraft = async () => {
+    setCheckingFilmcraft(true);
+    try {
+      const st = await fetchFilmCraftStatus();
+      setFilmcraftStatus(st);
+      showToast(
+        st.installed ? "ok" : "err",
+        st.installed
+          ? `FilmCraft detectado (v${st.version || "0.20.1"}). Bridge: ${st.bridge_up ? "Conectado" : "Inactivo"}`
+          : "No se encontró FilmCraft en el equipo."
+      );
+    } catch {
+      showToast("err", "No se pudo consultar el estado de FilmCraft.");
+    } finally {
+      setCheckingFilmcraft(false);
     }
   };
 
@@ -1133,6 +1161,76 @@ export default function SettingsPage() {
                 >
                   Confirmar código
                 </button>
+              </div>
+            </div>
+          </GlassCard>
+
+          {/* 5. SECCIÓN INTEGRACIÓN FILMCRAFT NLE */}
+          <GlassCard as="section" className="p-6 sm:p-7">
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+              <div className="flex items-center gap-3.5">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-500/15 text-sky-400 border border-sky-500/30">
+                  <Sliders className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-extrabold text-white">FilmCraft NLE & Copiloto MCP</h2>
+                  <p className="text-xs text-slate-400">
+                    Edición profesional no lineal y asistencia conversacional local con Claude Desktop.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${
+                    filmcraftStatus?.installed
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                      : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                  }`}
+                >
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      filmcraftStatus?.installed ? "bg-emerald-400" : "bg-amber-400"
+                    }`}
+                  />
+                  {filmcraftStatus?.installed
+                    ? `Instalado (v${filmcraftStatus.version || "0.20.1"})`
+                    : "No detectado"}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCheckFilmcraft}
+                  disabled={checkingFilmcraft}
+                  className={`${btnSecondary} !px-3 !py-1 !text-xs`}
+                >
+                  {checkingFilmcraft ? (
+                    <SoftSpinner className="h-3.5 w-3.5" />
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  )}
+                  Comprobar
+                </button>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 text-xs">
+              <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
+                <span className="font-bold text-slate-200">Ruta de la aplicación</span>
+                <p className="mt-1 font-mono text-[11px] text-slate-400 break-all">
+                  {filmcraftStatus?.path || "C:\\...\\AppData\\Local\\Programs\\ArtCraft\\FilmCraft\\filmcraft.exe"}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
+                <span className="font-bold text-slate-200">Bridge de control loopback</span>
+                <p className="mt-1 text-slate-400">
+                  Puerto: <span className="font-mono text-slate-200">9876</span> · Estado:{" "}
+                  <span
+                    className={`font-bold ${
+                      filmcraftStatus?.bridge_up ? "text-emerald-400" : "text-slate-400"
+                    }`}
+                  >
+                    {filmcraftStatus?.bridge_up ? "Activo (127.0.0.1:9876)" : "Inactivo (se abrirá al pulsar)"}
+                  </span>
+                </p>
               </div>
             </div>
           </GlassCard>

@@ -224,6 +224,11 @@ class ServerSettings:
     webhook_url: Optional[str] = None
     public_web_url: str = "http://127.0.0.1:3040"
     temp_ttl_days: float = 7.0
+    # FilmCraft NLE Integration
+    filmcraft_path: str = ""
+    filmcraft_cli_path: str = ""
+    filmcraft_bridge_port: int = 9876
+    filmcraft_captions_mode: str = "native"
     # Testing / Offline fixtures
     fixtures_dir: Optional[Path] = None
 
@@ -308,6 +313,10 @@ class ServerSettings:
             webhook_url=os.environ.get("CLIPS_WEBHOOK_URL", "").strip() or None,
             public_web_url=os.environ.get("CLIPS_PUBLIC_WEB_URL", "http://127.0.0.1:3040").strip(),
             temp_ttl_days=float(os.environ.get("CLIPS_TEMP_TTL_DAYS", "7.0")),
+            filmcraft_path=os.environ.get("CLIPS_FILMCRAFT_PATH", "").strip(),
+            filmcraft_cli_path=os.environ.get("CLIPS_FILMCRAFT_CLI_PATH", "").strip(),
+            filmcraft_bridge_port=int(os.environ.get("CLIPS_FILMCRAFT_BRIDGE_PORT", "9876")),
+            filmcraft_captions_mode=os.environ.get("CLIPS_FILMCRAFT_CAPTIONS_MODE", "native").strip(),
             fixtures_dir=fix_path,
         )
 
@@ -339,6 +348,10 @@ class ServerSettings:
             "max_budget_usd": self.max_budget_usd,
             "webhook_url": self.webhook_url or "",
             "temp_ttl_days": self.temp_ttl_days,
+            "filmcraft_path": self.filmcraft_path,
+            "filmcraft_cli_path": self.filmcraft_cli_path,
+            "filmcraft_bridge_port": self.filmcraft_bridge_port,
+            "filmcraft_captions_mode": self.filmcraft_captions_mode,
             "auto_render_top_k": self.auto_render_top_k,
             "auto_render_min_score": self.auto_render_min_score,
             "default_keyterms": list(self.default_keyterms),

@@ -1938,6 +1938,125 @@
         }
       }
     },
+    "/integrations/filmcraft/status": {
+      "get": {
+        "summary": "Get Filmcraft Status",
+        "description": "Consulta el estado de instalación, versión y bridge de FilmCraft.",
+        "operationId": "get_filmcraft_status_integrations_filmcraft_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Filmcraft Status Integrations Filmcraft Status Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clips/{clip_id}/filmcraft/export": {
+      "post": {
+        "summary": "Export Filmcraft Endpoint",
+        "description": "Exporta el EditPlan del clip a un proyecto nativo FilmCraft (.fcproj) u OTIO.",
+        "operationId": "export_filmcraft_endpoint_clips__clip_id__filmcraft_export_post",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Clip Id"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "filmcraft",
+                "otio"
+              ],
+              "type": "string",
+              "default": "filmcraft",
+              "title": "Format"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Export Filmcraft Endpoint Clips  Clip Id  Filmcraft Export Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clips/{clip_id}/filmcraft/open": {
+      "post": {
+        "summary": "Open Filmcraft Endpoint",
+        "description": "Exporta el clip si hace falta y abre FilmCraft con el proyecto montado.",
+        "operationId": "open_filmcraft_endpoint_clips__clip_id__filmcraft_open_post",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Clip Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Open Filmcraft Endpoint Clips  Clip Id  Filmcraft Open Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/events": {
       "get": {
         "summary": "Sse Events",

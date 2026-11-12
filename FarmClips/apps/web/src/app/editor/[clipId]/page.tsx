@@ -34,6 +34,7 @@ import {
   API_PREFIX,
   fetchClipDetail,
   fetchEmojiCatalog,
+  openInFilmCraft,
   renderClip,
   retimeClip,
   saveClipEditPlan,
@@ -160,6 +161,7 @@ export default function ClipEditorPage() {
   const [clipTime, setClipTime] = useState(0);
   const [saving, setSaving] = useState(false);
   const [renderingQuality, setRenderingQuality] = useState<"draft" | "final" | null>(null);
+  const [openingFilmCraft, setOpeningFilmCraft] = useState(false);
   const [renderProgress, setRenderProgress] = useState<number | null>(null);
   const [statusMsg, setStatusMsg] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -1072,6 +1074,32 @@ export default function ClipEditorPage() {
     }
   }
 
+  async function handleOpenInFilmCraft() {
+    if (!plan) return;
+    setError(null);
+    setOpeningFilmCraft(true);
+    try {
+      if (dirty) {
+        const saved = await handleSave();
+        if (!saved) return;
+      }
+      const res = await openInFilmCraft(clipId);
+      setStatusMsg(
+        res.reused_instance
+          ? "Proyecto abierto en la ventana activa de FilmCraft."
+          : "FilmCraft iniciado con el proyecto montado."
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo abrir FilmCraft. Verifica que esté instalado o configúralo en Ajustes."
+      );
+    } finally {
+      setOpeningFilmCraft(false);
+    }
+  }
+
   function addImpactZoomAtPlayhead() {
     if (!plan) return;
     const total = getTotalClipDuration(plan);
@@ -1188,6 +1216,21 @@ export default function ClipEditorPage() {
           >
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
             Guardar cambios
+          </button>
+
+          <button
+            type="button"
+            onClick={handleOpenInFilmCraft}
+            disabled={openingFilmCraft || renderingQuality !== null}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-sky-500/40 bg-sky-500/10 px-3.5 py-2 text-xs font-bold text-sky-400 hover:bg-sky-500/20 disabled:opacity-50"
+            title="Exporta y abre el clip como proyecto nativo en FilmCraft"
+          >
+            {openingFilmCraft ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Sliders className="h-3.5 w-3.5" />
+            )}
+            Abrir en FilmCraft
           </button>
 
           <button

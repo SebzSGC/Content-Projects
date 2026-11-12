@@ -1,0 +1,103 @@
+"""Pruebas unitarias para endpoints de integración con FilmCraft en FastAPI."""
+
+import json
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+from clipsserver.api.routes import create_app
+from clipsserver.config import ServerSettings
+from clipsserver.filmcraft import FilmCraftLauncher, OpenFilmCraftResponse
+from fastapi.testclient import TestClient
+
+
+@pytest.fixture
+def client(tmp_path: Path):
+    settings = ServerSettings(data_dir=tmp_path / "data")
+    app = create_app(settings, use_process_pool=False, enable_drive_watcher=False)
+
+    # Insertar sesión y clip de prueba directamente en orch.db
+    orch = app.state.orchestrator
+    srow = orch.db.create_session(
+        title="Sesión Test",
+        gameplay_path=str(tmp_path / "gameplay.mp4"),
+        camera_path=str(tmp_path / "camara.mp4"),
+        recording_name="rec_test",
+    )
+
+    dummy_plan = {
+        "version": 2,
+        "clip_id": "clip_456",
+        "source": {"session": srow["id"], "ranges": [(1.0, 5.0)]},
+        "layout": [{"t": 0.0, "kind": "split", "camera_ratio": 0.40}],
+        "audio": {"mic_gain_db": 1.0, "duck_game_db": -12.0},
+        "captions": {
+            "preset": "hormozi",
+            "groups": [{"words": [{"w": "test", "s": 1.5, "e": 2.0}]}],
+        },
+    }
+
+    orch.db.upsert_clip(
+        clip_id="clip_456",
+        session_id=srow["id"],
+        rank_order=1,
+        start_sec=1.0,
+        end_sec=5.0,
+        overlay_title="Clip Test",
+        post_title="Post Test",
+        hashtags=["#gaming"],
+        reason="Test",
+        llm_score=80.0,
+        signal_score=90.0,
+        final_score=85.0,
+        curated_json="{}",
+        editplan_json=json.dumps(dummy_plan),
+    )
+
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+def test_filmcraft_status_endpoint(client):
+    res = client.get("/integrations/filmcraft/status")
+    assert res.status_code == 200
+    data = res.json()
+    assert "installed" in data
+    assert "supported_version" in data
+    assert data["supported_version"] == "0.20.1"
+    assert "bridge_up" in data
+
+
+def test_filmcraft_export_endpoint(client):
+    res = client.post("/clips/clip_456/filmcraft/export?format=filmcraft")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["exporter"] == "filmcraft"
+    assert Path(data["project_path"]).exists()
+    assert data["project_path"].endswith("clip.fcproj")
+
+
+def test_filmcraft_export_otio_endpoint(client):
+    res = client.post("/clips/clip_456/filmcraft/export?format=otio")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["exporter"] == "otio"
+    assert Path(data["project_path"]).exists()
+    assert data["project_path"].endswith("clip.otio")
+
+
+def test_filmcraft_open_endpoint(client):
+    with patch.object(
+        FilmCraftLauncher,
+        "open_project",
+        return_value=OpenFilmCraftResponse(
+            project_path="mock/path/clip.fcproj",
+            launched=True,
+            reused_instance=False,
+        ),
+    ):
+        res = client.post("/clips/clip_456/filmcraft/open")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["launched"] is True
+        assert data["reused_instance"] is False
