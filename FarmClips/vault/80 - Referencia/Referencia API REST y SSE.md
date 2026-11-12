@@ -85,7 +85,9 @@ etiquetas: [tipo/api, area/backend]
 |---|---|---|---|
 | `GET`  | `/integrations/filmcraft/status` | Estado de instalación, versión fijada (`0.20.1`), bridge y CLI. | JSON de diagnóstico |
 | `POST` | `/clips/{clip_id}/filmcraft/export` | Exporta el EditPlan a proyecto nativo `.fcproj` o fallback OTIO. | Query: `format=filmcraft\|otio` |
-| `POST` | `/clips/{clip_id}/filmcraft/open` | Exporta si hace falta y abre FilmCraft montando el timeline. | Sin cuerpo |
+| `POST` | `/clips/{clip_id}/filmcraft/open` | Exporta si hace falta y abre FilmCraft montando el timeline en el escritorio. | Sin cuerpo |
+| `GET`  | `/clips/{clip_id}/filmcraft/download` | Descarga directa del archivo de proyecto generado (`.fcproj` u `.otio`). | Query: `format=filmcraft\|otio` |
+| `POST` | `/clips/{clip_id}/filmcraft/reveal` | Revela y selecciona el archivo `.fcproj` en el Explorador de Windows (`explorer.exe /select,...`). | Sin cuerpo |
 
 ### Eventos SSE emitidos
 - `filmcraft.export.finished`: Notifica la finalización de la exportación con la ruta absoluta del archivo generado.

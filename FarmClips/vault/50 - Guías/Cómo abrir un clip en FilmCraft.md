@@ -25,8 +25,11 @@ etiquetas: [guia, nle, filmcraft, exportacion]
    - Ubicado en la barra superior junto a «Guardar cambios».
    - Si tenías cambios sin guardar, FarmClips los guarda automáticamente antes de exportar.
 4. **FilmCraft se abre automáticamente:**
-   - Si FilmCraft ya estaba abierto con su bridge activo, el proyecto se cargará en la ventana existente sin abrir procesos duplicados.
-   - Si no estaba abierto, se iniciará con la secuencia vertical (1080×1920) lista.
+   - Si FilmCraft ya estaba abierto con su bridge activo, el proyecto se cargará en la ventana existente sin abrir procesos duplicados y se traerá al frente.
+   - Si no estaba abierto, se iniciará con la secuencia vertical (1080×1920) lista y aceleración por GPU (`--graphics default`).
+   - En la interfaz web aparecerá un banner de éxito con opciones adicionales:
+     - `[📁 Abrir carpeta]`: Abre el Explorador de Windows con el archivo `.fcproj` seleccionado directamente.
+     - `[📥 Descargar .fcproj]`: Descarga una copia directa del proyecto para respaldos o edición manual.
 
 ---
 
@@ -51,8 +54,8 @@ Además, los subtítulos de cada frase aparecen como **marcadores** en el timeli
   - Entra a `/settings`.
   - Verifica la sección **FilmCraft NLE & Copiloto MCP**.
   - Si instalaste FilmCraft en una carpeta personalizada, puedes configurar la variable `CLIPS_FILMCRAFT_PATH`.
-- **Control server y token:** FilmCraft requiere `FILMCRAFT_CONTROL_TOKEN` (64 caracteres hexadecimales) para su servidor de control loopback (puerto 9876). FarmClips lo genera y persiste automáticamente en `%LOCALAPPDATA%\FilmCraft\.farmclips_control_token`.
-- **Ventana en Windows:** FarmClips lanza el proceso en el grupo de procesos interactivo del usuario (`CREATE_NEW_PROCESS_GROUP`), garantizando que la ventana se dibuje de inmediato en primer plano sin quedar aislada en segundo plano.
+- **Control server y token:** FilmCraft requiere `FILMCRAFT_CONTROL_TOKEN` (64 caracteres hexadecimales) para su servidor de control loopback (puerto 9876). FarmClips lo genera y persiste automáticamente en `%LOCALAPPDATA%\FilmCraft\.farmclips_control_token` y en el entorno del usuario (`HKCU\Environment`).
+- **Ventana y asociación en Windows:** FarmClips asocia automáticamente la extensión `.fcproj` en el Registro de Windows (`HKCU\Software\Classes\.fcproj`) configurando la apertura interactiva mediante el Shell (`Shell.Application` / `os.startfile`) con `--graphics default` y el puerto de control, asegurando que la ventana aparezca siempre en el monitor del usuario y pase al frente. Si por alguna razón de permisos el proceso no emerge, el botón `[📁 Abrir carpeta]` permite abrirlo de inmediato con doble clic desde el Explorador.
 
 ---
 

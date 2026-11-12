@@ -20,8 +20,15 @@ etiquetas: [tipo/cambios, area/general]
 Exportación determinista de clips a proyectos nativos de FilmCraft (`.fcproj`), apertura en 1 clic desde el Web Studio, fallback OpenTimelineIO (`.otio`) y servidor `farmclips-mcp` para asistencia en lenguaje natural con Claude Desktop y Antigravity.
 
 #### Qué cambió
-- **Nuevo botón «Abrir en FilmCraft»** en `/editor/[clipId]`:
-  - Guarda automáticamente los cambios pendientes y abre la aplicación con el proyecto montado (reutilizando la ventana activa vía bridge TCP loopback `127.0.0.1:9876` o iniciando una nueva instancia desacoplada).
+- **Nuevo botón «Abrir en FilmCraft» y banner interactivo** en `/editor/[clipId]`:
+  - Guarda automáticamente los cambios pendientes y abre la aplicación con el proyecto montado (reutilizando la ventana activa vía bridge TCP loopback `127.0.0.1:9876` o iniciando una nueva instancia en el escritorio del usuario).
+  - Banner con accesos rápidos: **«Abrir carpeta»** para revelar y seleccionar el `.fcproj` en el Explorador de Windows, y **«Descargar .fcproj»** para descarga directa del proyecto.
+- **Acciones y endpoints adicionales en FastAPI**:
+  - `GET /clips/{clip_id}/filmcraft/download`: descarga directa del `.fcproj` u `.otio`.
+  - `POST /clips/{clip_id}/filmcraft/reveal`: abre el explorador del sistema operativo seleccionando el archivo de proyecto.
+- **Lanzamiento robusto con aceleración GPU en Windows**:
+  - Asociación automática de archivos `.fcproj` en el Registro de Windows (`HKCU\Software\Classes\.fcproj`).
+  - Activación por defecto de `--graphics default` (Vulkan/DX12 en GPU dedicada NVIDIA RTX) y gestión de tokens de control de 64 caracteres hex.
 - **Nuevo paquete `packages/interchange/` (`clipsinterchange`)**:
   - `TimelineExporter` (Protocolo desacoplado de exportación).
   - `FilmCraftExporter`: genera deterministamente proyectos `.fcproj` (`schema_version: 17`) con pistas `V1 Gameplay`, `V2 Cámara`, `V3 Overlays`, `A1 Mic`, `A2 Juego` (con ducking automático) y `A3 SFX`.
