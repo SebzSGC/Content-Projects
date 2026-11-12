@@ -26,9 +26,12 @@ Exportación determinista de clips a proyectos nativos de FilmCraft (`.fcproj`),
 - **Acciones y endpoints adicionales en FastAPI**:
   - `GET /clips/{clip_id}/filmcraft/download`: descarga directa del `.fcproj` u `.otio`.
   - `POST /clips/{clip_id}/filmcraft/reveal`: abre el explorador del sistema operativo seleccionando el archivo de proyecto.
-- **Lanzamiento robusto con aceleración GPU en Windows**:
-  - Asociación automática de archivos `.fcproj` en el Registro de Windows (`HKCU\Software\Classes\.fcproj`).
-  - Activación por defecto de `--graphics default` (Vulkan/DX12 en GPU dedicada NVIDIA RTX) y gestión de tokens de control de 64 caracteres hex.
+- **Lanzamiento robusto con aceleración GPU en Windows y solución de visualización**:
+  - Eliminación de `--graphics default` forzado en el comando de registro y en el lanzador, permitiendo que FilmCraft seleccione automáticamente su backend gráfico óptimo (`DirectX 12` / `Vulkan`) y evitando bloqueos o cuelgues en equipos con GPU híbrida (Intel UHD + NVIDIA GeForce RTX).
+  - Limpieza proactiva de marcadores bloqueantes de pruebas gráficas (`graphics-test.json`, `graphics-start.json`) y carpetas de recuperación (`Recovery`) antes de cada lanzamiento.
+  - Detección precisa de ventana interactiva mediante `FindWindowW` y terminación automática de procesos huérfanos/zombies previos.
+  - Corrección en el Web Studio (`/editor/[clipId]`): se eliminó la apertura forzada simultánea del Explorador de Windows al pulsar «Abrir en FilmCraft», manteniendo la ventana de FilmCraft en primer plano (el usuario dispone del botón «Abrir carpeta» si desea explorarla manualmente).
+  - Asociación automática de archivos `.fcproj` en el Registro de Windows (`HKCU\Software\Classes\.fcproj`) y gestión de tokens de control de 64 caracteres hex.
 - **Nuevo paquete `packages/interchange/` (`clipsinterchange`)**:
   - `TimelineExporter` (Protocolo desacoplado de exportación).
   - `FilmCraftExporter`: genera deterministamente proyectos `.fcproj` (`schema_version: 17`) con pistas `V1 Gameplay`, `V2 Cámara`, `V3 Overlays`, `A1 Mic`, `A2 Juego` (con ducking automático) y `A3 SFX`.
