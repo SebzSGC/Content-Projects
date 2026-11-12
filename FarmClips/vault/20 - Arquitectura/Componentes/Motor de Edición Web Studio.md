@@ -4,7 +4,7 @@ tipo: componente
 estado: vigente
 audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
-actualizado: 2026-11-09
+actualizado: 2026-11-12
 etiquetas: [tipo/componente, area/frontend]
 ---
 
@@ -19,7 +19,7 @@ etiquetas: [tipo/componente, area/frontend]
 
 La app web corre por defecto en `http://127.0.0.1:3040` y consta de las siguientes rutas:
 - `/sessions`: Listado general de grabaciones procesadas, en curso y fallidas, con barra de progreso general.
-- `/sessions/[id]`: Vista de detalle de una sesión, ranking de clips curados con sus puntuaciones y botón de reprocesamiento.
+- `/sessions/[id]`: Vista de detalle de una sesión, ranking de clips curados con sus puntuaciones, selección individual de clips (**Incluido / Incluir**, **Todos / Ninguno**) para exportación global («Abrir proyecto en FilmCraft» y banner con «Abrir carpeta», «Copiar ruta» y descarga `.fcproj` para clips con `EditPlan`) y botón de reprocesamiento.
 - `/editor/[clipId]`: Estudio de edición interactivo de un clip particular.
 - `/settings`: Panel de control dinámico para editar API Keys, seleccionar modelos y configurar límites de presupuesto sin tocar archivos de texto a mano.
 - `/analytics`: Métricas de consumo de tokens, uso de cuota en dólares y tiempos promedio de renderizado.
@@ -81,7 +81,9 @@ flowchart TD
 - [[FastAPI y Orquestador]]
 - [[Contrato EditPlan v2]]
 - [[Cómo usar el Editor Web Studio]]
+- [[Cómo abrir un clip en FilmCraft]]
 - [[Sistema de Estilos y Presets]]
 - [[HU-002 Simplificación y lenguaje claro en toda la plataforma|HU-002]]
 - [[HU-003 Editor interactivo WYSIWYG reencuadre visual y rendimiento 60 fps|HU-003]]
 - [[HU-004 Edición confiable de clips tramos frases y guardado automático|HU-004]]
+- [[HU-011 Exportación global de sesión a FilmCraft con sub-secuencias|HU-011]]

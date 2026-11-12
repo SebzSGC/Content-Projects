@@ -24,6 +24,7 @@ progreso: 100
 - [[HU-008 Abrir en FilmCraft desde el Web Studio]]
 - [[HU-009 Servidor farmclips-mcp y mcp-config]]
 - [[HU-010 Copiloto en Claude Desktop y Antigravity]]
+- [[HU-011 Exportación global de sesión a FilmCraft con sub-secuencias]]
 
 ## 🔗 Relacionado
 - [[ADR-006 Integración con FilmCraft y copiloto MCP]]

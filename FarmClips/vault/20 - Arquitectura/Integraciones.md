@@ -4,7 +4,7 @@ tipo: arquitectura
 estado: vigente
 audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
-actualizado: 2026-11-07
+actualizado: 2026-11-12
 etiquetas: [tipo/arquitectura, area/integraciones]
 ---
 
@@ -121,8 +121,9 @@ Al concluir el renderizado de los clips en 1080p, el sistema despacha una petici
 
 FarmClips se integra nativamente con el editor no lineal de escritorio **FilmCraft** y clientes MCP (Claude Desktop, Antigravity, Cursor):
 
-1. **Exportación determinista de proyectos:**
-   - Transforma el `EditPlan v2` a un proyecto `.fcproj` (`schema_version: 17`) con pistas multicapa (`V1 Gameplay`, `V2 Cámara`, `V3 Overlays`, `A1 Mic`, `A2 Juego`, `A3 SFX`), base de tiempo en ticks racionales (`254,016,000,000` ticks/seg) y marcadores para cada frase.
+1. **Exportación determinista de proyectos (individual y de sesión):**
+   - Por clip: transforma el `EditPlan v2` a un proyecto `.fcproj` (`schema_version: 17`) con pistas multicapa (`V1 Cámara`, `V2 Gameplay`, `V3 Overlays`, `C1 Subtitles`, `A1 Mic`, `A2 Juego`, `A3 SFX`), base de tiempo en ticks racionales (`254,016,000,000` ticks/seg) y marcadores por frase.
+   - Por sesión (`export_session`): genera `session.fcproj` con una secuencia **Master 16:9** del VOD completo y sub-secuencias 9:16 anidadas sobre sus marcas de tiempo exactas para los clips seleccionados.
 2. **Control Loopback y Lanzador:**
    - La API de FarmClips lanza FilmCraft con `--control 9876` o reutiliza la instancia abierta comunicándose vía `filmcraft-cli --bridge 127.0.0.1:9876`.
 3. **Servidor MCP stdio (`farmclips-mcp`):**

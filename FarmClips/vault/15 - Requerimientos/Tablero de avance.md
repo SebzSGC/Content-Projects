@@ -16,7 +16,7 @@ etiquetas: [tipo/tablero, requerimientos]
 <!-- inicio:tablero-automatico (no editar a mano: lo regenera requerimientos.py) -->
 
 > [!abstract] Avance general al 2026-11-12
-> **████████████████████ 98 %** · 9 ítems · 8 hechos · 1 en curso · 0 por hacer · 0 sin iniciar
+> **████████████████████ 99 %** · 10 ítems · 9 hechos · 1 en curso · 0 por hacer · 0 sin iniciar
 > Sin estimaciones en puntos todavía.
 
 ## 🧩 Épicas
@@ -24,7 +24,7 @@ etiquetas: [tipo/tablero, requerimientos]
 | Épica | Avance | Ítems | Fechas |
 |---|---|---|---|
 | [[EP-02 Claridad y Experiencia de Usuario en Web Studio\|EP-02]] Claridad y Experiencia de Usuario en Web Studio | `██████████ 95 %` | 3 | 2026-11-07 → 2026-11-09 |
-| [[EP-03 Edición profesional en FilmCraft con copiloto MCP\|EP-03]] Edición profesional en FilmCraft con copiloto MCP | `██████████ 100 %` | 6 | 2026-11-12 → 2026-11-12 |
+| [[EP-03 Edición profesional en FilmCraft con copiloto MCP\|EP-03]] Edición profesional en FilmCraft con copiloto MCP | `██████████ 100 %` | 7 | 2026-11-12 → 2026-11-12 |
 
 ## 📋 Tablero
 
@@ -45,7 +45,7 @@ _Ninguno._
 ### ⚪ Sin iniciar (0)
 _Ninguno._
 
-### 🟢 Hecho (8)
+### 🟢 Hecho (9)
 | ID | Título | Prioridad | Responsable | Avance | Fin |
 |---|---|---|---|---|---|
 | [[HU-002 Simplificación y lenguaje claro en toda la plataforma\|HU-002]] | Simplificación y lenguaje claro en toda la plataforma | ⬆️ Alta | Equipo FarmClips | `██████████ 100 %` | — |
@@ -54,6 +54,7 @@ _Ninguno._
 | [[HU-006 Exportador EditPlan v2 a FilmCraft\|HU-006]] | Exportador EditPlan v2 a FilmCraft | ⬆️ Alta | Equipo FarmClips | `██████████ 100 %` | 2026-11-12 |
 | [[HU-008 Abrir en FilmCraft desde el Web Studio\|HU-008]] | Abrir en FilmCraft desde el Web Studio | ⬆️ Alta | Equipo FarmClips | `██████████ 100 %` | 2026-11-12 |
 | [[HU-009 Servidor farmclips-mcp y mcp-config\|HU-009]] | Servidor farmclips-mcp y mcp-config | ⬆️ Alta | Equipo FarmClips | `██████████ 100 %` | 2026-11-12 |
+| [[HU-011 Exportación global de sesión a FilmCraft con sub-secuencias\|HU-011]] | Exportación global de sesión a FilmCraft con sub-secuencias | ⬆️ Alta | Equipo FarmClips | `██████████ 100 %` | 2026-11-12 |
 | [[HU-007 Fallback OTIO OpenTimelineIO\|HU-007]] | Fallback OTIO OpenTimelineIO | ➖ Media | Equipo FarmClips | `██████████ 100 %` | 2026-11-12 |
 | [[HU-010 Copiloto en Claude Desktop y Antigravity\|HU-010]] | Copiloto en Claude Desktop y Antigravity | ➖ Media | Equipo FarmClips | `██████████ 100 %` | 2026-11-12 |
 
@@ -72,6 +73,7 @@ gantt
     HU-008 Abrir en FilmCraft desde el Web Studio :done, hu-008, 2026-11-12, 2026-11-12
     HU-009 Servidor farmclips-mcp y mcp-config :done, hu-009, 2026-11-12, 2026-11-12
     HU-010 Copiloto en Claude Desktop y Antigravity :done, hu-010, 2026-11-12, 2026-11-12
+    HU-011 Exportación global de sesión a FilmCraft con sub-secu :done, hu-011, 2026-11-12, 2026-11-12
 ```
 
 > [!info]- Sin fechas planificadas (3)

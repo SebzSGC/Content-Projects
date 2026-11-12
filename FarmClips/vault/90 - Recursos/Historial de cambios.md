@@ -4,7 +4,7 @@ tipo: cambios
 estado: vigente
 audiencia: [todos]
 responsable: Equipo FarmClips
-actualizado: 2026-11-09
+actualizado: 2026-11-12
 etiquetas: [tipo/cambios, area/general]
 ---
 
@@ -13,7 +13,36 @@ etiquetas: [tipo/cambios, area/general]
 > [!abstract] En pocas palabras
 > Registro cronológico de las versiones de FarmClips, nuevas funcionalidades, optimizaciones de rendimiento y ajustes en la arquitectura del sistema.
 
-## [2.7.0] — 2026-11-12 (Versión actual)
+## [2.8.0] — 2026-11-12 (Versión actual)
+
+### 🧩 Exportación Global de Sesión a FilmCraft (Master VOD + Sub-secuencias anidadas)
+
+En lugar de abrir y editar clip por clip en proyectos separados, ahora puedes exportar **toda la sesión en un único proyecto `.fcproj`** eligiendo exactamente qué clips incluir.
+
+#### Qué cambió
+- **Exportador multi-secuencia (`FilmCraftExporter.export_session` en `packages/interchange/clipsinterchange/filmcraft/exporter.py`)**:
+  - Registra una sola vez las fuentes compartidas (`gameplay` y `camera`) en el bin `Footage`.
+  - Genera una **secuencia principal `Master · <Sesión>` (16:9)** con el VOD completo (`V1 VOD Gameplay`, `V2 VOD Cámara (Ref)` desactivada por defecto, `A1 Mic (VOD)` y `A2 Juego (VOD)` sincronizados), marcadores en cada momento destacado y pistas **`V3 Clips (Sub-secuencias)`** (y carriles adicionales si hay solapamientos) donde cada clip seleccionado aparece anidado en sus marcas de tiempo exactas (respetando tramos de *jump cuts*).
+  - Crea dentro de `Sequences/Clips (9:16)` una **sub-secuencia vertical 1080×1920 completa por cada clip** elegido (con cámara, gameplay, ducking, overlays en `clips/<clip_id>/` y subtítulos nativos `C1`) abierta como pestaña en `view.open_sequences`.
+- **Nuevos endpoints en FastAPI (`apps/server/clipsserver/api/routes.py`)**:
+  - `POST /sessions/{session_id}/filmcraft/export`, `POST /sessions/{session_id}/filmcraft/open`, `GET /sessions/{session_id}/filmcraft/download` y `POST /sessions/{session_id}/filmcraft/reveal`, todos con soporte de filtrado opcional `clip_ids`.
+- **Selector de clips y exportación global en `/sessions/[id]` (`apps/web/src/app/sessions/[id]/page.tsx`, `apps/web/src/lib/api/client.ts`)**:
+  - Botones **Incluido / Incluir** en cada tarjeta de clip, atajos **Todos / Ninguno**, botón **«Abrir proyecto en FilmCraft (N)»** y descarga directa `.fcproj`.
+- **Pruebas y contratos**:
+  - Pruebas unitarias e inspección real con `filmcraft-cli.exe` en `tests/test_interchange.py` y pruebas de API en `tests/test_filmcraft_api.py`.
+  - Contratos OpenAPI regenerados en `apps/web/src/lib/api/openapi.json`.
+  - Historia de usuario [[HU-011 Exportación global de sesión a FilmCraft con sub-secuencias|HU-011]] en [[EP-03 Edición profesional en FilmCraft con copiloto MCP]].
+
+#### Por qué
+- Evitar la gestión fragmentada de proyectos 1 a 1 cuando se quieren revisar y editar varios Shorts de una misma grabación dentro del contexto completo del VOD en FilmCraft.
+
+> [!warning] ⚠️ Cambia para ti
+> - En la página de cada sesión (`/sessions/[id]`) ahora puedes marcar o desmarcar los clips que quieras y pulsar **«Abrir proyecto en FilmCraft»** para abrir todo en un solo `.fcproj`.
+> - Dentro de FilmCraft verás la línea completa de tu grabación como secuencia principal, los clips colocados sobre sus marcas de tiempo y una pestaña 9:16 lista para editar por cada clip (también accesible con doble clic sobre el bloque en `V3`).
+
+---
+
+## [2.7.0] — 2026-11-12
 
 ### 🎬 Integración FilmCraft NLE y Copiloto Conversacional MCP
 

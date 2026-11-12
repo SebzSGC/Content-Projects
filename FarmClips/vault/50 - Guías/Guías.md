@@ -4,7 +4,7 @@ tipo: indice
 estado: vigente
 audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
-actualizado: 2026-11-07
+actualizado: 2026-11-12
 etiquetas: [tipo/indice, area/guias]
 ---
 
@@ -23,6 +23,8 @@ etiquetas: [tipo/indice, area/guias]
 | [[Cómo configurar Proveedores de IA]] | Configuración de claves, pruebas de conexión en caliente y presupuesto máximo en USD. | Todos | `#estado/vigente` |
 | [[Cómo usar el Editor Web Studio]] | Uso de la interfaz `/editor/[clipId]`, recorte de silencios, emojis y mezcla de audio. | Creadores / Editores | `#estado/vigente` |
 | [[Cómo exportar y renderizar clips]] | Opciones de calidad (540p vs 1080p), aceleración NVENC y carpetas de salida. | Creadores / Técnicos | `#estado/vigente` |
+| [[Cómo abrir un clip en FilmCraft]] | Exportación de clip individual o sesión completa (Master + sub-secuencias) hacia FilmCraft. | Creadores / Editores | `#estado/vigente` |
+| [[Cómo usar el copiloto con Claude Desktop y Antigravity]] | Configuración MCP para editar clips y timelines en lenguaje natural. | Creadores / Técnicos | `#estado/vigente` |
 | [[Cómo añadir un nuevo Preset de Estilo]] | Creación de archivos JSON de estilos, fuentes personalizadas y colores de subtítulo. | Diseñadores / Técnicos | `#estado/vigente` |
 
 ---
