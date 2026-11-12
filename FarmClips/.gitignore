@@ -24,5 +24,6 @@ __pycache__/
 *service-account*.json
 
 # OS
+*.tsbuildinfo
 .DS_Store
 Thumbs.db
