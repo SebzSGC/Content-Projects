@@ -100,7 +100,7 @@ def register_windows_association(app_path: Path, bridge_port: int = 9876) -> Non
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\.fcproj") as k:
             winreg.SetValueEx(k, "", 0, winreg.REG_SZ, "FilmCraft.Project")
 
-        cmd = f'"{app_path}" --no-recover --control {bridge_port} "%1"'
+        cmd = f'"{app_path}" "%1"'
         with winreg.CreateKey(
             winreg.HKEY_CURRENT_USER,
             r"Software\Classes\FilmCraft.Project\shell\open\command",
@@ -485,42 +485,30 @@ class FilmCraftLauncher:
         # Lanzar la nueva instancia en el desktop interactivo
         if sys.platform == "win32":
             register_windows_association(app, self.bridge_port)
-            ps_cmd = (
-                f"$env:FILMCRAFT_CONTROL_TOKEN='{token}'; "
-                f"Start-Process -FilePath '{app}' -WindowStyle Normal -ArgumentList @('--no-recover', '--control', '{self.bridge_port}', '{project_path}')"
-            )
             launched_ok = False
+            # Mecanismo principal: apertura estándar a través del Shell de Windows (ShellExecute)
             try:
-                subprocess.Popen(
-                    ["powershell.exe", "-NoProfile", "-Command", ps_cmd],
-                    env=child_env,
-                )
+                os.startfile(str(project_path))
                 launched_ok = True
             except Exception:
                 pass
 
             if not launched_ok:
                 try:
-                    os.startfile(str(project_path))
-                except Exception:
-                    args = [
-                        str(app),
-                        "--no-recover",
-                        "--control",
-                        str(self.bridge_port),
-                        str(project_path),
-                    ]
+                    DETACHED = 0x00000008
+                    BREAKAWAY = 0x01000000
                     subprocess.Popen(
-                        args,
-                        env=child_env,
-                        creationflags=0x00000008,
+                        [str(app), str(project_path)],
+                        creationflags=DETACHED | BREAKAWAY,
+                    )
+                except Exception:
+                    subprocess.Popen(
+                        ["cmd.exe", "/c", "start", '""', str(app), str(project_path)],
+                        shell=True,
                     )
         else:
             args = [
                 str(app),
-                "--no-recover",
-                "--control",
-                str(self.bridge_port),
                 str(project_path),
             ]
             subprocess.Popen(
@@ -530,7 +518,6 @@ class FilmCraftLauncher:
             )
 
         _async_bring_to_front()
-        _async_import_captions(project_path, cli, token, self.bridge_port)
 
         return OpenFilmCraftResponse(
             project_path=str(project_path),
