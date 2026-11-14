@@ -20,7 +20,7 @@ etiquetas: [requerimientos, historia, area/frontend, diseno, astryx]
 estado_historia: hecho
 inicio: 2026-11-13
 fin: 2026-11-13
-progreso: 0
+progreso: 100
 fin_real: 2026-11-13
 ---
 

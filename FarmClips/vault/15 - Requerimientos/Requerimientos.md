@@ -39,7 +39,7 @@ flowchart LR
 
 | Épica | Avance | Ítems |
 |---|---|---|
-| [[EP-02 Claridad y Experiencia de Usuario en Web Studio\|EP-02]] Claridad y Experiencia de Usuario en Web Studio | `███████░░░ 72 %` | 4 |
+| [[EP-02 Claridad y Experiencia de Usuario en Web Studio\|EP-02]] Claridad y Experiencia de Usuario en Web Studio | `██████████ 97 %` | 5 |
 | [[EP-03 Edición profesional en FilmCraft con copiloto MCP\|EP-03]] Edición profesional en FilmCraft con copiloto MCP | `██████████ 100 %` | 7 |
 
 ## 🗒️ Notas de origen
@@ -50,6 +50,7 @@ flowchart LR
 - [[2026-11-12 Exportación global de sesión a FilmCraft]]
 - [[2026-11-12 Plan de integracion FilmCraft y copiloto MCP]]
 - [[2026-11-13 Auditoría y rediseño integral del frontend con Astryx]]
+- [[2026-11-13 Selector de cantidad de clips por sesión]]
 
 <!-- fin:indice-automatico -->
 

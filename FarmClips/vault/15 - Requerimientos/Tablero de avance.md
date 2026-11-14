@@ -16,14 +16,14 @@ etiquetas: [tipo/tablero, requerimientos]
 <!-- inicio:tablero-automatico (no editar a mano: lo regenera requerimientos.py) -->
 
 > [!abstract] Avance general al 2026-11-13
-> **██████████████████░░ 90 %** · 11 ítems · 9 hechos · 2 en curso · 0 por hacer · 0 sin iniciar
+> **████████████████████ 99 %** · 12 ítems · 11 hechos · 1 en curso · 0 por hacer · 0 sin iniciar
 > Sin estimaciones en puntos todavía.
 
 ## 🧩 Épicas
 
 | Épica | Avance | Ítems | Fechas |
 |---|---|---|---|
-| [[EP-02 Claridad y Experiencia de Usuario en Web Studio\|EP-02]] Claridad y Experiencia de Usuario en Web Studio | `███████░░░ 72 %` | 4 | 2026-11-07 → 2026-11-13 |
+| [[EP-02 Claridad y Experiencia de Usuario en Web Studio\|EP-02]] Claridad y Experiencia de Usuario en Web Studio | `██████████ 97 %` | 5 | 2026-11-07 → 2026-11-13 |
 | [[EP-03 Edición profesional en FilmCraft con copiloto MCP\|EP-03]] Edición profesional en FilmCraft con copiloto MCP | `██████████ 100 %` | 7 | 2026-11-12 → 2026-11-12 |
 
 ## 📋 Tablero
@@ -31,10 +31,8 @@ etiquetas: [tipo/tablero, requerimientos]
 ### 🔴 Bloqueado (0)
 _Ninguno._
 
-### 🟡 En progreso (1)
-| ID | Título | Prioridad | Responsable | Avance | Fin |
-|---|---|---|---|---|---|
-| [[HU-012 Rediseño integral del Web Studio inspirado en Astryx de Meta\|HU-012]] | Rediseño integral del Web Studio inspirado en Astryx de Meta | ⬆️ Alta | Equipo FarmClips | `░░░░░░░░░░ 0 %` | 2026-11-13 |
+### 🟡 En progreso (0)
+_Ninguno._
 
 ### 🟣 En revisión (1)
 | ID | Título | Prioridad | Responsable | Avance | Fin |
@@ -47,7 +45,7 @@ _Ninguno._
 ### ⚪ Sin iniciar (0)
 _Ninguno._
 
-### 🟢 Hecho (9)
+### 🟢 Hecho (11)
 | ID | Título | Prioridad | Responsable | Avance | Fin |
 |---|---|---|---|---|---|
 | [[HU-002 Simplificación y lenguaje claro en toda la plataforma\|HU-002]] | Simplificación y lenguaje claro en toda la plataforma | ⬆️ Alta | Equipo FarmClips | `██████████ 100 %` | — |
@@ -57,6 +55,8 @@ _Ninguno._
 | [[HU-008 Abrir en FilmCraft desde el Web Studio\|HU-008]] | Abrir en FilmCraft desde el Web Studio | ⬆️ Alta | Equipo FarmClips | `██████████ 100 %` | 2026-11-12 |
 | [[HU-009 Servidor farmclips-mcp y mcp-config\|HU-009]] | Servidor farmclips-mcp y mcp-config | ⬆️ Alta | Equipo FarmClips | `██████████ 100 %` | 2026-11-12 |
 | [[HU-011 Exportación global de sesión a FilmCraft con sub-secuencias\|HU-011]] | Exportación global de sesión a FilmCraft con sub-secuencias | ⬆️ Alta | Equipo FarmClips | `██████████ 100 %` | 2026-11-12 |
+| [[HU-012 Rediseño integral del Web Studio inspirado en Astryx de Meta\|HU-012]] | Rediseño integral del Web Studio inspirado en Astryx de Meta | ⬆️ Alta | Equipo FarmClips | `██████████ 100 %` | 2026-11-13 |
+| [[HU-013 Selección de cantidad de clips a extraer por sesión\|HU-013]] | Selección de cantidad de clips a extraer por sesión | ⬆️ Alta | Equipo FarmClips | `██████████ 100 %` | 2026-11-13 |
 | [[HU-007 Fallback OTIO OpenTimelineIO\|HU-007]] | Fallback OTIO OpenTimelineIO | ➖ Media | Equipo FarmClips | `██████████ 100 %` | 2026-11-12 |
 | [[HU-010 Copiloto en Claude Desktop y Antigravity\|HU-010]] | Copiloto en Claude Desktop y Antigravity | ➖ Media | Equipo FarmClips | `██████████ 100 %` | 2026-11-12 |
 
@@ -77,7 +77,8 @@ gantt
     HU-010 Copiloto en Claude Desktop y Antigravity :done, hu-010, 2026-11-12, 2026-11-12
     HU-011 Exportación global de sesión a FilmCraft con sub-secu :done, hu-011, 2026-11-12, 2026-11-12
     section EP-02 Claridad y Experiencia de Usuario en Web Studio
-    HU-012 Rediseño integral del Web Studio inspirado en Astryx  :active, hu-012, 2026-11-13, 2026-11-13
+    HU-012 Rediseño integral del Web Studio inspirado en Astryx  :done, hu-012, 2026-11-13, 2026-11-13
+    HU-013 Selección de cantidad de clips a extraer por sesión :done, hu-013, 2026-11-13, 2026-11-13
 ```
 
 > [!info]- Sin fechas planificadas (3)

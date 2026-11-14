@@ -13,7 +13,32 @@ etiquetas: [tipo/cambios, area/general]
 > [!abstract] En pocas palabras
 > Registro cronológico de las versiones de FarmClips, nuevas funcionalidades, optimizaciones de rendimiento y ajustes en la arquitectura del sistema.
 
-## [2.9.0] — 2026-11-13 (Versión actual)
+## [2.10.0] — 2026-11-13 (Rama `feat/seleccion-cantidad-clips`)
+
+### 🎯 Selector de cantidad de clips a extraer por sesión (`HU-013`)
+
+Ahora el creador puede elegir exactamente cuántos clips (`1` a `20`) extraer de cada grabación al crear una sesión, al reprocesar una sesión existente o como valor predeterminado en Ajustes.
+
+#### Qué cambió
+- **Persistencia y Orquestación (`db.py`, `api_pool.py`, `engine.py`, `routes.py`)**:
+  - Nueva columna `max_clips INTEGER` en `sessions` con migración automática segura en SQLite.
+  - Propagación de `max_clips` al `task_hash` de curación LLM (`curate_window_cached`) y recorte de clips resueltos y auto-renderizados al límite elegido (`target_clips`).
+  - Nuevos campos en `POST /sessions`, `POST /drive/sessions`, `POST /sessions/{id}/run` (`max_clips`) y `POST /settings` (`auto_render_top_k`).
+- **Web Studio (`/sessions`, `/sessions/[id]`, `/settings`, `client.ts`)**:
+  - Selector con presets rápidos (`3`, `5`, `8`, `10`) e input numérico (`1–20`) en el formulario de nueva sesión.
+  - Badge de objetivo y selector compacto junto a **«Reprocesar gratis»** en el detalle de sesión.
+  - Campo **«Clips por sesión (por defecto)»** en Ajustes.
+  - Historia [[HU-013 Selección de cantidad de clips a extraer por sesión|HU-013]] en [[EP-02 Claridad y Experiencia de Usuario en Web Studio]].
+
+#### Por qué
+- Permitir al usuario adaptar la cantidad de Shorts generados según la duración de su partida y reducir tiempos de renderizado cuando solo necesita unos pocos clips.
+
+> [!warning] ⚠️ Cambia para ti
+> - Al crear una sesión en **Sesiones** o antes de pulsar **Reprocesar gratis**, ahora puedes elegir exactamente cuántos clips (`1–20`) quieres extraer, y definir tu valor predeterminado en **Ajustes**.
+
+---
+
+## [2.9.0] — 2026-11-13
 
 ### 🎨 Rediseño Integral del Web Studio inspirado en Astryx de Meta (`HU-012`)
 
