@@ -62,6 +62,15 @@ import { useAutosave, useUnsavedChangesWarning } from "@/lib/editor/useAutosave"
 import { useEditHistory } from "@/lib/editor/useEditHistory";
 import { useEditorShortcuts } from "@/lib/editor/useEditorShortcuts";
 import { captionGroupText, retextCaptionGroup } from "@/lib/editor/captionText";
+import {
+  AlertDialog,
+  Badge,
+  Kbd,
+  TabList,
+  btnGhost,
+  btnPrimary,
+  btnSecondary,
+} from "@/components/ui";
 
 function dbToLinear(db: number): number {
   return Math.pow(10, db / 20);
@@ -1026,13 +1035,16 @@ export default function ClipEditorPage() {
     }
   }
 
-  async function handleRetime() {
+  const [confirmRetimeOpen, setConfirmRetimeOpen] = useState(false);
+
+  function handleRetime() {
     if (!clip) return;
-    const ok = window.confirm(
-      "Se recalculan la cámara, los cortes y los subtítulos de este clip para el nuevo tramo.\n" +
-        "Tus correcciones de texto y el título se conservan; los ajustes manuales de cámara no."
-    );
-    if (!ok) return;
+    setConfirmRetimeOpen(true);
+  }
+
+  async function executeRetime() {
+    if (!clip) return;
+    setConfirmRetimeOpen(false);
     setRetiming(true);
     setError(null);
     try {
@@ -1190,56 +1202,81 @@ export default function ClipEditorPage() {
       : null;
 
   return (
-    <div className="space-y-5">
-      {/* Studio Header: Save, Undo/Redo & Export */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-[#0E1017] px-5 py-3.5">
-        <div className="flex items-center gap-3">
-          <Link
-            href={`/sessions/${session.id}`}
-            className="inline-flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-300 hover:text-white"
-          >
+    <div className="space-y-4">
+      <AlertDialog
+        open={confirmRetimeOpen}
+        title="¿Actualizar el tramo temporal del clip?"
+        description={
+          <>
+            Se recalcularán la cámara, los cortes rápidos y los subtítulos para el nuevo tramo (
+            <span className="font-mono font-semibold text-amber-300 tabular-nums">
+              {retimeStart.toFixed(1)}s – {retimeEnd.toFixed(1)}s
+            </span>
+            ). Tus correcciones de texto y el título del video se conservan; los ajustes manuales de
+            encuadre de cámara se volverán a centrar.
+          </>
+        }
+        confirmLabel="Recalcular tramo"
+        cancelLabel="Cancelar"
+        tone="warning"
+        isLoading={retiming}
+        onConfirm={executeRetime}
+        onCancel={() => setConfirmRetimeOpen(false)}
+      />
+
+      {/* Astryx Studio NLE Toolbar: Save, Undo/Redo, Shortcuts & Export */}
+      <div className="ax-card flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link href={`/sessions/${session.id}`} className={btnGhost}>
             <ArrowLeft className="h-3.5 w-3.5" /> Volver a la sesión
           </Link>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base font-extrabold text-white">{clip.overlay_title}</h1>
-              <span className="rounded bg-[#FFD400]/15 px-2 py-0.5 font-mono text-[11px] font-bold text-[#FFD400]">
+          <div className="h-5 w-px bg-white/[0.08] hidden sm:block" />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="truncate text-sm sm:text-base font-bold text-slate-50">
+                {clip.overlay_title}
+              </h1>
+              <Badge tone="gold" className="font-mono tabular-nums">
                 Nota {clip.final_score.toFixed(0)}/100
-              </span>
-              {dirty && (
-                <span className="rounded bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
-                  Cambios sin guardar
-                </span>
-              )}
+              </Badge>
+              {dirty && <Badge tone="info">Cambios sin guardar</Badge>}
             </div>
-            <p className="text-[11px] text-zinc-400">
-              Edición visual interactiva en tiempo real · 60 fps · Duración:{" "}
-              <strong>{totalDur.toFixed(1)} s</strong>
-              {statusMsg ? ` · ${statusMsg}` : ""}
+            <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
+              <span>Visor 60 fps</span>
+              <span>·</span>
+              <span className="font-mono text-slate-200 tabular-nums">
+                {totalDur.toFixed(1)} s
+              </span>
+              <span className="hidden md:inline-flex items-center gap-1 text-slate-500">
+                · Play/Pausa <Kbd>Espacio</Kbd>
+              </span>
+              {statusMsg ? <span className="text-amber-300">· {statusMsg}</span> : null}
             </p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Undo / Redo buttons */}
-          <div className="mr-1 flex items-center rounded-xl border border-zinc-800 bg-zinc-950 p-0.5">
+          {/* Undo / Redo buttons with Kbd hints */}
+          <div className="mr-0.5 flex items-center rounded-lg border border-white/[0.09] bg-[#0e1016] p-0.5">
             <button
               type="button"
               onClick={handleUndo}
               disabled={!canUndo}
               title="Deshacer cambio (Ctrl+Z)"
-              className="rounded-lg p-2 text-zinc-300 hover:bg-zinc-800 hover:text-white disabled:opacity-25"
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs text-slate-300 transition hover:bg-white/[0.06] hover:text-white disabled:opacity-30 cursor-pointer"
             >
-              <Undo2 className="h-4 w-4" />
+              <Undo2 className="h-3.5 w-3.5" />
+              <Kbd className="hidden xl:inline-flex">⌘Z</Kbd>
             </button>
             <button
               type="button"
               onClick={handleRedo}
               disabled={!canRedo}
               title="Rehacer cambio (Ctrl+Y)"
-              className="rounded-lg p-2 text-zinc-300 hover:bg-zinc-800 hover:text-white disabled:opacity-25"
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs text-slate-300 transition hover:bg-white/[0.06] hover:text-white disabled:opacity-30 cursor-pointer"
             >
-              <Redo2 className="h-4 w-4" />
+              <Redo2 className="h-3.5 w-3.5" />
+              <Kbd className="hidden xl:inline-flex">⌘Y</Kbd>
             </button>
           </div>
 
@@ -1247,17 +1284,17 @@ export default function ClipEditorPage() {
             type="button"
             onClick={() => handleSave()}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50"
+            className={btnSecondary}
           >
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            Guardar cambios
+            Guardar
           </button>
 
           <button
             type="button"
             onClick={handleOpenInFilmCraft}
             disabled={openingFilmCraft || renderingQuality !== null}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-sky-500/40 bg-sky-500/10 px-3.5 py-2 text-xs font-bold text-sky-400 hover:bg-sky-500/20 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-sky-400/35 bg-sky-500/12 px-3 py-2 text-xs font-semibold text-sky-300 transition-colors hover:border-sky-400/55 hover:bg-sky-500/20 disabled:opacity-50 cursor-pointer"
             title="Exporta y abre el clip como proyecto nativo en FilmCraft"
           >
             {openingFilmCraft ? (
@@ -1272,7 +1309,7 @@ export default function ClipEditorPage() {
             type="button"
             onClick={() => handleRender("draft")}
             disabled={renderingQuality !== null}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-[#39FF14]/40 bg-[#39FF14]/10 px-3.5 py-2 text-xs font-bold text-[#39FF14] hover:bg-[#39FF14]/20 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/35 bg-emerald-500/12 px-3 py-2 text-xs font-semibold text-emerald-300 transition-colors hover:border-emerald-400/55 hover:bg-emerald-500/20 disabled:opacity-50 cursor-pointer"
           >
             {renderingQuality === "draft" ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1286,14 +1323,14 @@ export default function ClipEditorPage() {
             type="button"
             onClick={() => handleRender("final")}
             disabled={renderingQuality !== null}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-[#FFD400] px-4 py-2 text-xs font-extrabold text-black shadow hover:bg-amber-300 disabled:opacity-50"
+            className={btnPrimary}
           >
             {renderingQuality === "final" ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
               <Film className="h-3.5 w-3.5" />
             )}
-            Exportar video final (1080p)
+            Exportar 1080p
           </button>
         </div>
       </div>
@@ -1384,18 +1421,18 @@ export default function ClipEditorPage() {
       )}
 
       {/* Main Studio Grid: Left = 9:16 WYSIWYG Stage, Right = Inspector Tabs */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
         {/* Left Column: Vertical 9:16 Interactive Stage */}
-        <div className="flex flex-col items-center rounded-2xl border border-zinc-800 bg-[#0E1017] p-4 lg:col-span-5">
+        <div className="ax-card flex flex-col items-center p-4 lg:col-span-5">
           <div className="mb-3 flex w-full items-center justify-between">
-            <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-0.5 text-xs">
+            <div className="inline-flex rounded-lg border border-white/[0.08] bg-[#0e1016] p-0.5 text-xs">
               <button
                 type="button"
                 onClick={() => setPreviewSource("live")}
-                className={`rounded-md px-3 py-1 font-semibold transition ${
+                className={`rounded-md px-3 py-1 font-semibold transition cursor-pointer ${
                   previewSource === "live"
-                    ? "bg-[#FFD400] text-black"
-                    : "text-zinc-400 hover:text-white"
+                    ? "bg-amber-400 text-slate-950"
+                    : "text-slate-400 hover:text-white"
                 }`}
               >
                 Vista interactiva en vivo
@@ -1409,10 +1446,10 @@ export default function ClipEditorPage() {
                     camVideoRef.current?.pause();
                     setPreviewSource("rendered");
                   }}
-                  className={`rounded-md px-3 py-1 font-semibold transition ${
+                  className={`rounded-md px-3 py-1 font-semibold transition cursor-pointer ${
                     previewSource === "rendered"
-                      ? "bg-[#39FF14] text-black"
-                      : "text-zinc-400 hover:text-white"
+                      ? "bg-emerald-400 text-slate-950"
+                      : "text-slate-400 hover:text-white"
                   }`}
                 >
                   Video exportado (MP4)
@@ -1423,7 +1460,7 @@ export default function ClipEditorPage() {
             {renderedUrl && (
               <a
                 href={`${API_PREFIX}/clips/${clip.id}/file?quality=final&download=true`}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-300 hover:text-[#FFD400]"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-slate-300 hover:text-amber-300"
               >
                 <Download className="h-3.5 w-3.5" /> Descargar MP4
               </a>
@@ -1647,53 +1684,39 @@ export default function ClipEditorPage() {
         </div>
 
         {/* Right Column: Declarative EditPlan v2 Inspector & Layout Templates */}
-        <div className="flex flex-col rounded-2xl border border-zinc-800 bg-[#0E1017] p-5 lg:col-span-7">
-          <div className="mb-4 flex flex-wrap gap-1.5 border-b border-zinc-800 pb-3 text-xs font-bold">
-            <button
-              type="button"
-              onClick={() => setActiveTab("captions")}
-              className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 transition ${
-                activeTab === "captions"
-                  ? "bg-[#FFD400] text-black"
-                  : "bg-zinc-900 text-zinc-300 hover:text-white"
-              }`}
-            >
-              <Type className="h-3.5 w-3.5" /> Subtítulos y Emojis ({plan.captions.groups.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("camera")}
-              className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 transition ${
-                activeTab === "camera"
-                  ? "bg-[#FFD400] text-black"
-                  : "bg-zinc-900 text-zinc-300 hover:text-white"
-              }`}
-            >
-              <Camera className="h-3.5 w-3.5" /> Disposición y Cámara
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("cuts")}
-              className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 transition ${
-                activeTab === "cuts"
-                  ? "bg-[#FFD400] text-black"
-                  : "bg-zinc-900 text-zinc-300 hover:text-white"
-              }`}
-            >
-              <Scissors className="h-3.5 w-3.5" /> Mezclador de Sonido y Ritmo
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("json")}
-              className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 transition ${
-                activeTab === "json"
-                  ? "bg-[#FFD400] text-black"
-                  : "bg-zinc-900 text-zinc-300 hover:text-white"
-              }`}
-            >
-              Datos avanzados
-            </button>
-          </div>
+        <div className="ax-card flex flex-col overflow-hidden lg:col-span-7">
+          <TabList
+            value={activeTab}
+            onChange={setActiveTab}
+            className="mb-4 px-4 pt-2"
+            tabs={[
+              {
+                value: "captions",
+                label: "Subtítulos y Emojis",
+                icon: <Type className="h-3.5 w-3.5" />,
+                badge: (
+                  <span className="rounded bg-white/[0.08] px-1.5 py-0.5 font-mono text-[10px] text-slate-300 tabular-nums">
+                    {plan.captions.groups.length}
+                  </span>
+                ),
+              },
+              {
+                value: "camera",
+                label: "Disposición y Cámara",
+                icon: <Camera className="h-3.5 w-3.5" />,
+              },
+              {
+                value: "cuts",
+                label: "Mezclador de Sonido y Ritmo",
+                icon: <Scissors className="h-3.5 w-3.5" />,
+              },
+              {
+                value: "json",
+                label: "Datos avanzados",
+              },
+            ]}
+          />
+          <div className="px-5 pb-5">
 
           {/* TAB 1: CAPTIONS & EMOJIS */}
           {activeTab === "captions" && (
@@ -2424,10 +2447,11 @@ export default function ClipEditorPage() {
 
           {/* TAB 4: RAW EDITPLAN V2 JSON */}
           {activeTab === "json" && (
-            <pre className="max-h-[580px] overflow-auto rounded-xl border border-zinc-800 bg-zinc-950 p-4 font-mono text-[11px] leading-relaxed text-zinc-300">
+            <pre className="max-h-[580px] overflow-auto rounded-xl border border-white/[0.08] bg-[#0e1016] p-4 font-mono text-[11px] leading-relaxed text-slate-300">
               {JSON.stringify(plan, null, 2)}
             </pre>
           )}
+          </div>
         </div>
       </div>
     </div>

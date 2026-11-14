@@ -118,6 +118,9 @@ export default function SettingsPage() {
   // Per-provider test connection state
   const [testingProvider, setTestingProvider] = useState<Record<string, boolean>>({});
   const [testResults, setTestResults] = useState<Record<string, TestConnectionResult>>({});
+  const [activeSection, setActiveSection] = useState<
+    "all" | "stt" | "llm" | "budget" | "drive" | "filmcraft"
+  >("all");
 
   const showToast = useCallback((kind: "ok" | "err", text: string) => {
     setToast({ kind, text });
@@ -411,15 +414,15 @@ export default function SettingsPage() {
   const budgetRatio = Math.min(1, spent / Math.max(0.01, maxBudgetUsd || 1));
 
   return (
-    <main className="mx-auto max-w-[1180px] px-4 py-8 sm:px-6">
+    <div className="space-y-6">
       {/* Toast Flotante */}
       {toast && (
         <div
           role="status"
-          className={`fixed bottom-6 right-6 z-50 flex max-w-md items-center gap-2.5 rounded-2xl border px-4 py-3 text-xs font-bold shadow-2xl backdrop-blur-xl transition-all ${
+          className={`ax-popover fixed bottom-6 right-6 z-50 flex max-w-md items-center gap-2.5 px-4 py-3 text-xs font-semibold transition-all ${
             toast.kind === "ok"
-              ? "border-emerald-400/40 bg-slate-900/95 text-emerald-200"
-              : "border-rose-400/40 bg-slate-900/95 text-rose-200"
+              ? "border-emerald-400/40 text-emerald-200"
+              : "border-rose-400/40 text-rose-200"
           }`}
         >
           {toast.kind === "ok" ? (
@@ -432,20 +435,16 @@ export default function SettingsPage() {
       )}
 
       {/* Encabezado */}
-      <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-400">
-            <Link href="/sessions" className="inline-flex items-center gap-1 transition hover:text-slate-100">
-              <ArrowLeft className="h-3.5 w-3.5" /> Volver a Sesiones
-            </Link>
-            <span>/</span>
-            <span className="text-amber-300">Ajustes</span>
+          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-amber-400/90">
+            <Sliders className="h-3.5 w-3.5" /> Configuración del estudio
           </div>
-          <h1 className="mt-1.5 text-2xl font-black tracking-tight text-slate-50 sm:text-3xl">
+          <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-50 sm:text-2xl">
             Ajustes de tu Estudio
           </h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Elige qué servicios usar para crear tus clips, define tu límite de gasto y conecta Google Drive.
+          <p className="mt-1 text-xs sm:text-sm text-slate-400">
+            Elige qué servicios usar para crear tus clips, define tu límite de gasto y conecta Google Drive o FilmCraft NLE.
             {settings?.env_path && (
               <InfoTip label="Guardado inmediato">
                 Tus cambios se aplican al instante sin necesidad de reiniciar la aplicación.
@@ -454,21 +453,21 @@ export default function SettingsPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <button type="button" onClick={loadAll} disabled={loading} className={btnSecondary}>
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
             Recargar
           </button>
 
           <button type="submit" form="settings-form" disabled={saving || loading} className={btnPrimary}>
-            {saving ? <SoftSpinner className="h-4 w-4" onAccent /> : <Save className="h-4 w-4" />}
+            {saving ? <SoftSpinner className="h-3.5 w-3.5" onAccent /> : <Save className="h-3.5 w-3.5" />}
             {saving ? "Guardando..." : "Guardar cambios"}
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="mb-6 flex items-center gap-2.5 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm font-medium text-rose-200">
+        <div className="mb-6 flex items-center gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs sm:text-sm font-medium text-rose-200">
           <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
           <span>{error}</span>
         </div>
@@ -480,9 +479,92 @@ export default function SettingsPage() {
           Cargando tus ajustes...
         </GlassCard>
       ) : (
-        <form id="settings-form" onSubmit={handleSave} className="space-y-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[15.5rem_minmax(0,1fr)]">
+          {/* Astryx settings-sidebar Navigation Rail */}
+          <aside className="lg:sticky lg:top-20 lg:self-start">
+            <GlassCard className="p-2.5 space-y-1">
+              <div className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Categorías
+              </div>
+              {[
+                {
+                  id: "all" as const,
+                  label: "Todas las secciones",
+                  sub: "Vista completa",
+                  icon: Sliders,
+                },
+                {
+                  id: "stt" as const,
+                  label: "1. Voz y Subtítulos",
+                  sub: sttPrimary,
+                  icon: Mic,
+                },
+                {
+                  id: "llm" as const,
+                  label: "2. Curación IA",
+                  sub: llmPrimary,
+                  icon: Cpu,
+                },
+                {
+                  id: "budget" as const,
+                  label: "3. Presupuesto y Avisos",
+                  sub: `$${Number(maxBudgetUsd || 0).toFixed(2)} USD`,
+                  icon: DollarSign,
+                },
+                {
+                  id: "drive" as const,
+                  label: "4. Google Drive",
+                  sub:
+                    driveStatus?.oauth_connected || settings?.drive_oauth_connected
+                      ? "Conectado"
+                      : driveMode,
+                  icon: FolderSync,
+                },
+                {
+                  id: "filmcraft" as const,
+                  label: "5. FilmCraft & MCP",
+                  sub: filmcraftStatus?.installed ? "Instalado" : "Verificar",
+                  icon: Wifi,
+                },
+              ].map((cat) => {
+                const Icon = cat.icon;
+                const active = activeSection === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setActiveSection(cat.id)}
+                    className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors duration-150 cursor-pointer ${
+                      active
+                        ? "bg-amber-400/12 text-amber-300 font-semibold"
+                        : "text-slate-300 hover:bg-white/[0.04] hover:text-white"
+                    }`}
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Icon
+                        className={`h-3.5 w-3.5 shrink-0 ${
+                          active ? "text-amber-300" : "text-slate-400"
+                        }`}
+                      />
+                      <span className="truncate">{cat.label}</span>
+                    </span>
+                    <span className="shrink-0 rounded bg-white/[0.05] px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
+                      {cat.sub}
+                    </span>
+                  </button>
+                );
+              })}
+            </GlassCard>
+          </aside>
+
+          <form id="settings-form" onSubmit={handleSave} className="space-y-6">
           {/* 1. SECCIÓN VOZ A TEXTO (STT) */}
-          <GlassCard as="section" className="p-6 sm:p-7">
+          <GlassCard
+            as="section"
+            className={`p-5 sm:p-6 ${
+              activeSection !== "all" && activeSection !== "stt" ? "hidden" : ""
+            }`}
+          >
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
               <div className="flex items-center gap-3.5">
                 <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-300">
@@ -660,7 +742,12 @@ export default function SettingsPage() {
           </GlassCard>
 
           {/* 2. SECCIÓN CURACIÓN NARRATIVA (LLM) */}
-          <GlassCard as="section" className="p-6 sm:p-7">
+          <GlassCard
+            as="section"
+            className={`p-5 sm:p-6 ${
+              activeSection !== "all" && activeSection !== "llm" ? "hidden" : ""
+            }`}
+          >
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
               <div className="flex items-center gap-3.5">
                 <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-400/15 text-amber-300">
@@ -883,7 +970,12 @@ export default function SettingsPage() {
           </GlassCard>
 
           {/* 3. SECCIÓN PRESUPUESTO Y LÍMITES */}
-          <GlassCard as="section" className="p-6 sm:p-7">
+          <GlassCard
+            as="section"
+            className={`p-5 sm:p-6 ${
+              activeSection !== "all" && activeSection !== "budget" ? "hidden" : ""
+            }`}
+          >
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
               <div className="flex items-center gap-3.5">
                 <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-400/15 text-amber-300">
@@ -965,7 +1057,12 @@ export default function SettingsPage() {
           </GlassCard>
 
           {/* 4. SECCIÓN CONEXIÓN DIRECTA A GOOGLE DRIVE (OAUTH 2.0 / SERVICIO / LOCAL) */}
-          <GlassCard as="section" className="p-6 sm:p-7">
+          <GlassCard
+            as="section"
+            className={`p-5 sm:p-6 ${
+              activeSection !== "all" && activeSection !== "drive" ? "hidden" : ""
+            }`}
+          >
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
               <div className="flex items-center gap-3.5">
                 <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-400/15 text-sky-300">
@@ -1166,7 +1263,12 @@ export default function SettingsPage() {
           </GlassCard>
 
           {/* 5. SECCIÓN INTEGRACIÓN FILMCRAFT NLE */}
-          <GlassCard as="section" className="p-6 sm:p-7">
+          <GlassCard
+            as="section"
+            className={`p-5 sm:p-6 ${
+              activeSection !== "all" && activeSection !== "filmcraft" ? "hidden" : ""
+            }`}
+          >
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
               <div className="flex items-center gap-3.5">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-500/15 text-sky-400 border border-sky-500/30">
@@ -1236,27 +1338,28 @@ export default function SettingsPage() {
           </GlassCard>
 
           {/* Barra inferior de acciones */}
-          <GlassCard className="flex flex-wrap items-center justify-between gap-4 px-6 py-4">
+          <GlassCard className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
             <div className="text-xs text-slate-400">
               Las claves que dejes en blanco conservarán la que ya tenías guardada.
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
               <button
                 type="button"
                 onClick={() => handleTestConnection("fixture")}
                 className={btnSecondary}
               >
-                <Wifi className="h-4 w-4" />
+                <Wifi className="h-3.5 w-3.5" />
                 Probar modo sin internet
               </button>
               <button type="submit" disabled={saving} className={btnPrimary}>
-                {saving ? <SoftSpinner className="h-4 w-4" onAccent /> : <Save className="h-4 w-4" />}
+                {saving ? <SoftSpinner className="h-3.5 w-3.5" onAccent /> : <Save className="h-3.5 w-3.5" />}
                 {saving ? "Guardando..." : "Guardar cambios"}
               </button>
             </div>
           </GlassCard>
         </form>
+        </div>
       )}
-    </main>
+    </div>
   );
 }

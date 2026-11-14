@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -50,10 +50,14 @@ import {
   Badge,
   DetailList,
   Disclosure,
+  EmptyState,
   GlassCard,
   InfoTip,
+  SectionHeader,
   Segmented,
   SoftSpinner,
+  StatusDot,
+  btnGhost,
   btnPrimary,
   btnSecondary,
   inputBase,
@@ -77,13 +81,32 @@ function stateBadge(state: string) {
   );
 }
 
-function FilePick({ label, file, onPick }: { label: string; file: File | null; onPick: (f: File | null) => void }) {
+function FilePick({
+  label,
+  hint,
+  file,
+  onPick,
+}: {
+  label: string;
+  hint: string;
+  file: File | null;
+  onPick: (f: File | null) => void;
+}) {
   return (
-    <label className="group flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-white/15 bg-slate-900/50 p-5 text-center transition-all duration-300 hover:scale-[1.01] hover:border-amber-300/40 hover:bg-slate-900/80">
-      <Upload className="h-5 w-5 text-slate-500 transition-colors duration-300 group-hover:text-amber-300" />
-      <span className="text-sm font-bold text-slate-200">{label}</span>
-      <span className="max-w-full truncate text-xs text-slate-400">{file ? file.name : "Haz clic para elegir el archivo"}</span>
-      <input type="file" accept="video/*" className="hidden" onChange={(e) => onPick(e.target.files?.[0] ?? null)} />
+    <label className="group flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/[0.14] bg-[#0e1016] p-5 text-center transition-colors duration-150 hover:border-amber-400/45 hover:bg-[#12151e]">
+      <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-slate-400 transition-colors duration-150 group-hover:border-amber-400/30 group-hover:text-amber-300">
+        <Upload className="h-4 w-4" />
+      </span>
+      <span className="text-xs sm:text-sm font-semibold text-slate-100">{label}</span>
+      <span className="max-w-full truncate font-mono text-[11px] text-slate-400">
+        {file ? file.name : hint}
+      </span>
+      <input
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={(e) => onPick(e.target.files?.[0] ?? null)}
+      />
     </label>
   );
 }
@@ -101,6 +124,10 @@ export default function SessionsPage() {
   const [testingWebhook, setTestingWebhook] = useState(false);
   const [maintMsg, setMaintMsg] = useState<string | null>(null);
   const [liveMessages, setLiveMessages] = useState<Record<string, string>>({});
+
+  // Session filter & search
+  const [sessionFilter, setSessionFilter] = useState<"all" | "running" | "delivered" | "failed">("all");
+  const [sessionQuery, setSessionQuery] = useState("");
 
   // Form state
   const [mode, setMode] = useState<"local" | "upload" | "drive">("local");
@@ -138,33 +165,32 @@ export default function SessionsPage() {
     }
   }, []);
 
-  const loadDriveFolder = useCallback(
-    async (folderId?: string, query?: string) => {
-      setLoadingDriveFiles(true);
-      setDriveBrowserError(null);
-      try {
-        const res = await fetchDriveFiles(folderId, query);
-        setDriveBrowser(res);
-        setDriveFolderId(res.folder_id);
-        if (res.detected_pair) {
-          setDriveGameplay(res.detected_pair.gameplay);
-          setDriveCamera(res.detected_pair.camera);
-          setTitle((prev) =>
-            prev.trim()
-              ? prev
-              : res.detected_pair?.recording_name && res.detected_pair.recording_name !== "Raíz local" && res.detected_pair.recording_name !== "Mi unidad"
+  const loadDriveFolder = useCallback(async (folderId?: string, query?: string) => {
+    setLoadingDriveFiles(true);
+    setDriveBrowserError(null);
+    try {
+      const res = await fetchDriveFiles(folderId, query);
+      setDriveBrowser(res);
+      setDriveFolderId(res.folder_id);
+      if (res.detected_pair) {
+        setDriveGameplay(res.detected_pair.gameplay);
+        setDriveCamera(res.detected_pair.camera);
+        setTitle((prev) =>
+          prev.trim()
+            ? prev
+            : res.detected_pair?.recording_name &&
+                res.detected_pair.recording_name !== "Raíz local" &&
+                res.detected_pair.recording_name !== "Mi unidad"
               ? res.detected_pair.recording_name
               : prev
-          );
-        }
-      } catch (err) {
-        setDriveBrowserError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setLoadingDriveFiles(false);
+        );
       }
-    },
-    []
-  );
+    } catch (err) {
+      setDriveBrowserError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoadingDriveFiles(false);
+    }
+  }, []);
 
   useEffect(() => {
     reload();
@@ -224,7 +250,9 @@ export default function SessionsPage() {
         const gp = driveGameplay ?? driveBrowser?.detected_pair?.gameplay ?? null;
         const cm = driveCamera ?? driveBrowser?.detected_pair?.camera ?? null;
         if (!gp || !cm) {
-          throw new Error("Selecciona los videos de Juego (gameplay) y Cámara desde el explorador de Google Drive.");
+          throw new Error(
+            "Selecciona los videos de Juego (gameplay) y Cámara desde el explorador de Google Drive."
+          );
         }
         if (gp.id === cm.id) {
           throw new Error("El video de gameplay y el de cámara deben ser archivos distintos.");
@@ -250,7 +278,10 @@ export default function SessionsPage() {
         if (!gameplayFile || !cameraFile) {
           throw new Error("Selecciona ambos archivos: gameplay.mp4 y camara.mp4.");
         }
-        const [upGp, upCm] = await Promise.all([uploadVideoFile(gameplayFile), uploadVideoFile(cameraFile)]);
+        const [upGp, upCm] = await Promise.all([
+          uploadVideoFile(gameplayFile),
+          uploadVideoFile(cameraFile),
+        ]);
         gp = upGp.path;
         cm = upCm.path;
       } else if (!gp || !cm) {
@@ -333,57 +364,103 @@ export default function SessionsPage() {
   }
 
   const activeCount = sessions.filter((s) => sessionSteps(s).running).length;
+  const deliveredCount = sessions.filter((s) => s.state === "DELIVERED").length;
+  const failedCount = sessions.filter((s) => s.state === "FAILED").length;
+
+  const filteredSessions = useMemo(() => {
+    return sessions.filter((s) => {
+      const steps = sessionSteps(s);
+      if (sessionFilter === "running" && !steps.running) return false;
+      if (sessionFilter === "delivered" && s.state !== "DELIVERED") return false;
+      if (sessionFilter === "failed" && s.state !== "FAILED") return false;
+      if (sessionQuery.trim()) {
+        const q = sessionQuery.trim().toLowerCase();
+        const inTitle = s.title.toLowerCase().includes(q);
+        const inGame = (s.detected_game ?? "").toLowerCase().includes(q);
+        const inId = s.id.toLowerCase().includes(q);
+        if (!inTitle && !inGame && !inId) return false;
+      }
+      return true;
+    });
+  }, [sessions, sessionFilter, sessionQuery]);
 
   return (
-    <div className="space-y-8">
-      {/* Header ------------------------------------------------------------ */}
-      <header className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="mb-2 inline-flex items-center gap-2 rounded-full bg-amber-400/10 px-3 py-1 text-xs font-bold text-amber-300">
-            <Gamepad2 className="h-3.5 w-3.5" /> Estudio de clips
-          </p>
-          <h1 className="flex items-center gap-2 text-3xl font-black tracking-tight text-slate-50 sm:text-4xl">
+    <div className="space-y-6">
+      {/* Studio Workspace Header */}
+      <SectionHeader
+        eyebrow={
+          <>
+            <Gamepad2 className="h-3.5 w-3.5" /> Estudio de producción · 9:16 Vertical
+          </>
+        }
+        title={
+          <span className="inline-flex items-center gap-2">
             Tus partidas, listas para Shorts
             <InfoTip label="¿Por qué es rápido y económico?">
               Tus videos pesados nunca suben a internet: se editan en tu propio equipo. A la nube solo enviamos una pista
               de voz muy ligera para entender qué dijiste y elegir los mejores momentos.
             </InfoTip>
-          </h1>
-          <p className="mt-2 max-w-xl text-base text-slate-400">
-            Sube el video del juego y el de tu cámara: nosotros encontramos las mejores jugadas, centramos tu rostro y
-            agregamos subtítulos dinámicos automáticamente.
-          </p>
-        </div>
-        <button type="button" onClick={fillGoldenPaths} className={btnSecondary}>
-          <Sparkles className="h-4 w-4 text-amber-300" /> Probar con video de ejemplo
-        </button>
-      </header>
+          </span>
+        }
+        description="Combina el video del juego y el de tu cámara: detectamos las jugadas clave, centramos tu rostro y generamos subtítulos dinámicos automáticamente."
+        actions={
+          <button type="button" onClick={fillGoldenPaths} className={btnSecondary}>
+            <Sparkles className="h-3.5 w-3.5 text-amber-300" /> Probar con video de ejemplo
+          </button>
+        }
+      />
 
       {error && (
-        <div className="rounded-3xl border border-rose-400/20 bg-rose-500/10 px-5 py-3 text-sm font-semibold text-rose-200">{error}</div>
+        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs sm:text-sm font-medium text-rose-200">
+          {error}
+        </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        {/* New session ----------------------------------------------------- */}
-        <GlassCard as="form" onSubmit={handleCreateSession} className="space-y-5 p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* Top Grid: Create Session Form + Google Drive Status Panel */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_21rem]">
+        {/* New Session Card */}
+        <GlassCard as="form" onSubmit={handleCreateSession} className="space-y-5 p-5 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] pb-4">
             <div>
-              <h2 className="text-lg font-extrabold text-slate-50">Crear nueva sesión</h2>
-              <p className="text-xs text-slate-400">Elige de dónde quieres tomar el video del juego y el de tu cámara.</p>
+              <h2 className="text-base font-bold text-slate-50">Crear nueva sesión</h2>
+              <p className="text-xs text-slate-400">
+                Elige el origen de tus grabaciones de juego y cámara.
+              </p>
             </div>
             <Segmented
               value={mode}
               onChange={setMode}
               options={[
-                { value: "local", label: <><HardDrive className="h-3.5 w-3.5" /> En tu PC</> },
-                { value: "upload", label: <><Upload className="h-3.5 w-3.5" /> Subir archivos</> },
-                { value: "drive", label: <><FolderSync className="h-3.5 w-3.5" /> Google Drive</> },
+                {
+                  value: "local",
+                  label: (
+                    <>
+                      <HardDrive className="h-3.5 w-3.5" /> En tu PC
+                    </>
+                  ),
+                },
+                {
+                  value: "upload",
+                  label: (
+                    <>
+                      <Upload className="h-3.5 w-3.5" /> Subir archivos
+                    </>
+                  ),
+                },
+                {
+                  value: "drive",
+                  label: (
+                    <>
+                      <FolderSync className="h-3.5 w-3.5" /> Google Drive
+                    </>
+                  ),
+                },
               ]}
             />
           </div>
 
-          <label className="block space-y-2">
-            <span className="flex items-center gap-1 text-sm font-bold text-slate-200">
+          <label className="block space-y-1.5">
+            <span className="flex items-center gap-1 text-xs sm:text-sm font-semibold text-slate-200">
               ¿Qué jugaste en esta grabación?
               <InfoTip>
                 Escribir el nombre del juego nos permite reconocer palabras propias de la partida (como armas, mapas o
@@ -398,10 +475,11 @@ export default function SessionsPage() {
               className={inputBase}
             />
             {keytermsInfo && (
-              <span className="flex flex-wrap items-center gap-1.5">
+              <span className="flex flex-wrap items-center gap-1.5 pt-0.5">
                 {keytermsInfo.detected_game ? (
                   <Badge tone="success">
-                    <Gamepad2 className="h-3 w-3" /> Vocabulario de {keytermsInfo.detected_game.toUpperCase()} activado
+                    <Gamepad2 className="h-3 w-3" /> Vocabulario de{" "}
+                    {keytermsInfo.detected_game.toUpperCase()} activado
                   </Badge>
                 ) : (
                   <Badge>Vocabulario general de gaming</Badge>
@@ -417,10 +495,12 @@ export default function SessionsPage() {
 
           {mode === "local" ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <label className="block space-y-2">
-                <span className="flex items-center gap-1 text-sm font-bold text-slate-200">
+              <label className="block space-y-1.5">
+                <span className="flex items-center gap-1 text-xs sm:text-sm font-semibold text-slate-200">
                   Video del juego
-                  <InfoTip>La grabación de tu pantalla (horizontal) donde se ven las jugadas y se oye el juego.</InfoTip>
+                  <InfoTip>
+                    La grabación de tu pantalla (horizontal) donde se ven las jugadas y se oye el juego.
+                  </InfoTip>
                 </span>
                 <input
                   type="text"
@@ -430,10 +510,12 @@ export default function SessionsPage() {
                   className={`${inputBase} font-mono text-xs`}
                 />
               </label>
-              <label className="block space-y-2">
-                <span className="flex items-center gap-1 text-sm font-bold text-slate-200">
+              <label className="block space-y-1.5">
+                <span className="flex items-center gap-1 text-xs sm:text-sm font-semibold text-slate-200">
                   Video de tu cámara
-                  <InfoTip>La grabación de tu webcam con tu voz para destacar tus reacciones arriba del juego.</InfoTip>
+                  <InfoTip>
+                    La grabación de tu webcam con tu voz para destacar tus reacciones arriba del juego.
+                  </InfoTip>
                 </span>
                 <input
                   type="text"
@@ -446,69 +528,92 @@ export default function SessionsPage() {
             </div>
           ) : mode === "upload" ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <FilePick label="Video del juego" file={gameplayFile} onPick={setGameplayFile} />
-              <FilePick label="Video de tu cámara" file={cameraFile} onPick={setCameraFile} />
+              <FilePick
+                label="Video del juego (Gameplay)"
+                hint="Haz clic para elegir gameplay.mp4"
+                file={gameplayFile}
+                onPick={setGameplayFile}
+              />
+              <FilePick
+                label="Video de tu cámara (Facecam)"
+                hint="Haz clic para elegir camara.mp4"
+                file={cameraFile}
+                onPick={setCameraFile}
+              />
             </div>
           ) : (
-            <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-900/50 p-4">
-              {/* Drive Explorer Header & Breadcrumbs */}
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-1 text-xs font-semibold text-slate-300">
-                  {(driveBrowser?.breadcrumbs ?? [{ id: "root", name: "Drive" }]).map((bc, idx, arr) => (
-                    <React.Fragment key={bc.id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDriveSearch("");
-                          setDriveFolderId(bc.id);
-                        }}
-                        className={`rounded-lg px-2 py-1 transition cursor-pointer ${
-                          idx === arr.length - 1
-                            ? "bg-amber-400/15 font-extrabold text-amber-300"
-                            : "text-slate-400 hover:bg-white/5 hover:text-slate-100"
-                        }`}
-                      >
-                        {bc.name}
-                      </button>
-                      {idx < arr.length - 1 && <ChevronRight className="h-3.5 w-3.5 text-slate-600" />}
-                    </React.Fragment>
-                  ))}
+            <div className="ax-card-muted space-y-3.5 p-4">
+              {/* Drive Explorer Toolbar & Breadcrumbs */}
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-3">
+                <div className="flex flex-wrap items-center gap-1 text-xs font-medium text-slate-300">
+                  {(driveBrowser?.breadcrumbs ?? [{ id: "root", name: "Drive" }]).map(
+                    (bc, idx, arr) => (
+                      <React.Fragment key={bc.id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDriveSearch("");
+                            setDriveFolderId(bc.id);
+                          }}
+                          className={`rounded-md px-2 py-1 transition cursor-pointer ${
+                            idx === arr.length - 1
+                              ? "bg-amber-400/15 font-semibold text-amber-300"
+                              : "text-slate-400 hover:bg-white/[0.06] hover:text-slate-100"
+                          }`}
+                        >
+                          {bc.name}
+                        </button>
+                        {idx < arr.length - 1 && (
+                          <ChevronRight className="h-3.5 w-3.5 text-slate-600" />
+                        )}
+                      </React.Fragment>
+                    )
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
                   <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
                     <input
                       type="text"
                       value={driveSearch}
                       onChange={(e) => setDriveSearch(e.target.value)}
-                      placeholder="Buscar carpeta o video…"
-                      className="w-44 rounded-full border border-white/10 bg-slate-950/70 py-1.5 pl-8 pr-3 text-xs text-slate-200 placeholder:text-slate-500 focus:border-amber-300/60 focus:outline-none"
+                      placeholder="Filtrar carpeta o video…"
+                      className="w-48 rounded-lg border border-white/[0.09] bg-[#0b0d11] py-1.5 pl-8 pr-3 text-xs text-slate-200 placeholder:text-slate-500 focus:border-amber-400/60 focus:outline-none"
                     />
                   </div>
                   <button
                     type="button"
                     onClick={() => loadDriveFolder(driveFolderId, driveSearch)}
                     disabled={loadingDriveFiles}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 cursor-pointer"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-white/[0.09] bg-white/[0.04] text-slate-300 transition hover:bg-white/[0.08] cursor-pointer"
                     title="Actualizar carpeta"
                   >
-                    <RefreshCw className={`h-3.5 w-3.5 ${loadingDriveFiles ? "animate-spin" : ""}`} />
+                    <RefreshCw
+                      className={`h-3.5 w-3.5 ${loadingDriveFiles ? "animate-spin" : ""}`}
+                    />
                   </button>
                 </div>
               </div>
 
               {/* OAuth Connection Prompt if disconnected */}
               {drive?.mode === "oauth" && !drive.oauth_connected && (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300/30 bg-amber-400/10 px-4 py-3 text-xs text-amber-200">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3.5 py-2.5 text-xs text-amber-200">
                   <span>Tu cuenta de Google Drive OAuth 2.0 aún no está vinculada.</span>
                   <div className="flex items-center gap-2">
                     {drive.client_configured ? (
-                      <button type="button" onClick={handleConnectDriveOAuth} className={`${btnPrimary} !px-3.5 !py-1.5 !text-xs`}>
+                      <button
+                        type="button"
+                        onClick={handleConnectDriveOAuth}
+                        className={`${btnPrimary} !px-3 !py-1.5 !text-xs`}
+                      >
                         <Link2 className="h-3.5 w-3.5" /> Conectar Google Drive
                       </button>
                     ) : (
-                      <Link href="/settings" className={`${btnSecondary} !px-3.5 !py-1.5 !text-xs`}>
+                      <Link
+                        href="/settings"
+                        className={`${btnSecondary} !px-3 !py-1.5 !text-xs`}
+                      >
                         Configurar Client ID en Ajustes
                       </Link>
                     )}
@@ -517,31 +622,33 @@ export default function SessionsPage() {
               )}
 
               {driveBrowserError && (
-                <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-2.5 text-xs font-semibold text-rose-200">
+                <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3.5 py-2 text-xs font-medium text-rose-200">
                   {driveBrowserError}
                 </div>
               )}
 
               {/* 1-Click Auto-detected Pair Banner */}
               {driveBrowser?.detected_pair && (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3.5 py-2">
                   <div className="min-w-0 text-xs text-emerald-100">
-                    <span className="font-extrabold text-emerald-300">Par detectado automáticamente:</span>{" "}
+                    <span className="font-semibold text-emerald-300">
+                      Par detectado automáticamente:
+                    </span>{" "}
                     <span className="font-mono">{driveBrowser.detected_pair.gameplay.name}</span> +{" "}
                     <span className="font-mono">{driveBrowser.detected_pair.camera.name}</span>
                   </div>
                   <button
                     type="button"
                     onClick={handleSelectDetectedPair}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-emerald-400 px-3 py-1 text-xs font-extrabold text-slate-950 transition hover:bg-emerald-300 cursor-pointer"
+                    className="inline-flex items-center gap-1.5 rounded-md bg-emerald-400 px-2.5 py-1 text-xs font-semibold text-slate-950 transition hover:bg-emerald-300 cursor-pointer"
                   >
                     <CheckCircle2 className="h-3.5 w-3.5" /> Elegir par en 1 clic
                   </button>
                 </div>
               )}
 
-              {/* Folders & Videos list */}
-              <div className="max-h-56 space-y-1.5 overflow-y-auto pr-1">
+              {/* Finder-Style Dense Rows for Folders & Videos */}
+              <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
                 {loadingDriveFiles ? (
                   <div className="flex items-center justify-center gap-2 py-8 text-xs text-slate-400">
                     <SoftSpinner className="h-4 w-4" /> Explorando Google Drive…
@@ -556,14 +663,14 @@ export default function SessionsPage() {
                           setDriveSearch("");
                           setDriveFolderId(f.id);
                         }}
-                        className="flex w-full items-center justify-between rounded-xl border border-white/5 bg-slate-950/50 px-3.5 py-2 text-left text-xs transition hover:border-amber-300/30 hover:bg-slate-900 cursor-pointer"
+                        className="ax-row flex w-full items-center justify-between px-3 py-2 text-left text-xs cursor-pointer"
                       >
-                        <span className="flex items-center gap-2 font-bold text-slate-200">
+                        <span className="flex items-center gap-2 font-semibold text-slate-200">
                           <Folder className="h-4 w-4 text-amber-300" />
                           {f.name}
                         </span>
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400">
-                          Abrir carpeta <ChevronRight className="h-3.5 w-3.5" />
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400">
+                          Abrir <ChevronRight className="h-3.5 w-3.5" />
                         </span>
                       </button>
                     ))}
@@ -574,101 +681,125 @@ export default function SessionsPage() {
                       return (
                         <div
                           key={v.id}
-                          className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3.5 py-2 text-xs transition ${
+                          className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs transition ${
                             isGp || isCam
-                              ? "border-amber-300/40 bg-amber-400/10"
-                              : "border-white/5 bg-slate-950/40 hover:border-white/15"
+                              ? "border-amber-400/40 bg-amber-400/[0.08]"
+                              : "border-white/[0.06] bg-[#141720] hover:border-white/[0.14]"
                           }`}
                         >
                           <div className="flex min-w-0 items-center gap-2">
-                            <Film className="h-4 w-4 shrink-0 text-sky-300" />
-                            <span className="truncate font-mono font-semibold text-slate-100">{v.name}</span>
-                            <span className="shrink-0 text-[11px] text-slate-400">({formatBytes(v.size)})</span>
-                            {v.role_hint === "gameplay" && <Badge tone="info">Juego sugerido</Badge>}
-                            {v.role_hint === "camera" && <Badge tone="gold">Cámara sugerida</Badge>}
+                            <Film className="h-3.5 w-3.5 shrink-0 text-sky-300" />
+                            <span className="truncate font-mono font-medium text-slate-100">
+                              {v.name}
+                            </span>
+                            <span className="shrink-0 font-mono text-[11px] text-slate-500 tabular-nums">
+                              {formatBytes(v.size)}
+                            </span>
+                            {v.role_hint === "gameplay" && (
+                              <Badge tone="info">Juego sugerido</Badge>
+                            )}
+                            {v.role_hint === "camera" && (
+                              <Badge tone="gold">Cámara sugerida</Badge>
+                            )}
                           </div>
                           <div className="flex items-center gap-1.5">
                             <button
                               type="button"
                               onClick={() => setDriveGameplay(isGp ? null : v)}
-                              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold transition cursor-pointer ${
+                              className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition cursor-pointer ${
                                 isGp
                                   ? "bg-amber-400 text-slate-950"
-                                  : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+                                  : "border border-white/[0.09] bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]"
                               }`}
                             >
-                              <Gamepad2 className="h-3 w-3" /> {isGp ? "Juego ✓" : "Usar como Juego"}
+                              <Gamepad2 className="h-3 w-3" />{" "}
+                              {isGp ? "Juego ✓" : "Usar como Juego"}
                             </button>
                             <button
                               type="button"
                               onClick={() => setDriveCamera(isCam ? null : v)}
-                              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold transition cursor-pointer ${
+                              className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition cursor-pointer ${
                                 isCam
                                   ? "bg-emerald-400 text-slate-950"
-                                  : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+                                  : "border border-white/[0.09] bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]"
                               }`}
                             >
-                              <Camera className="h-3 w-3" /> {isCam ? "Cámara ✓" : "Usar como Cámara"}
+                              <Camera className="h-3 w-3" />{" "}
+                              {isCam ? "Cámara ✓" : "Usar como Cámara"}
                             </button>
                           </div>
                         </div>
                       );
                     })}
 
-                    {(driveBrowser?.folders.length ?? 0) === 0 && (driveBrowser?.files.length ?? 0) === 0 && (
-                      <p className="py-6 text-center text-xs text-slate-400">
-                        No hay subcarpetas ni archivos de video en esta ubicación.
-                      </p>
-                    )}
+                    {(driveBrowser?.folders.length ?? 0) === 0 &&
+                      (driveBrowser?.files.length ?? 0) === 0 && (
+                        <p className="py-6 text-center text-xs text-slate-500">
+                          No hay subcarpetas ni archivos de video en esta ubicación.
+                        </p>
+                      )}
                   </>
                 )}
               </div>
 
               {/* Selected Gameplay + Camera Summary */}
-              <div className="grid grid-cols-1 gap-3 border-t border-white/10 pt-3 md:grid-cols-2">
-                <div className="rounded-xl border border-white/10 bg-slate-950/60 px-3.5 py-2.5 text-xs">
-                  <div className="font-bold text-slate-400">Video del juego (Gameplay)</div>
-                  <div className="mt-0.5 truncate font-mono text-slate-100">
-                    {driveGameplay ? `${driveGameplay.name} (${formatBytes(driveGameplay.size)})` : "Sin seleccionar"}
+              <div className="grid grid-cols-1 gap-2.5 border-t border-white/[0.06] pt-3 md:grid-cols-2">
+                <div className="rounded-lg border border-white/[0.07] bg-[#0b0d11] px-3 py-2 text-xs">
+                  <div className="text-[11px] font-semibold text-slate-400">
+                    Video del juego (Gameplay)
+                  </div>
+                  <div className="mt-0.5 truncate font-mono text-slate-100 tabular-nums">
+                    {driveGameplay
+                      ? `${driveGameplay.name} (${formatBytes(driveGameplay.size)})`
+                      : "Sin seleccionar"}
                   </div>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-slate-950/60 px-3.5 py-2.5 text-xs">
-                  <div className="font-bold text-slate-400">Video de la cámara (Facecam)</div>
-                  <div className="mt-0.5 truncate font-mono text-slate-100">
-                    {driveCamera ? `${driveCamera.name} (${formatBytes(driveCamera.size)})` : "Sin seleccionar"}
+                <div className="rounded-lg border border-white/[0.07] bg-[#0b0d11] px-3 py-2 text-xs">
+                  <div className="text-[11px] font-semibold text-slate-400">
+                    Video de la cámara (Facecam)
+                  </div>
+                  <div className="mt-0.5 truncate font-mono text-slate-100 tabular-nums">
+                    {driveCamera
+                      ? `${driveCamera.name} (${formatBytes(driveCamera.size)})`
+                      : "Sin seleccionar"}
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-            <span className="flex items-center gap-1 text-sm text-slate-400">
-              Formato vertical dinámico (9:16)
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.06] pt-4">
+            <span className="flex items-center gap-1 text-xs text-slate-400">
+              Formato vertical dinámico (9:16 · 1080×1920 · −14 LUFS)
               <InfoTip>
                 Los 5 mejores momentos se preparan solos con tu cámara arriba, el juego abajo y subtítulos animados.
               </InfoTip>
             </span>
             <button type="submit" disabled={submitting} className={btnPrimary}>
-              {submitting ? <SoftSpinner onAccent className="h-4 w-4" /> : <Play className="h-4 w-4 fill-current" />}
+              {submitting ? (
+                <SoftSpinner onAccent className="h-4 w-4" />
+              ) : (
+                <Play className="h-3.5 w-3.5 fill-current" />
+              )}
               {mode === "drive" ? "Descargar de Drive y buscar clips" : "Buscar mejores clips"}
             </button>
           </div>
         </GlassCard>
 
-        {/* Google Drive ---------------------------------------------------- */}
-        <GlassCard className="flex flex-col justify-between gap-5 p-6">
+        {/* Google Drive Sync Widget Card */}
+        <GlassCard className="flex flex-col justify-between gap-5 p-5 sm:p-6">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="flex items-center gap-2 text-lg font-extrabold text-slate-50">
-                <FolderSync className="h-5 w-5 text-amber-300" /> Google Drive
+              <h2 className="flex items-center gap-2 text-base font-bold text-slate-50">
+                <FolderSync className="h-4 w-4 text-amber-300" /> Google Drive
               </h2>
               <div className="flex items-center gap-1.5">
                 {drive && (
                   <Badge tone={drive.connected ? "success" : "neutral"}>
+                    <StatusDot tone={drive.connected ? "online" : "neutral"} />
                     {drive.mode === "oauth"
                       ? drive.oauth_connected
-                        ? "Cuenta conectada"
+                        ? "Conectada"
                         : "Sin vincular"
                       : drive.mode === "local"
                         ? "Carpeta local"
@@ -682,95 +813,162 @@ export default function SessionsPage() {
                 </InfoTip>
               </div>
             </div>
-            <p className="text-sm text-slate-400">
+            <p className="text-xs leading-relaxed text-slate-400">
               {drive?.user_email
                 ? `Conectado con ${drive.user_email}. Explora tus carpetas o deja tus grabaciones en Entradas para procesarlas solas.`
                 : "Selecciona tus videos directo desde la nube o deja tus grabaciones en la carpeta Entradas."}
             </p>
             {drive && (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-2xl bg-white/5 p-3 text-center">
-                  <div className="text-2xl font-black text-slate-50">{drive.entradas.length}</div>
-                  <div className="text-xs font-semibold text-slate-400">Por procesar</div>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="rounded-lg border border-white/[0.06] bg-[#0e1016] p-3 text-center">
+                  <div className="font-mono text-2xl font-bold text-slate-50 tabular-nums">
+                    {drive.entradas.length}
+                  </div>
+                  <div className="mt-0.5 text-[11px] font-medium text-slate-400">Por procesar</div>
                 </div>
-                <div className="rounded-2xl bg-white/5 p-3 text-center">
-                  <div className="text-2xl font-black text-slate-50">{drive.salidas.length}</div>
-                  <div className="text-xs font-semibold text-slate-400">Clips entregados</div>
+                <div className="rounded-lg border border-white/[0.06] bg-[#0e1016] p-3 text-center">
+                  <div className="font-mono text-2xl font-bold text-emerald-300 tabular-nums">
+                    {drive.salidas.length}
+                  </div>
+                  <div className="mt-0.5 text-[11px] font-medium text-slate-400">
+                    Clips entregados
+                  </div>
                 </div>
               </div>
             )}
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 border-t border-white/[0.06] pt-4">
             <button
               type="button"
               onClick={() => setMode("drive")}
               className={`${btnPrimary} w-full`}
             >
-              <Folder className="h-4 w-4" />
+              <Folder className="h-3.5 w-3.5" />
               Explorar carpetas de Drive
             </button>
-            <button type="button" onClick={handlePollDrive} disabled={pollingDrive} className={`${btnSecondary} w-full`}>
-              <RefreshCw className={`h-4 w-4 ${pollingDrive ? "animate-spin" : ""}`} />
+            <button
+              type="button"
+              onClick={handlePollDrive}
+              disabled={pollingDrive}
+              className={`${btnSecondary} w-full`}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${pollingDrive ? "animate-spin" : ""}`} />
               Buscar grabaciones nuevas
             </button>
           </div>
         </GlassCard>
       </div>
 
-      {/* Sessions ------------------------------------------------------------ */}
+      {/* Sessions Section with Astryx Filter & Search Toolbar */}
       <section className="space-y-4" aria-label="Sesiones">
-        <div className="flex items-end justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl font-black text-slate-50">Tus sesiones</h2>
-            <p className="text-sm text-slate-400">
-              {sessions.length} {sessions.length === 1 ? "grabación" : "grabaciones"}
+            <h2 className="text-lg font-bold text-slate-50">Tus sesiones</h2>
+            <p className="text-xs text-slate-400">
+              <span className="font-mono text-slate-200 tabular-nums">{sessions.length}</span>{" "}
+              {sessions.length === 1 ? "grabación registrada" : "grabaciones registradas"}
               {activeCount > 0 ? ` · ${activeCount} en proceso ahora mismo` : ""}
             </p>
           </div>
-          <button type="button" onClick={reload} className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold text-slate-400 transition-all duration-300 hover:bg-white/5 hover:text-slate-100">
-            <RefreshCw className="h-4 w-4" /> Actualizar
-          </button>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {sessions.length > 0 && (
+              <>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    value={sessionQuery}
+                    onChange={(e) => setSessionQuery(e.target.value)}
+                    placeholder="Buscar sesión o juego…"
+                    className="w-44 sm:w-52 rounded-lg border border-white/[0.09] bg-[#0e1016] py-1.5 pl-8 pr-3 text-xs text-slate-200 placeholder:text-slate-500 focus:border-amber-400/60 focus:outline-none"
+                  />
+                </div>
+                <Segmented
+                  value={sessionFilter}
+                  onChange={setSessionFilter}
+                  options={[
+                    { value: "all", label: `Todas (${sessions.length})` },
+                    { value: "running", label: `En curso (${activeCount})` },
+                    { value: "delivered", label: `Listas (${deliveredCount})` },
+                    ...(failedCount > 0
+                      ? [{ value: "failed" as const, label: `Con aviso (${failedCount})` }]
+                      : []),
+                  ]}
+                />
+              </>
+            )}
+
+            <button type="button" onClick={reload} className={btnGhost}>
+              <RefreshCw className="h-3.5 w-3.5" /> Actualizar
+            </button>
+          </div>
         </div>
 
         {loading ? (
-          <div className="space-y-4">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="h-28 animate-pulse rounded-3xl bg-slate-800/40 motion-reduce:animate-none" />
+          <div className="grid gap-3.5 xl:grid-cols-2">
+            {[0, 1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="h-28 animate-pulse rounded-xl border border-white/[0.05] bg-[#161922] motion-reduce:animate-none"
+              />
             ))}
           </div>
         ) : sessions.length === 0 ? (
-          <GlassCard className="flex flex-col items-center gap-3 p-12 text-center">
-            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-400/10">
-              <Gamepad2 className="h-7 w-7 text-amber-300" />
-            </span>
-            <p className="text-lg font-extrabold text-slate-100">Aún no tienes sesiones</p>
-            <p className="max-w-md text-sm text-slate-400">
-              Elige tus videos arriba para empezar o{" "}
-              <button type="button" onClick={fillGoldenPaths} className="font-bold text-amber-300 hover:text-amber-200">
-                prueba con nuestra grabación de ejemplo
+          <EmptyState
+            icon={<Gamepad2 className="h-5 w-5 text-amber-300" />}
+            title="Aún no tienes sesiones registradas"
+            description="Selecciona tus videos de juego y cámara arriba para iniciar el análisis automático o carga nuestra grabación de demostración."
+            action={
+              <button type="button" onClick={fillGoldenPaths} className={btnSecondary}>
+                <Sparkles className="h-3.5 w-3.5 text-amber-300" /> Cargar grabación de ejemplo
               </button>
-              .
-            </p>
-          </GlassCard>
+            }
+          />
+        ) : filteredSessions.length === 0 ? (
+          <EmptyState
+            icon={<Search className="h-5 w-5 text-slate-400" />}
+            title="Ninguna sesión coincide con tu filtro"
+            description="Prueba con otro término de búsqueda o vuelve a mostrar todas las grabaciones."
+            action={
+              <button
+                type="button"
+                onClick={() => {
+                  setSessionFilter("all");
+                  setSessionQuery("");
+                }}
+                className={btnSecondary}
+              >
+                Mostrar todas las sesiones
+              </button>
+            }
+          />
         ) : (
-          <div className="grid gap-4 xl:grid-cols-2">
-            {sessions.map((s) => {
+          <div className="grid gap-3.5 xl:grid-cols-2">
+            {filteredSessions.map((s) => {
               const steps = sessionSteps(s);
               return (
-                <Link key={s.id} href={`/sessions/${s.id}`} className="block rounded-3xl focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-400/30">
-                  <GlassCard interactive className="space-y-4 p-5">
+                <Link
+                  key={s.id}
+                  href={`/sessions/${s.id}`}
+                  className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50"
+                >
+                  <GlassCard interactive className="space-y-3.5 p-4 sm:p-5">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 space-y-1.5">
+                      <div className="min-w-0 space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="truncate text-base font-extrabold text-slate-50">{s.title}</span>
+                          <span className="truncate text-sm sm:text-base font-bold text-slate-50">
+                            {s.title}
+                          </span>
                           {s.detected_game && (
                             <Badge tone="info">
                               <Gamepad2 className="h-3 w-3" /> {s.detected_game.toUpperCase()}
                             </Badge>
                           )}
                         </div>
-                        <p className="flex items-center gap-1.5 text-sm text-slate-400">
-                          <Clock className="h-3.5 w-3.5" /> {new Date(s.created_at * 1000).toLocaleString()}
+                        <p className="flex items-center gap-1.5 font-mono text-[11px] text-slate-400 tabular-nums">
+                          <Clock className="h-3 w-3 text-slate-500" />{" "}
+                          {new Date(s.created_at * 1000).toLocaleString()}
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
@@ -779,19 +977,37 @@ export default function SessionsPage() {
                       </div>
                     </div>
 
-                    <StepProgress steps={PIPELINE_STEPS} statuses={steps.statuses} fill={steps.fill} current={steps.current} compact />
+                    <StepProgress
+                      steps={PIPELINE_STEPS}
+                      statuses={steps.statuses}
+                      fill={steps.fill}
+                      current={steps.current}
+                      compact
+                    />
 
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.05] pt-2.5 text-xs">
                       <span className="min-w-0 truncate text-slate-400">
                         {s.error ? (
                           <span className="text-rose-300">{s.error}</span>
                         ) : liveMessages[s.id] && steps.running ? (
-                          liveMessages[s.id]
+                          <span className="text-amber-200">{liveMessages[s.id]}</span>
                         ) : (
-                          `${s.clips_count} momentos encontrados · ${s.rendered_count} videos listos`
+                          <span>
+                            <strong className="font-mono text-slate-200 tabular-nums">
+                              {s.clips_count}
+                            </strong>{" "}
+                            momentos encontrados ·{" "}
+                            <strong className="font-mono text-slate-200 tabular-nums">
+                              {s.rendered_count}
+                            </strong>{" "}
+                            videos listos
+                          </span>
                         )}
                       </span>
-                      <span className="flex items-center gap-1 text-xs text-slate-500">
+                      <span
+                        className="flex items-center gap-1 text-[11px] text-slate-500"
+                        onClick={(e) => e.preventDefault()}
+                      >
                         Info
                         <InfoTip label="Resumen de la sesión" align="end">
                           Código: <span className="font-mono">{s.id}</span>
@@ -813,16 +1029,20 @@ export default function SessionsPage() {
         )}
       </section>
 
-      {/* Maintenance & webhooks (progressive disclosure) --------------------- */}
-      <GlassCard as="section" className="p-6">
+      {/* Maintenance & Webhooks (Progressive Disclosure) */}
+      <GlassCard as="section" className="p-5 sm:p-6">
         <Disclosure
-          icon={<Wrench className="h-5 w-5" />}
+          icon={<Wrench className="h-4 w-4" />}
           title="Espacio en disco y avisos automáticos"
-          subtitle={maint ? `Archivos temporales: ${formatBytes(maint.temp_media_bytes)} · se limpian solos cada ${maint.temp_ttl_days} días` : "Liberar espacio y recibir avisos en Discord o Slack"}
+          subtitle={
+            maint
+              ? `Archivos temporales: ${formatBytes(maint.temp_media_bytes)} · limpieza automática cada ${maint.temp_ttl_days} días`
+              : "Liberar espacio y recibir avisos en Discord o Slack"
+          }
         >
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <div className="space-y-4">
-              <h3 className="flex items-center gap-2 text-sm font-extrabold text-slate-200">
+            <div className="space-y-3.5">
+              <h3 className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-200">
                 <Trash2 className="h-4 w-4 text-slate-400" /> Liberar espacio en tu PC
                 <InfoTip>
                   Borra pistas de audio intermedias que ya no se necesitan en sesiones terminadas, pero conserva tus
@@ -839,14 +1059,23 @@ export default function SessionsPage() {
                   ]}
                 />
               )}
-              <button type="button" onClick={handleCleanupNow} disabled={cleaningUp} className={btnSecondary}>
-                {cleaningUp ? <SoftSpinner className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
+              <button
+                type="button"
+                onClick={handleCleanupNow}
+                disabled={cleaningUp}
+                className={btnSecondary}
+              >
+                {cleaningUp ? (
+                  <SoftSpinner className="h-3.5 w-3.5" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
                 Liberar espacio ahora
               </button>
             </div>
 
-            <div className="space-y-4">
-              <h3 className="flex items-center gap-2 text-sm font-extrabold text-slate-200">
+            <div className="space-y-3.5">
+              <h3 className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-200">
                 <Bell className="h-4 w-4 text-slate-400" /> Avisos en Discord o Slack
                 <InfoTip>
                   Recibe un mensaje automático en tu servidor de Discord o Slack apenas tus clips estén listos para ver y
@@ -861,14 +1090,27 @@ export default function SessionsPage() {
                   placeholder="https://discord.com/api/webhooks/…"
                   className={`${inputBase} min-w-0 flex-1 font-mono text-xs`}
                 />
-                <button type="button" onClick={handleTestWebhook} disabled={testingWebhook} className={`${btnSecondary} shrink-0`}>
-                  {testingWebhook ? <SoftSpinner className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
+                <button
+                  type="button"
+                  onClick={handleTestWebhook}
+                  disabled={testingWebhook}
+                  className={`${btnSecondary} shrink-0`}
+                >
+                  {testingWebhook ? (
+                    <SoftSpinner className="h-3.5 w-3.5" />
+                  ) : (
+                    <Bell className="h-3.5 w-3.5" />
+                  )}
                   Enviar prueba
                 </button>
               </div>
             </div>
           </div>
-          {maintMsg && <p className="mt-4 rounded-2xl bg-emerald-400/10 px-4 py-2 text-sm font-semibold text-emerald-200">{maintMsg}</p>}
+          {maintMsg && (
+            <p className="mt-4 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-3.5 py-2 text-xs font-medium text-emerald-200">
+              {maintMsg}
+            </p>
+          )}
         </Disclosure>
       </GlassCard>
     </div>
