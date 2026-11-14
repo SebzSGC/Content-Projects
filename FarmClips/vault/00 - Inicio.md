@@ -4,9 +4,9 @@ tipo: inicio
 estado: vigente
 audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
-actualizado: 2026-11-12
+actualizado: 2026-11-13
 etiquetas: [tipo/inicio]
-commit_codigo: 9888c83
+commit_codigo: 049fe06
 ---
 
 # 🏠 FarmClips — Arquitectura Híbrida
@@ -16,7 +16,7 @@ commit_codigo: 9888c83
 
 | 📌 Estado | 👤 Responsable | 🗓️ Actualizado | 🔗 Repositorio / Código |
 |---|---|---|---|
-| En producción (v2.8.0) | Equipo FarmClips | 2026-11-12 | `ClipsApp` (Monorepo unificado) |
+| En producción (v2.9.0) | Equipo FarmClips | 2026-11-13 | `ClipsApp` (Monorepo unificado) |
 
 ---
 
@@ -66,6 +66,7 @@ flowchart LR
 
 ---
 
+- **2026-11-13 (v2.9.0)**: Rediseño integral del Web Studio (`apps/web`) inspirado en **Astryx de Meta** y macOS (`AppShell` con `SideNav` colapsable, tokens semánticos de superficie y bisel 1 px, tipografía `Figtree` + `JetBrains Mono`, navegación por categorías en `/settings`, filtros en `/sessions` y `AlertDialog` accesible en `/editor/[clipId]`) → [[Historial de cambios]].
 - **2026-11-12 (v2.8.0)**: Exportación global de sesiones a FilmCraft en un único `.fcproj` con secuencia **Master** del VOD completo, selector de clips en `/sessions/[id]` y sub-secuencias 9:16 anidadas por marcas de tiempo → [[Historial de cambios]].
 - **2026-11-12 (v2.7.0)**: Integración directa con FilmCraft NLE (`.fcproj`, fallback `.otio`), apertura en 1 clic desde `/editor/[clipId]` y copiloto MCP (`farmclips-mcp`) → [[Historial de cambios]].
 - **2026-11-09 (v2.6.0)**: Editor más confiable (Espacio pausa, deshacer correcto, el visor se actualiza en pausa), corrección de frases completas, inicio/final del clip y cortes desde el editor, guardado automático, y render casi el doble de rápido en Mac con VideoToolbox (Windows sin cambios) → [[Historial de cambios]].

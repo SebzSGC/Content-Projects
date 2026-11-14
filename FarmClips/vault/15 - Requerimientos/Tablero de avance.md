@@ -3,7 +3,7 @@ titulo: Tablero de avance
 tipo: indice
 estado: vigente
 audiencia: [negocio, tecnico]
-actualizado: 2026-11-12
+actualizado: 2026-11-13
 etiquetas: [tipo/tablero, requerimientos]
 ---
 
@@ -15,15 +15,15 @@ etiquetas: [tipo/tablero, requerimientos]
 
 <!-- inicio:tablero-automatico (no editar a mano: lo regenera requerimientos.py) -->
 
-> [!abstract] Avance general al 2026-11-12
-> **████████████████████ 99 %** · 10 ítems · 9 hechos · 1 en curso · 0 por hacer · 0 sin iniciar
+> [!abstract] Avance general al 2026-11-13
+> **██████████████████░░ 90 %** · 11 ítems · 9 hechos · 2 en curso · 0 por hacer · 0 sin iniciar
 > Sin estimaciones en puntos todavía.
 
 ## 🧩 Épicas
 
 | Épica | Avance | Ítems | Fechas |
 |---|---|---|---|
-| [[EP-02 Claridad y Experiencia de Usuario en Web Studio\|EP-02]] Claridad y Experiencia de Usuario en Web Studio | `██████████ 95 %` | 3 | 2026-11-07 → 2026-11-09 |
+| [[EP-02 Claridad y Experiencia de Usuario en Web Studio\|EP-02]] Claridad y Experiencia de Usuario en Web Studio | `███████░░░ 72 %` | 4 | 2026-11-07 → 2026-11-13 |
 | [[EP-03 Edición profesional en FilmCraft con copiloto MCP\|EP-03]] Edición profesional en FilmCraft con copiloto MCP | `██████████ 100 %` | 7 | 2026-11-12 → 2026-11-12 |
 
 ## 📋 Tablero
@@ -31,8 +31,10 @@ etiquetas: [tipo/tablero, requerimientos]
 ### 🔴 Bloqueado (0)
 _Ninguno._
 
-### 🟡 En progreso (0)
-_Ninguno._
+### 🟡 En progreso (1)
+| ID | Título | Prioridad | Responsable | Avance | Fin |
+|---|---|---|---|---|---|
+| [[HU-012 Rediseño integral del Web Studio inspirado en Astryx de Meta\|HU-012]] | Rediseño integral del Web Studio inspirado en Astryx de Meta | ⬆️ Alta | Equipo FarmClips | `░░░░░░░░░░ 0 %` | 2026-11-13 |
 
 ### 🟣 En revisión (1)
 | ID | Título | Prioridad | Responsable | Avance | Fin |
@@ -74,6 +76,8 @@ gantt
     HU-009 Servidor farmclips-mcp y mcp-config :done, hu-009, 2026-11-12, 2026-11-12
     HU-010 Copiloto en Claude Desktop y Antigravity :done, hu-010, 2026-11-12, 2026-11-12
     HU-011 Exportación global de sesión a FilmCraft con sub-secu :done, hu-011, 2026-11-12, 2026-11-12
+    section EP-02 Claridad y Experiencia de Usuario en Web Studio
+    HU-012 Rediseño integral del Web Studio inspirado en Astryx  :active, hu-012, 2026-11-13, 2026-11-13
 ```
 
 > [!info]- Sin fechas planificadas (3)

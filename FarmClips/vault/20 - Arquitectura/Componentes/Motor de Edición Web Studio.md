@@ -4,25 +4,33 @@ tipo: componente
 estado: vigente
 audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
-actualizado: 2026-11-12
+actualizado: 2026-11-13
 etiquetas: [tipo/componente, area/frontend]
 ---
 
 # Motor de Edición Web Studio (`apps/web`)
 
 > [!abstract] En pocas palabras
-> Es la interfaz visual en Next.js 15 donde los creadores revisan y ajustan sus clips en tiempo real. Reproduce el video vertical combinando las fuentes originales con transformaciones CSS y mezclando el sonido en el navegador con la Web Audio API, sin obligarte a esperar un renderizado completo cada vez que cambias un subtítulo.
+> Es la interfaz visual en Next.js 15 inspirada en **Astryx de Meta** y aplicaciones nativas de escritorio macOS donde los creadores gestionan sesiones y ajustan sus clips en tiempo real. Reproduce el video vertical combinando las fuentes originales con transformaciones CSS y mezclando el sonido en el navegador con la Web Audio API, sin obligarte a esperar un renderizado completo cada vez que cambias un subtítulo.
 
 ---
 
-## 🎨 Pantallas principales de la aplicación
+## 🎨 Sistema de Diseño Astryx y Marco de Escritorio (`AppShell`)
+
+El frontend utiliza un sistema de tokens semánticos propio inspirado en `@astryxdesign/core` y `@astryxdesign/theme-neutral` (`apps/web/src/app/globals.css`, `apps/web/src/components/ui.tsx` y `apps/web/src/components/TopNav.tsx`):
+- **Jerarquía de superficies en 5 niveles**: `body` (`#0b0d11`) → `surface` (`#11141b`) → `card` (`#161922`) → `popover` (`#1d222e`) → `muted` (`#0e1016`), con soporte de alternancia en caliente entre los temas **Obsidiana Estudio (`dark`)** y **Grafito Puro (`graphite`)**.
+- **Elevación por bisel de 1 px estilo macOS**: Las superficies emplean `--shadow-low`, `--shadow-med` y `--shadow-high` con iluminación cenital interna (`inset 0 1px 0 0 rgba(255,255,255,0.07)`) y radios concéntricos (`--radius-inner: 6px`, `--radius-element: 8px`, `--radius-container: 12px`, `--radius-page: 16px`).
+- **Tipografía de precisión**: Fuente geométrica **`Figtree`** para controles y lectura general, combinada con **`JetBrains Mono`** (`tabular-nums`) para códigos de tiempo, métricas financieras y rutas, conservando `"Montserrat ExtraBold"` exclusivamente para el renderizado de subtítulos en el lienzo `<canvas>` 9:16.
+- **Marco `AppShell` + `SideNav` colapsable**: Barra lateral izquierda estilo macOS que muestra telemetría del motor (`NVENC`/`CPU`, `STT`, `LLM`) y saldo en vivo, plegándose automáticamente al entrar en `/editor/[clipId]` para maximizar el área del visor a 60 fps.
+
+## 🖥️ Pantallas principales de la aplicación
 
 La app web corre por defecto en `http://127.0.0.1:3040` y consta de las siguientes rutas:
-- `/sessions`: Listado general de grabaciones procesadas, en curso y fallidas, con barra de progreso general.
-- `/sessions/[id]`: Vista de detalle de una sesión, ranking de clips curados con sus puntuaciones, selección individual de clips (**Incluido / Incluir**, **Todos / Ninguno**) para exportación global («Abrir proyecto en FilmCraft» y banner con «Abrir carpeta», «Copiar ruta» y descarga `.fcproj` para clips con `EditPlan`) y botón de reprocesamiento.
-- `/editor/[clipId]`: Estudio de edición interactivo de un clip particular.
-- `/settings`: Panel de control dinámico para editar API Keys, seleccionar modelos y configurar límites de presupuesto sin tocar archivos de texto a mano.
-- `/analytics`: Métricas de consumo de tokens, uso de cuota en dólares y tiempos promedio de renderizado.
+- `/sessions`: Creación de sesiones (PC, subida o explorador de Google Drive con filas estilo Finder y detección de pares en 1 clic) y listado de grabaciones con buscador instantáneo y filtro por estado (`Todas`, `En curso`, `Listas`, `Con aviso`).
+- `/sessions/[id]`: Vista de detalle con pista de progreso `StepProgress` de 7 pasos, mapa de emoción con rejilla de referencia, selección de clips (**Incluido / Incluir**, **Todos / Ninguno**) para exportación global a FilmCraft (`.fcproj`) y galería de tarjetas verticales 9:16.
+- `/editor/[clipId]`: Estudio de edición interactivo a 60 fps unificado bajo los tokens de Astryx, con barra de herramientas NLE, atajos de teclado `Kbd` (`Espacio`, `⌘Z`, `⌘Y`), inspector organizado con `TabList` y confirmación modal accesible (`AlertDialog`) al recalcular el tramo del clip.
+- `/settings`: Panel de control con arquitectura maestro-detalle (`settings-sidebar`) que permite navegar por categorías (`1. Voz y Subtítulos`, `2. Curación IA`, `3. Presupuesto y Avisos`, `4. Google Drive`, `5. FilmCraft & MCP`) o ver todas las secciones en simultáneo.
+- `/analytics`: Telemetría financiera con tarjetas KPI tabulares (`tabular-nums`), monitor de capa gratuita por proveedor, simulador de costos y tabla de auditoría.
 
 ---
 
@@ -87,3 +95,4 @@ flowchart TD
 - [[HU-003 Editor interactivo WYSIWYG reencuadre visual y rendimiento 60 fps|HU-003]]
 - [[HU-004 Edición confiable de clips tramos frases y guardado automático|HU-004]]
 - [[HU-011 Exportación global de sesión a FilmCraft con sub-secuencias|HU-011]]
+- [[HU-012 Rediseño integral del Web Studio inspirado en Astryx de Meta|HU-012]]

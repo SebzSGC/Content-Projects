@@ -4,7 +4,7 @@ tipo: cambios
 estado: vigente
 audiencia: [todos]
 responsable: Equipo FarmClips
-actualizado: 2026-11-12
+actualizado: 2026-11-13
 etiquetas: [tipo/cambios, area/general]
 ---
 
@@ -13,7 +13,32 @@ etiquetas: [tipo/cambios, area/general]
 > [!abstract] En pocas palabras
 > Registro cronológico de las versiones de FarmClips, nuevas funcionalidades, optimizaciones de rendimiento y ajustes en la arquitectura del sistema.
 
-## [2.8.0] — 2026-11-12 (Versión actual)
+## [2.9.0] — 2026-11-13 (Versión actual)
+
+### 🎨 Rediseño Integral del Web Studio inspirado en Astryx de Meta (`HU-012`)
+
+Transformación visual, tipográfica y arquitectónica de `apps/web` tomando como referencia los fundamentos y patrones de **Astryx de Meta** (`@astryxdesign/core` y `@astryxdesign/theme-neutral`) y la ergonomía de aplicaciones profesionales de escritorio en macOS.
+
+#### Qué cambió
+- **Sistema de Design Tokens Astryx (`apps/web/src/app/globals.css` y `apps/web/src/app/layout.tsx`)**:
+  - Jerarquía de superficies en 5 niveles (`body`, `surface`, `card`, `popover`, `muted`), iluminación cenital por bisel de 1 px (`--shadow-low/med/high`), radios concéntricos (`--radius-inner` a `--radius-page`), transiciones precisas de `120ms` y soporte de temas (**Obsidiana Estudio** y **Grafito Puro**).
+  - Tipografía **`Figtree`** para interfaz y **`JetBrains Mono`** (`tabular-nums`) para códigos de tiempo, costos y telemetría, manteniendo `"Montserrat ExtraBold"` para el lienzo `<canvas>` 9:16.
+- **Marco de escritorio `AppShell` con `SideNav` colapsable (`apps/web/src/components/TopNav.tsx`)**:
+  - Barra lateral de navegación colapsable con estado en tiempo real del motor (`NVENC`/`CPU`, `STT`, `LLM`) y barra superior contextual con migas de pan, billetera y selector de tema. En `/editor/[clipId]`, el `SideNav` se compacta automáticamente para maximizar el área de edición.
+- **Primitivas y módulos unificados (`ui.tsx`, `StepProgress.tsx`, `/sessions`, `/sessions/[id]`, `/editor/[clipId]`, `/settings`, `/analytics`)**:
+  - Nuevas primitivas reutilizables: `Card` con variantes, `TabList`, `StatusDot`, `Kbd`, `SectionHeader`, `EmptyState` y `AlertDialog`.
+  - Buscador instantáneo y filtro de estado en `/sessions`, filas estilo Finder en el explorador de Google Drive, navegación lateral por categorías (`settings-sidebar`) en `/settings`, unificación visual del editor a 60 fps y reemplazo del `window.confirm` nativo por `AlertDialog` en `handleRetime`.
+  - Historia [[HU-012 Rediseño integral del Web Studio inspirado en Astryx de Meta|HU-012]] en [[EP-02 Claridad y Experiencia de Usuario en Web Studio]].
+
+#### Por qué
+- Unificar el lenguaje visual entre el editor de clips y el resto del estudio, eliminar elementos decorativos innecesarios (manchas difuminadas de fondo y escalados bruscos en hover) y ofrecer una experiencia de aplicación nativa de escritorio más limpia, rápida y legible.
+
+> [!warning] ⚠️ Cambia para ti
+> - Ahora cuentas con una **barra lateral colapsable (`SideNav`)** a la izquierda, un selector de tema (**Obsidiana / Grafito**) en la barra superior, buscador y filtros por estado en **Sesiones**, navegación lateral por categorías en **Ajustes** y un diálogo visual integrado al cambiar el tramo de un clip en el **Editor**.
+
+---
+
+## [2.8.0] — 2026-11-12
 
 ### 🔧 Corrección: Bridge de control (`--control 9876`) habilitado al abrir FilmCraft
 
