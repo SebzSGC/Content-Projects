@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     drive_folder_id TEXT,
     language TEXT NOT NULL DEFAULT 'es',
     style_preset TEXT NOT NULL DEFAULT 'hormozi-gaming',
+    max_clips INTEGER,
     sync_json TEXT,
     prepared_json TEXT,
     error TEXT,
@@ -130,6 +131,9 @@ class OrchestratorDB:
         self._conn.row_factory = sqlite3.Row
         with self._lock:
             self._conn.executescript(SCHEMA_SQL)
+            cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(sessions)").fetchall()}
+            if "max_clips" not in cols:
+                self._conn.execute("ALTER TABLE sessions ADD COLUMN max_clips INTEGER")
             self._conn.commit()
 
     def close(self) -> None:
@@ -167,6 +171,7 @@ class OrchestratorDB:
         drive_folder_id: Optional[str] = None,
         language: str = "es",
         style_preset: str = "hormozi-gaming",
+        max_clips: Optional[int] = None,
         initial_state: SessionState = SessionState.NEW,
         session_id: Optional[str] = None,
     ) -> Dict[str, Any]:
@@ -177,8 +182,8 @@ class OrchestratorDB:
             self._conn.execute(
                 """INSERT INTO sessions (
                     id, title, recording_name, state, gameplay_path, camera_path,
-                    drive_folder_id, language, style_preset, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    drive_folder_id, language, style_preset, max_clips, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     sid,
                     title,
@@ -189,6 +194,7 @@ class OrchestratorDB:
                     drive_folder_id,
                     language,
                     style_preset,
+                    max_clips,
                     now,
                     now,
                 ),

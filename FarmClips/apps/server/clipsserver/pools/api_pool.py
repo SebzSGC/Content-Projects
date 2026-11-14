@@ -267,6 +267,7 @@ class ApiPool:
                 "title": title,
                 "min_len": min_len,
                 "max_len": max_len,
+                "max_clips": max_clips,
                 "prompt_version": CURATION_PROMPT_VERSION,
                 "llm_primary": self.llm_router.primary.provider_name,
                 "llm_model": self.settings.llm_model,

@@ -136,6 +136,7 @@ export default function SessionsPage() {
   const [cameraPath, setCameraPath] = useState("");
   const [gameplayFile, setGameplayFile] = useState<File | null>(null);
   const [cameraFile, setCameraFile] = useState<File | null>(null);
+  const [maxClips, setMaxClips] = useState<number>(5);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -258,6 +259,7 @@ export default function SessionsPage() {
           throw new Error("El video de gameplay y el de cámara deben ser archivos distintos.");
         }
         const recName = title.trim() || driveBrowser?.folder_name || "Sesión Drive";
+        const safeMaxClips = Math.max(1, Math.min(20, Math.round(Number(maxClips) || 5)));
         const created = await createDriveSession({
           title: recName,
           folder_id: driveBrowser?.folder_id,
@@ -266,6 +268,7 @@ export default function SessionsPage() {
           recording_name: recName,
           language: "es",
           style_preset: "hormozi-gaming",
+          max_clips: safeMaxClips,
           auto_start: true,
         });
         router.push(`/sessions/${created.id}`);
@@ -288,6 +291,7 @@ export default function SessionsPage() {
         throw new Error("Indica las rutas locales de gameplay.mp4 y camara.mp4.");
       }
 
+      const safeMaxClips = Math.max(1, Math.min(20, Math.round(Number(maxClips) || 5)));
       const created = await createSession({
         title: title.trim() || "Sesión Gaming",
         gameplay_path: gp,
@@ -295,6 +299,7 @@ export default function SessionsPage() {
         recording_name: title.trim() || undefined,
         language: "es",
         style_preset: "hormozi-gaming",
+        max_clips: safeMaxClips,
         auto_start: true,
       });
       router.push(`/sessions/${created.id}`);
@@ -492,6 +497,56 @@ export default function SessionsPage() {
               </span>
             )}
           </label>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-[#0e1016] px-4 py-3">
+            <div className="space-y-0.5">
+              <span className="flex items-center gap-1 text-xs sm:text-sm font-semibold text-slate-200">
+                ¿Cuántos clips quieres extraer?
+                <InfoTip>
+                  La IA seleccionará los mejores momentos hasta alcanzar este límite (entre 1 y 20 clips) y los renderizará automáticamente.
+                </InfoTip>
+              </span>
+              <p className="text-[11px] text-slate-400">
+                Elige un preset rápido o escribe la cantidad exacta (1–20).
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.02] p-1">
+                {[3, 5, 8, 10].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setMaxClips(preset)}
+                    className={`rounded-md px-2.5 py-1 font-mono text-xs font-semibold transition-colors cursor-pointer ${
+                      maxClips === preset
+                        ? "bg-amber-400/20 text-amber-200 border border-amber-400/40"
+                        : "text-slate-400 hover:text-slate-200 border border-transparent"
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  step={1}
+                  aria-label="Cantidad exacta de clips a extraer"
+                  value={maxClips}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    if (!Number.isNaN(val)) {
+                      setMaxClips(Math.max(1, Math.min(20, val)));
+                    }
+                  }}
+                  className={`${inputBase} w-20 text-center font-mono text-xs font-bold text-amber-300`}
+                />
+                <span className="text-xs text-slate-400">clips</span>
+              </div>
+            </div>
+          </div>
 
           {mode === "local" ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

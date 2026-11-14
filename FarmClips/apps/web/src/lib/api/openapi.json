@@ -1256,6 +1256,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RerunSessionBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2633,6 +2650,19 @@
             "title": "Style Preset",
             "default": "hormozi-gaming"
           },
+          "max_clips": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 20.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Clips"
+          },
           "auto_start": {
             "type": "boolean",
             "title": "Auto Start",
@@ -2671,6 +2701,19 @@
             "type": "string",
             "title": "Style Preset",
             "default": "hormozi-gaming"
+          },
+          "max_clips": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 20.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Clips"
           },
           "auto_start": {
             "type": "boolean",
@@ -3088,6 +3131,25 @@
         "type": "object",
         "title": "RenderClipBody"
       },
+      "RerunSessionBody": {
+        "properties": {
+          "max_clips": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 20.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Clips"
+          }
+        },
+        "type": "object",
+        "title": "RerunSessionBody"
+      },
       "RetimeClipBody": {
         "properties": {
           "start": {
@@ -3413,6 +3475,19 @@
               }
             ],
             "title": "Max Budget Usd"
+          },
+          "auto_render_top_k": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 20.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Render Top K"
           },
           "deepgram_api_key": {
             "anyOf": [

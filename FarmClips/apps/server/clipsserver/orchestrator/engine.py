@@ -244,6 +244,7 @@ class Orchestrator:
         recording_name: str = "",
         language: str = "es",
         style_preset: Optional[str] = None,
+        max_clips: Optional[int] = None,
         auto_start: bool = True,
     ) -> Dict[str, Any]:
         if self.drive is None:
@@ -285,6 +286,7 @@ class Orchestrator:
             drive_folder_id=(folder_id or "").strip() or gp_entry.id,
             language=language or "es",
             style_preset=style_preset or self.settings.style_preset,
+            max_clips=max_clips,
             initial_state=SessionState.NEW,
         )
         sid = ses["id"]
@@ -514,7 +516,8 @@ class Orchestrator:
             self._set_state(session_id, SessionState.TRANSCRIBED, message=f"{len(utterances)} frases detectadas")
 
             # 3 & 4. TIMELINE + CURAR CON LLM (API Pool)
-            self.events.publish("stage_progress", session_id=session_id, stage="curate", progress=0.55, message="Eligiendo las mejores jugadas y momentos divertidos…")
+            target_clips = max(1, min(20, int(row.get("max_clips") or self.settings.auto_render_top_k or 5)))
+            self.events.publish("stage_progress", session_id=session_id, stage="curate", progress=0.55, message=f"Eligiendo las mejores {target_clips} jugadas y momentos divertidos…")
             windows = build_timeline_windows_if_needed(utterances, signals)
             window_proposals = await asyncio.gather(
                 *(
@@ -524,6 +527,7 @@ class Orchestrator:
                         title=row.get("title") or "Stream",
                         min_len=preset.duration.min_sec,
                         max_len=preset.duration.max_sec,
+                        max_clips=target_clips,
                     )
                     for w_txt in windows
                 )
@@ -536,7 +540,7 @@ class Orchestrator:
                 vod_duration=prep.gameplay.duration,
                 min_sec=preset.duration.min_sec,
                 max_sec=preset.duration.max_sec,
-            )
+            )[:target_clips]
             self.events.publish(
                 "budget_update",
                 session_id=session_id,
@@ -572,13 +576,13 @@ class Orchestrator:
 
             self._set_state(session_id, SessionState.CURATED, message=f"{len(curated_clips)} momentos seleccionados")
 
-            # Identify top-5 clips > 60/100 for automatic 1080p render & Drive delivery
+            # Identify top-K clips > min_score for automatic 1080p render & Drive delivery
             auto_render_ids = {
                 c.id
                 for c in curated_clips
                 if c.final_score >= self.settings.auto_render_min_score
             }
-            top_ordered = [c.id for c in curated_clips if c.id in auto_render_ids][: self.settings.auto_render_top_k]
+            top_ordered = [c.id for c in curated_clips if c.id in auto_render_ids][:target_clips]
             auto_render_set = set(top_ordered)
 
             self._set_state(session_id, SessionState.PLANNING, message="Centrando tu cámara y preparando los subtítulos de cada clip…")

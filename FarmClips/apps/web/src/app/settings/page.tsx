@@ -87,6 +87,7 @@ export default function SettingsPage() {
   const [llmBackupBaseUrl, setLlmBackupBaseUrl] = useState("https://api.openai.com/v1");
 
   const [maxBudgetUsd, setMaxBudgetUsd] = useState<number>(9.0);
+  const [autoRenderTopK, setAutoRenderTopK] = useState<number>(5);
   const [webhookUrl, setWebhookUrl] = useState<string>("");
   const [tempTtlDays, setTempTtlDays] = useState<number>(7.0);
 
@@ -141,6 +142,7 @@ export default function SettingsPage() {
     setLlmBackupModel(s.llm_backup_model || "gpt-6-luna");
     setLlmBackupBaseUrl(s.llm_backup_base_url || "https://api.openai.com/v1");
     setMaxBudgetUsd(s.max_budget_usd);
+    setAutoRenderTopK(s.auto_render_top_k ?? 5);
     setWebhookUrl(s.webhook_url || "");
     setTempTtlDays(s.temp_ttl_days ?? 7.0);
     setDriveMode(s.drive_mode || "local");
@@ -211,6 +213,7 @@ export default function SettingsPage() {
         llm_backup_model: llmBackupModel.trim() || "gpt-6-luna",
         llm_backup_base_url: llmBackupBaseUrl.trim() || "https://api.openai.com/v1",
         max_budget_usd: Number(maxBudgetUsd) || 9.0,
+        auto_render_top_k: Math.max(1, Math.min(20, Math.round(Number(autoRenderTopK) || 5))),
         webhook_url: webhookUrl.trim(),
         temp_ttl_days: Number(tempTtlDays) >= 0 ? Number(tempTtlDays) : 7.0,
         drive_mode: driveMode,
@@ -996,7 +999,25 @@ export default function SettingsPage() {
               </Badge>
             </div>
 
-            <div className="grid gap-5 md:grid-cols-3">
+            <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-slate-300">
+                  Clips por sesión (por defecto)
+                </label>
+                <input
+                  type="number"
+                  step="1"
+                  min="1"
+                  max="20"
+                  value={autoRenderTopK}
+                  onChange={(e) => setAutoRenderTopK(parseInt(e.target.value, 10) || 5)}
+                  className={`${inputBase} font-mono font-bold text-amber-300`}
+                />
+                <p className="mt-1.5 text-xs text-slate-400">
+                  Cantidad predeterminada (1–20) si no indicas otra al crear la sesión.
+                </p>
+              </div>
+
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-slate-300">
                   Límite máximo de gasto (USD)

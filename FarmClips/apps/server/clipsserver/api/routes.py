@@ -66,6 +66,7 @@ class CreateSessionBody(BaseModel):
     recording_name: str = ""
     language: str = "es"
     style_preset: str = "hormozi-gaming"
+    max_clips: Optional[int] = Field(default=None, ge=1, le=20)
     auto_start: bool = True
 
 
@@ -77,7 +78,12 @@ class CreateDriveSessionBody(BaseModel):
     recording_name: str = ""
     language: str = "es"
     style_preset: str = "hormozi-gaming"
+    max_clips: Optional[int] = Field(default=None, ge=1, le=20)
     auto_start: bool = True
+
+
+class RerunSessionBody(BaseModel):
+    max_clips: Optional[int] = Field(default=None, ge=1, le=20)
 
 
 class ManualSyncBody(BaseModel):
@@ -122,6 +128,7 @@ class UpdateSettingsBody(BaseModel):
     llm_backup_model: Optional[str] = None
     llm_backup_base_url: Optional[str] = None
     max_budget_usd: Optional[float] = Field(default=None, ge=0.05, le=10000.0)
+    auto_render_top_k: Optional[int] = Field(default=None, ge=1, le=20)
     deepgram_api_key: Optional[str] = None
     groq_api_key: Optional[str] = None
     gemini_api_key: Optional[str] = None
@@ -338,6 +345,7 @@ def _serialize_session(orch: Orchestrator, row: Dict[str, Any]) -> Dict[str, Any
         "drive_folder_id": row["drive_folder_id"],
         "language": row["language"],
         "style_preset": row["style_preset"],
+        "max_clips": row.get("max_clips"),
         "detected_game": detected_game,
         "keyterms_count": len(resolved_terms),
         "sync": sync,
@@ -498,6 +506,8 @@ def create_app(
 
         if body.max_budget_usd is not None:
             env_updates["CLIPS_MAX_BUDGET_USD"] = f"{float(body.max_budget_usd):.2f}"
+        if body.auto_render_top_k is not None:
+            env_updates["CLIPS_AUTO_RENDER_TOP_K"] = str(int(body.auto_render_top_k))
         if body.webhook_url is not None:
             env_updates["CLIPS_WEBHOOK_URL"] = body.webhook_url.strip()
         if body.temp_ttl_days is not None:
@@ -982,6 +992,7 @@ def create_app(
                 recording_name=body.recording_name,
                 language=body.language or "es",
                 style_preset=body.style_preset or cfg.style_preset,
+                max_clips=body.max_clips,
                 auto_start=body.auto_start,
             )
         except FileNotFoundError as exc:
@@ -1020,6 +1031,7 @@ def create_app(
             recording_name=body.recording_name.strip() or body.title.strip() or gp.stem,
             language=body.language or "es",
             style_preset=body.style_preset or cfg.style_preset,
+            max_clips=body.max_clips,
             initial_state=SessionState.DOWNLOADED,
         )
         if body.auto_start:
@@ -1036,10 +1048,15 @@ def create_app(
         return data
 
     @app.post("/sessions/{session_id}/run")
-    async def run_session_endpoint(session_id: str) -> Dict[str, Any]:
+    async def run_session_endpoint(
+        session_id: str,
+        body: Optional[RerunSessionBody] = None,
+    ) -> Dict[str, Any]:
         row = orch.db.get_session(session_id)
         if not row:
             raise HTTPException(404, "Sesión no encontrada")
+        if body and body.max_clips is not None:
+            orch.db.update_session(session_id, max_clips=body.max_clips)
         orch.launch_session(session_id)
         return _serialize_session(orch, orch.db.get_session(session_id) or row)
 

@@ -79,6 +79,7 @@ export default function SessionDetailPage() {
   const [renderProgress, setRenderProgress] = useState<Record<string, number>>({});
   const [manualShift, setManualShift] = useState<string>("0.00");
   const [savingSync, setSavingSync] = useState(false);
+  const [targetClips, setTargetClips] = useState<number>(5);
   const [error, setError] = useState<string | null>(null);
   const [selectedClipIds, setSelectedClipIds] = useState<Set<string>>(new Set());
   const selectionInitRef = useRef(false);
@@ -98,6 +99,9 @@ export default function SessionDetailPage() {
       setSession(ses);
       setClips(cl);
       setSignals(sig);
+      if (typeof ses.max_clips === "number" && ses.max_clips >= 1) {
+        setTargetClips(ses.max_clips);
+      }
       if (cl.length > 0) {
         if (!selectionInitRef.current) {
           setSelectedClipIds(new Set(cl.map((c) => c.id)));
@@ -256,6 +260,13 @@ export default function SessionDetailPage() {
                   de partida
                 </Badge>
               )}
+              {typeof session.max_clips === "number" && (
+                <Badge>
+                  Objetivo:{" "}
+                  <span className="font-mono tabular-nums">{session.max_clips}</span>{" "}
+                  {session.max_clips === 1 ? "clip" : "clips"}
+                </Badge>
+              )}
             </div>
             <h1 className="truncate text-xl font-bold tracking-tight text-slate-50 sm:text-2xl">
               {session.title}
@@ -279,10 +290,28 @@ export default function SessionDetailPage() {
                 <StopCircle className="h-4 w-4" /> Detener proceso
               </button>
             ) : (
-              <span className="flex items-center gap-1.5">
+              <span className="flex flex-wrap items-center gap-2">
+                <label className="flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#0e1016] px-2.5 py-1.5 text-xs text-slate-300">
+                  <span>Clips:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    step={1}
+                    aria-label="Cantidad de clips a reprocesar"
+                    value={targetClips}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (!Number.isNaN(val)) {
+                        setTargetClips(Math.max(1, Math.min(20, val)));
+                      }
+                    }}
+                    className="w-12 bg-transparent text-center font-mono text-xs font-bold text-amber-300 focus:outline-none"
+                  />
+                </label>
                 <button
                   type="button"
-                  onClick={() => rerunSession(session.id).then(reload)}
+                  onClick={() => rerunSession(session.id, targetClips).then(reload)}
                   className={btnPrimary}
                 >
                   <RefreshCw className="h-3.5 w-3.5" /> Reprocesar gratis
