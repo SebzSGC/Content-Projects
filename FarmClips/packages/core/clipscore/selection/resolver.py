@@ -29,6 +29,44 @@ def _norm_uid(raw_id: str, valid_map: Dict[str, int]) -> Optional[int]:
     return None
 
 
+def compute_dynamic_tail_pad(
+    raw_end_sec: float,
+    signals: Optional[SignalSeries],
+    next_utterance_start: Optional[float] = None,
+    default_pad: float = 0.8,
+) -> float:
+    """Adapt clip tail padding using vocal reaction decay: extend for ongoing laughter/scream, trim on dead silence."""
+    if signals is None or not signals.reaction:
+        return default_pad
+    sec = max(0, int(raw_end_sec))
+    n_react = len(signals.reaction)
+    if sec >= n_react:
+        return default_pad
+
+    tail_pad = default_pad
+    cur_react = signals.reaction[sec]
+    next_react = signals.reaction[sec + 1] if sec + 1 < n_react else 0.0
+    later_react = signals.reaction[sec + 2] if sec + 2 < n_react else 0.0
+
+    if max(cur_react, next_react) >= 0.55:
+        if later_react >= 0.48:
+            tail_pad = 1.65
+        elif next_react >= 0.48:
+            tail_pad = 1.25
+        else:
+            tail_pad = 0.95
+    elif cur_react < 0.16 and next_react < 0.16:
+        mic_val = signals.mic_loudness[sec] if sec < len(signals.mic_loudness) else 0.5
+        if mic_val < 0.18:
+            tail_pad = 0.35
+
+    if next_utterance_start is not None and next_utterance_start > raw_end_sec:
+        gap = next_utterance_start - raw_end_sec
+        if gap > 0.25 and tail_pad > default_pad:
+            tail_pad = min(tail_pad, max(default_pad, round(gap - 0.12, 3)))
+    return round(tail_pad, 3)
+
+
 def adjust_utterance_span(
     start_idx: int,
     end_idx: int,
@@ -38,6 +76,7 @@ def adjust_utterance_span(
     max_sec: float = 60.0,
     lead_pad: float = 0.2,
     tail_pad: float = 0.8,
+    signals: Optional[SignalSeries] = None,
 ) -> Tuple[int, int, float, float]:
     """Expand or trim along utterance boundaries so clip stays in [min_sec, max_sec] without mid-sentence cuts."""
     n = len(utterances)
@@ -48,7 +87,17 @@ def adjust_utterance_span(
         u_a, u_b = utterances[a_i], utterances[b_i]
         w_start = u_a.words[0].start if u_a.words else u_a.start
         w_end = u_b.words[-1].end if u_b.words else u_b.end
-        return max(0.0, w_start - lead_pad), min(vod_duration, w_end + tail_pad)
+        next_u_start = (
+            (utterances[b_i + 1].words[0].start if utterances[b_i + 1].words else utterances[b_i + 1].start)
+            if b_i + 1 < n
+            else None
+        )
+        eff_tail = (
+            compute_dynamic_tail_pad(w_end, signals, next_u_start, default_pad=tail_pad)
+            if tail_pad > 0 and signals is not None
+            else tail_pad
+        )
+        return max(0.0, w_start - lead_pad), min(vod_duration, w_end + eff_tail)
 
     a, b = bounds(s_i, e_i)
 
@@ -292,6 +341,7 @@ def resolve_curated_clips(
                 s_idx, e_idx, utterances, vod_duration,
                 min_sec=0 if editorial_profile else min_sec,
                 max_sec=vod_duration if editorial_profile else max_sec,
+                signals=signals,
             )
         if end_t - start_t < 3.0 or (not segments and end_t - start_t > max_sec):
             continue

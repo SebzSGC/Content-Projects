@@ -127,14 +127,38 @@ def prune_utterances_by_signal_clusters(
     return kept
 
 
+def _utterance_reaction_tag(u: Utterance, signals: Optional[SignalSeries]) -> str:
+    if signals is None or not signals.reaction:
+        return ""
+    lo = max(0, int(u.start))
+    hi = min(len(signals.reaction), int(u.end) + 1)
+    if hi <= lo:
+        return ""
+    peak_react = max(signals.reaction[lo:hi])
+    if peak_react >= 0.75:
+        return " [ALTA REACCIÓN]"
+    if peak_react >= 0.58:
+        return " [REACCIÓN]"
+    return ""
+
+
 def build_compact_timeline(
     utterances: Sequence[Utterance],
     signals: Optional[SignalSeries] = None,
+    min_pause_marker_sec: float = 3.0,
 ) -> str:
-    """Build the exact compact text timeline for the LLM: `u0412 [1:02:03] texto` + peak markers."""
+    """Build the exact compact text timeline for the LLM: `u0412 [1:02:03] texto` + pause & peak markers."""
     events: List[Tuple[float, int, str]] = []
-    for u in utterances:
-        events.append((u.start, 1, f"{u.id} [{fmt_hms(u.start)}] {u.text}"))
+    for idx, u in enumerate(utterances):
+        if idx > 0 and signals is not None and min_pause_marker_sec > 0:
+            prev_u = utterances[idx - 1]
+            gap = u.start - prev_u.end
+            if gap >= min_pause_marker_sec:
+                gap_sec = max(int(min_pause_marker_sec), int(round(gap)))
+                mid_t = round((prev_u.end + u.start) * 0.5, 3)
+                events.append((mid_t, 0, f"--- [PAUSA {gap_sec}s] ---"))
+        tag = _utterance_reaction_tag(u, signals)
+        events.append((u.start, 1, f"{u.id} [{fmt_hms(u.start)}] {u.text}{tag}"))
     if signals:
         for p in signals.peaks:
             events.append((p.t, 0, _format_peak(p)))

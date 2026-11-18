@@ -37,7 +37,8 @@ from clipsrender import RenderQuality
 from clipsstyles import load_preset, resolve_game_keyterms
 
 from ..config import ServerSettings
-from ..experimental.generation import selection_guidance
+from ..experimental.generation import selection_guidance, summarize_editor_diff
+from ..experimental.storage import Store
 from ..pools.api_pool import ApiPool
 from ..pools.cpu_pool import (
     CpuPool,
@@ -528,7 +529,7 @@ class Orchestrator:
             target_clips = max(1, min(20, int(row.get("max_clips") or self.settings.auto_render_top_k or 5)))
             self.events.publish("stage_progress", session_id=session_id, stage="curate", progress=0.55, message=f"Eligiendo las mejores {target_clips} jugadas y momentos divertidos…")
             related_window_sec = self.settings.related_window_sec
-            guidance = selection_guidance(related_window_sec)
+            guidance = selection_guidance(related_window_sec, db_path=self.db.db_path)
             windows = build_timeline_windows_if_needed(utterances, signals)
             window_proposals = await asyncio.gather(
                 *(
@@ -757,6 +758,13 @@ class Orchestrator:
         raw_json = plan.model_dump_json(indent=2, exclude_none=True)
         (cdir / "editplan.user.json").write_text(raw_json + "\n", encoding="utf-8")
         self.db.update_clip(clip_id, editplan_json=raw_json, state="EDITED")
+        try:
+            diff_payload = summarize_editor_diff(row, json.loads(raw_json))
+            if diff_payload is not None:
+                op_key = f"editor:{clip_id}:{stable_hash(diff_payload)[:16]}"
+                Store(self.db.db_path).record_editor_diff(row["session_id"], clip_id, op_key, diff_payload)
+        except Exception:
+            pass
         self.events.publish("clip_updated", session_id=row["session_id"], clip_id=clip_id, state="EDITED")
         return plan
 

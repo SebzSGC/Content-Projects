@@ -53,11 +53,15 @@ type ProviderId = "deepgram" | "groq" | "gemini" | "openai_compat" | "fixture";
 
 const GEMINI_MODELS = [
   { value: "gemini-3.5-flash-lite", label: "gemini-3.5-flash-lite (Recomendado)" },
+  { value: "gemini-3.1-flash-lite", label: "gemini-3.1-flash-lite (Económico)" },
   { value: "gemini-3.8-flash", label: "gemini-3.8-flash (Alta capacidad)" },
 ];
 
 const OPENAI_COMPAT_MODELS = [
   { value: "gpt-6-luna", label: "gpt-6-luna (Reemplazo oficial de gpt-4o-mini)" },
+  { value: "deepseek-flash", label: "deepseek-flash (DeepSeek API · Ultra económico)" },
+  { value: "deepseek-chat", label: "deepseek-chat (DeepSeek V3 · Alto valor)" },
+  { value: "deepseek-reasoner", label: "deepseek-reasoner (DeepSeek R1)" },
   { value: "gpt-4o-mini", label: "gpt-4o-mini (Auto-normalizado a gpt-6-luna)" },
   { value: "llama-3.3-70b-versatile", label: "llama-3.3-70b-versatile (Groq / OpenRouter)" },
 ];

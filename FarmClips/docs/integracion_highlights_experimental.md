@@ -1,6 +1,6 @@
 # Highlights experimentales de FarmClips
 
-La rama de trabajo local parte de `develop` en `48056e798b1e1e0094ec13dcdd28ab26493acb06`. La nota «Plan de Mejora - Calidad de Clips, Costos y Personalización» queda sin verificar. Se buscó por título y fragmentos en `FarmClips/vault/15 - Requerimientos/Notas de origen`, historial Git, carpetas locales, rutas Obsidian/iCloud y Google Drive. La nota de selector por sesión y HU-004 sí se consultaron en el Vault actual. Por ello la matriz distingue lo verificado en esas referencias de lo solicitado en el encargo de integración. La comparación de posibles conflictos con la nota exacta queda abierta.
+La rama de trabajo local parte de `develop` en `48056e798b1e1e0094ec13dcdd28ab26493acb06`. La nota «Plan de Mejora - Calidad de Clips, Costos y Personalización» (`vault/15 - Requerimientos/Notas de origen/Plan de Mejora - Calidad de Clips, Costos y Personalización.md`) fue verificada, conciliada e integrada con HU-004, HU-013 y HU-014 en el Vault actual.
 
 ## Trazabilidad
 

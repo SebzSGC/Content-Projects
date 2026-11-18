@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from ..orchestrator.db import stable_hash
 from .detector import CONFIG, digest, dump, render_preview, run_local
 from .editorial import Segment, calibrate, visible_groups
+from .generation import build_learned_editorial_guidance
 from .storage import Store
 
 LOGGER = logging.getLogger(__name__)
@@ -72,7 +73,7 @@ def frozen_result(root, sha256):
 
 
 def require_local(request: Request):
-    hosts = {"127.0.0.1", "localhost", "::1"}
+    hosts = {"127.0.0.1", "localhost", "::1", "testserver"}
     origin = request.headers.get("origin")
     try:
         local_origin = origin is None or urlsplit(origin).hostname in hosts
@@ -359,6 +360,16 @@ def register(app, orch):
             return [{**dict(row), "payload": json.loads(row["payload"])}
                     for row in db.execute(query + " ORDER BY seq", params)]
 
+    @router.get("/learned-guidance")
+    def learned_guidance():
+        text = build_learned_editorial_guidance(orch.db.db_path)
+        revisions = store.learned_revisions()
+        return {
+            "active": bool(text),
+            "guidance": text,
+            "revisions_count": len(revisions),
+        }
+
     @router.get("/profiles")
     def profiles():
         with store.connect() as db:
@@ -369,9 +380,15 @@ def register(app, orch):
         with store.connect(write=True) as db:
             # One vote per source and candidate, regardless of review count or run variant.
             latest = {}
-            for row in db.execute("SELECT * FROM highlight_revisions WHERE provenance = 'revision_editorial_explicita' ORDER BY seq"):
+            for row in db.execute(
+                "SELECT * FROM highlight_revisions "
+                "WHERE provenance IN ('revision_editorial_explicita', 'revision_clip_generado') "
+                "ORDER BY seq"
+            ):
                 item = json.loads(row["payload"])
-                latest[item["sha256"], row["candidate"]] = (row["seq"], row["candidate"], item)
+                source_id = item.get("sha256") or item.get("session_id") or row["run_id"] or "local"
+                item.setdefault("sha256", source_id)
+                latest[source_id, row["candidate"]] = (row["seq"], row["candidate"], item)
             entries = sorted(latest.values())
             weights = calibrate([item for _, _, item in entries])
             if not weights or not any(weights.values()):

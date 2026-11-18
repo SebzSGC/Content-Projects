@@ -198,7 +198,7 @@ def ensure_emoji_png(emoji_id: str, size: int = 128, cache_dir: Optional[Path] =
 
 
 def ensure_sfx_wav(sfx_id: str = "boom", cache_dir: Optional[Path] = None) -> Path:
-    """Return path to a clean synthetic CC0 SFX WAV (e.g. 'boom' bass impact) for audio.sfx."""
+    """Return path to a clean synthetic CC0 SFX WAV ('boom', 'whoosh', 'pop') for audio.sfx."""
     import soundfile as sf
 
     safe_id = "".join(c for c in sfx_id.lower() if c.isalnum() or c in ("_", "-")) or "boom"
@@ -209,13 +209,29 @@ def ensure_sfx_wav(sfx_id: str = "boom", cache_dir: Optional[Path] = None) -> Pa
         return target
 
     sr = 48000
-    dur = 0.55
-    t = np.linspace(0.0, dur, int(sr * dur), endpoint=False, dtype=np.float32)
-    # Sub-bass pitch drop 110Hz -> 38Hz + transient punch
-    freq = 38.0 + 72.0 * np.exp(-t * 14.0)
-    phase = 2.0 * math.pi * np.cumsum(freq) / sr
-    env = np.exp(-t * 6.5)
-    punch = np.sin(2.0 * math.pi * 220.0 * t) * np.exp(-t * 45.0) * 0.35
-    wave = np.clip((np.sin(phase) * env * 0.75 + punch), -0.95, 0.95).astype(np.float32)
+    if safe_id == "whoosh":
+        dur = 0.36
+        t = np.linspace(0.0, dur, int(sr * dur), endpoint=False, dtype=np.float32)
+        freq = 580.0 - 410.0 * (t / dur)
+        phase = 2.0 * math.pi * np.cumsum(freq) / sr
+        env = np.sin(math.pi * (t / dur)) ** 1.6
+        harmonic = np.sin(phase * 1.45) * 0.35
+        wave = np.clip((np.sin(phase) * 0.65 + harmonic) * env * 0.85, -0.95, 0.95).astype(np.float32)
+    elif safe_id == "pop":
+        dur = 0.24
+        t = np.linspace(0.0, dur, int(sr * dur), endpoint=False, dtype=np.float32)
+        freq = 160.0 + 360.0 * np.exp(-t * 32.0)
+        phase = 2.0 * math.pi * np.cumsum(freq) / sr
+        env = np.exp(-t * 18.0)
+        wave = np.clip(np.sin(phase) * env * 0.85, -0.95, 0.95).astype(np.float32)
+    else:
+        dur = 0.55
+        t = np.linspace(0.0, dur, int(sr * dur), endpoint=False, dtype=np.float32)
+        # Sub-bass pitch drop 110Hz -> 38Hz + transient punch
+        freq = 38.0 + 72.0 * np.exp(-t * 14.0)
+        phase = 2.0 * math.pi * np.cumsum(freq) / sr
+        env = np.exp(-t * 6.5)
+        punch = np.sin(2.0 * math.pi * 220.0 * t) * np.exp(-t * 45.0) * 0.35
+        wave = np.clip((np.sin(phase) * env * 0.75 + punch), -0.95, 0.95).astype(np.float32)
     sf.write(str(target), wave, sr, subtype="PCM_16")
     return target

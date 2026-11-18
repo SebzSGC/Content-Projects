@@ -41,8 +41,11 @@ def compute_jump_cut_ranges(
     silences: Sequence[SilenceSpan],
     signals: Optional[SignalSeries],
     preset: StylePreset,
+    mic_attack_100hz: Optional[np.ndarray] = None,
+    mic_attack_start_sec: float = 0.0,
+    attack_hz: int = 100,
 ) -> List[Tuple[float, float]]:
-    """Cut silences > 0.7s leaving 0.15s margin, NEVER cutting during laughter/screams."""
+    """Cut silences > 0.7s leaving 0.15s margin, NEVER cutting during laughter/screams (1Hz + 100Hz protection)."""
     min_sil = preset.cuts.min_silence_sec
     margin = preset.cuts.margin_sec
     protect_reactions = preset.cuts.never_cut_laughter_or_scream
@@ -74,18 +77,24 @@ def compute_jump_cut_ranges(
         else:
             merged.append((a, b))
 
-    # Filter out gaps where streamer is laughing/screaming (high mic burst/reaction)
+    # Filter out gaps where streamer is laughing/screaming (high mic burst/reaction at 1Hz or 100Hz sub-second)
     cuts_to_remove: List[Tuple[float, float]] = []
     for a, b in merged:
         cut_a = a + margin
         cut_b = b - margin
         if cut_b - cut_a < 0.20:
             continue
-        if protect_reactions and signals is not None and signals.reaction:
-            lo_s = max(0, int(a))
-            hi_s = min(len(signals.reaction), int(b) + 1)
-            if hi_s > lo_s and max(signals.reaction[lo_s:hi_s]) >= 0.50:
-                continue
+        if protect_reactions:
+            if signals is not None and signals.reaction:
+                lo_s = max(0, int(a))
+                hi_s = min(len(signals.reaction), int(b) + 1)
+                if hi_s > lo_s and max(signals.reaction[lo_s:hi_s]) >= 0.50:
+                    continue
+            if mic_attack_100hz is not None and len(mic_attack_100hz) > 0:
+                lo_100 = max(0, int(round((cut_a - mic_attack_start_sec) * attack_hz)))
+                hi_100 = min(len(mic_attack_100hz), int(round((cut_b - mic_attack_start_sec) * attack_hz)) + 1)
+                if hi_100 > lo_100 and float(np.max(mic_attack_100hz[lo_100:hi_100])) >= 0.45:
+                    continue
         cuts_to_remove.append((round(cut_a, 3), round(cut_b, 3)))
 
     if not cuts_to_remove:
@@ -311,7 +320,16 @@ def build_editplan(
     snapped_words = snap_word_starts_to_attack(raw_words, mic_attack_100hz, mic_attack_start_sec)
 
     ranges = (
-        compute_jump_cut_ranges(clip.start, clip.end, snapped_words, speech_silences, signals, preset)
+        compute_jump_cut_ranges(
+            clip.start,
+            clip.end,
+            snapped_words,
+            speech_silences,
+            signals,
+            preset,
+            mic_attack_100hz=mic_attack_100hz,
+            mic_attack_start_sec=mic_attack_start_sec,
+        )
         if clip.jump_cuts and not clip.editorial_segments
         else source_ranges
     )

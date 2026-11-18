@@ -393,7 +393,7 @@ def create_app(
         allow_headers=["*"],
     )
 
-    if os.environ.get("CLIPS_EXPERIMENTAL_HIGHLIGHTS") == "1":
+    if os.environ.get("CLIPS_EXPERIMENTAL_HIGHLIGHTS", "1").strip().lower() not in ("0", "false", "no", "off"):
         from ..experimental.routes import register
 
         register(app, orch)

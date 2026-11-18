@@ -13,6 +13,7 @@ from .base import LlmAdapter, RawLlmCallOutput
 
 # Pricing per 1M tokens (USD) — verified table in architecture spec
 GEMINI_PRICING_PER_1M: Dict[str, Tuple[float, float]] = {
+    "gemini-3.1-flash-lite": (0.25, 1.50),
     "gemini-3.5-flash-lite": (0.30, 2.50),
     "gemini-3.8-flash": (0.50, 3.00),
 }

@@ -70,3 +70,28 @@ class Store:
                 "INSERT INTO highlight_revisions(run_id,candidate,provenance,operation,payload) VALUES(?,?,?,?,?)",
                 (run_id, candidate, provenance, operation, encoded),
             ).lastrowid
+
+    def record_editor_diff(self, session_id: str, clip_id: str, operation: str, payload: dict) -> int:
+        """Record an idempotent non-blocking editor adjustment diff without conflicting with ClipReview seqs."""
+        self.migrate()
+        run_id = f"editor:{session_id}"
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+        with self.connect(write=True) as db:
+            previous = db.execute("SELECT seq FROM highlight_revisions WHERE operation=?", (operation,)).fetchone()
+            if previous:
+                return previous["seq"]
+            return db.execute(
+                "INSERT INTO highlight_revisions(run_id,candidate,provenance,operation,payload) VALUES(?,?,?,?,?)",
+                (run_id, clip_id, "edicion_estudio", operation, encoded),
+            ).lastrowid
+
+    def learned_revisions(self) -> list[dict]:
+        """Return all revisions ordered by seq for learned editorial guidance synthesis."""
+        self.migrate()
+        with self.connect() as db:
+            rows = db.execute(
+                "SELECT * FROM highlight_revisions "
+                "WHERE provenance IN ('revision_clip_generado', 'revision_editorial_explicita', 'edicion_estudio') "
+                "ORDER BY seq"
+            ).fetchall()
+            return [{**dict(row), "payload": json.loads(row["payload"])} for row in rows]
