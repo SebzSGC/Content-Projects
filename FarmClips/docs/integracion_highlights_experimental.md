@@ -25,6 +25,14 @@ La calibración compara tasas descriptivas por categoría, exige al menos tres d
 
 Claude Code revisó en solo lectura `config.py`, `db.py` y `routes.py` con la suscripción local. Se incorporaron la biblioteca confinada al directorio configurado, el control de origen local, la verificación de rangos HTTP y el seguimiento de trabajos. Codex realizó el resto de la arquitectura, cambios, pruebas y verificación. El flujo normal mantiene sus rutas y política de publicación.
 
+## Generación y valoración desde una sesión
+
+Con `CLIPS_EXPERIMENTAL_HIGHLIGHTS=1`, la generación habitual incluye el perfil editorial FarmClips 1.0 en la curación existente. Usa los patrones revisados para pedir preparación, giro, consecuencia y límites que hagan comprensible el momento. Una llamada puede conservar su desarrollo posterior si explica el desenlace. Los picos de sonido y los cambios de imagen tienen peso secundario. El orden y la selección entre propuestas solapadas usan 85 % de curación y 15 % de señal, una decisión inicial de implementación. El umbral de render usa la puntuación de entrega existente. El perfil emplea la llamada normal de curación y forma parte de la clave de caché. Al cambiar el perfil, reprocesar puede requerir una nueva llamada normal al proveedor.
+
+Desde [Sesiones](http://127.0.0.1:3040/sessions), abrir una sesión con clips y desplegar **Valorar clip** en una tarjeta. La revisión guarda la decisión, una categoría opcional, el motivo y el intervalo exacto que se valoró. **Personalizar clip** abre el editor existente para cambiar ese intervalo. Si el corte se modifica mientras una valoración está abierta, el servidor pide recargar antes de guardar. El historial de cortes anteriores se conserva. La navegación solo muestra el flujo de sesiones habitual.
+
+La comparación offline V1/V2 conserva sus resultados y su URL directa para regresión. El generador habitual usa las pautas editoriales y decide los límites mediante los IDs de frases y el preset de la sesión. El conjunto revisado no permite un modelo estadístico validado. Las valoraciones de clips de producción se guardan con su propia procedencia para trazabilidad y para una calibración posterior con fuentes comparables.
+
 ## Arranque en este Mac
 
 Desde `/Users/usuario/Documents/Clips-farmclips-experimental/FarmClips`, en una terminal:
@@ -44,7 +52,7 @@ cd /Users/usuario/Documents/Clips-farmclips-experimental/FarmClips
 ./scripts/farmclips-local.sh web
 ```
 
-Abrir [Highlights experimentales](http://127.0.0.1:3040/experimental/highlights). Elegir un VOD y pulsar **Analizar VOD**. Por defecto, el paquete de referencia se usa solo si coinciden las huellas. Marcar **Calcular desde el VOD** para ejecutar reglas locales. Seleccionar un candidato, reproducir el corte V1 o V2, ajustar los límites, guardar una decisión y recargar para comprobar el historial. **Ver todos** muestra la lista completa. **Previsualizar calibración** avisa si los datos son insuficientes. Cuando exista un perfil guardado, **Baseline** restaura la vista original.
+Para reproducir las pruebas offline, abrir directamente el [comparador de referencia](http://127.0.0.1:3040/experimental/highlights). Elegir un VOD y pulsar **Analizar VOD**. Por defecto, el paquete de referencia se usa solo si coinciden las huellas. Marcar **Calcular desde el VOD** para ejecutar reglas locales. Seleccionar un candidato, reproducir el corte V1 o V2, ajustar los límites, guardar una decisión y recargar para comprobar el historial. **Ver todos** muestra la lista completa. **Previsualizar calibración** avisa si los datos son insuficientes. Cuando exista un perfil guardado, **Baseline** restaura la vista original.
 
 Las dependencias web se instalan con `npm --prefix apps/web ci --no-audit --no-fund`. Si hace falta reconstruir la venv de este worktree, usar el Python 3.12 de la venv existente con `-m venv .venv`, conservando la variable `FARMCLIPS_DEV_SITE_PACKAGES`. El arranque local usa un SQLite aislado en `.venv/local-data` y deshabilita Drive. Para desactivar, detener el backend, ejecutar `unset CLIPS_EXPERIMENTAL_HIGHLIGHTS` y reiniciar. Se conservan el historial y los artefactos. Para usar otro directorio de datos o puerto, configurar `CLIPS_DATA_DIR` y `CLIPS_PORT` y hacer coincidir `CLIPS_SERVER_URL` del frontend. Mantener ambas interfaces ligadas a localhost.
 

@@ -183,6 +183,7 @@ class LlmAdapter(ABC):
         max_len: float = 60.0,
         max_clips: int = 12,
         on_raw_call: Optional[Callable[[RawLlmCallOutput], None]] = None,
+        editorial_guidance: str = "",
     ) -> LlmCurationResult:
         """Curate timeline with JSON Schema + Pydantic validation; retries once with compact error feedback."""
         sys_prompt = CURATION_SYSTEM_PROMPT.format(
@@ -191,6 +192,8 @@ class LlmAdapter(ABC):
             title=title or "Stream de gaming",
             max_clips=max_clips,
         )
+        if editorial_guidance:
+            sys_prompt += "\n\n" + editorial_guidance
         calls: List[RawLlmCallOutput] = []
         first = await self.generate_raw(sys_prompt, timeline_text, CURATION_JSON_SCHEMA)
         calls.append(first)

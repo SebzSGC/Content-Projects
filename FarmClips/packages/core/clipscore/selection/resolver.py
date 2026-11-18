@@ -116,8 +116,11 @@ def iou_1d(a: Tuple[float, float], b: Tuple[float, float]) -> float:
 
 
 def dedupe_clips(clips: Sequence[CuratedClip], max_iou: float = 0.35) -> List[CuratedClip]:
+    def rank(clip: CuratedClip) -> float:
+        return clip.editorial_score if clip.editorial_score is not None else clip.final_score
+
     kept: List[CuratedClip] = []
-    for c in sorted(clips, key=lambda x: x.final_score, reverse=True):
+    for c in sorted(clips, key=rank, reverse=True):
         if all(iou_1d((c.start, c.end), (k.start, k.end)) < max_iou for k in kept):
             kept.append(c)
     return kept
@@ -203,6 +206,8 @@ def resolve_curated_clips(
     vod_duration: float,
     min_sec: float = 20.0,
     max_sec: float = 60.0,
+    *,
+    editorial_profile: bool = False,
 ) -> List[CuratedClip]:
     """Convert LLM utterance IDs into exact word-bounded CuratedClip objects with local CPU enrichment."""
     if not utterances or not llm_clips:
@@ -268,6 +273,7 @@ def resolve_curated_clips(
                 llm_score=llm_score,
                 signal_score=sig_score,
                 final_score=combined,
+                editorial_score=round(0.85 * llm_score + 15.0 * sig_score, 1) if editorial_profile else None,
                 reason=str(item.get("reason", "")).strip() or "Seleccionado por alta energía y arco narrativo.",
                 reaction_peaks=r_peaks,
             )

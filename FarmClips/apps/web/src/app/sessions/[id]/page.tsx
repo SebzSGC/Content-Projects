@@ -21,6 +21,7 @@ import {
 import {
   API_PREFIX,
   cancelSession,
+  fetchHealth,
   fetchSessionClips,
   fetchSessionDetail,
   fetchSessionSignals,
@@ -34,6 +35,7 @@ import {
   type SessionSummary,
   type SignalSeries,
 } from "@/lib/api/client";
+import { ClipReview } from "@/components/ClipReview";
 import { StepProgress } from "@/components/StepProgress";
 import { PIPELINE_STEPS, friendlyState, sessionSteps } from "@/lib/pipelineSteps";
 import {
@@ -71,6 +73,11 @@ function polyline(values: number[]): string {
 export default function SessionDetailPage() {
   const params = useParams<{ id: string }>();
   const sessionId = params.id;
+
+  const [canReview, setCanReview] = useState(false);
+  useEffect(() => {
+    fetchHealth().then(health => setCanReview(Boolean(health.experimental_highlights))).catch(() => {});
+  }, []);
 
   const [session, setSession] = useState<SessionSummary | null>(null);
   const [clips, setClips] = useState<ClipItem[]>([]);
@@ -741,8 +748,12 @@ export default function SessionDetailPage() {
                         <br />
                         Historia: {clip.llm_score.toFixed(0)}/100 · Emoción en vivo:{" "}
                         {(clip.signal_score * 100).toFixed(0)}/100 · Nota final: {score}/100.
+                        {clip.curated?.editorial_score != null && <>
+                          <br />Puntuación para ordenar: {clip.curated.editorial_score.toFixed(1)}/100
+                        </>}
                       </InfoTip>
                     </div>
+                    {canReview && <ClipReview key={`${clip.id}:${clip.start}:${clip.end}`} clip={clip} />}
                   </div>
                 </GlassCard>
               );

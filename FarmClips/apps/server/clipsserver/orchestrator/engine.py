@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -33,6 +34,7 @@ from clipsrender import RenderQuality
 from clipsstyles import load_preset, resolve_game_keyterms
 
 from ..config import ServerSettings
+from ..experimental.generation import EDITORIAL_GUIDANCE
 from ..pools.api_pool import ApiPool
 from ..pools.cpu_pool import (
     CpuPool,
@@ -518,6 +520,7 @@ class Orchestrator:
             # 3 & 4. TIMELINE + CURAR CON LLM (API Pool)
             target_clips = max(1, min(20, int(row.get("max_clips") or self.settings.auto_render_top_k or 5)))
             self.events.publish("stage_progress", session_id=session_id, stage="curate", progress=0.55, message=f"Eligiendo las mejores {target_clips} jugadas y momentos divertidos…")
+            editorial_profile = os.environ.get("CLIPS_EXPERIMENTAL_HIGHLIGHTS") == "1"
             windows = build_timeline_windows_if_needed(utterances, signals)
             window_proposals = await asyncio.gather(
                 *(
@@ -528,6 +531,7 @@ class Orchestrator:
                         min_len=preset.duration.min_sec,
                         max_len=preset.duration.max_sec,
                         max_clips=target_clips,
+                        **({"editorial_guidance": EDITORIAL_GUIDANCE} if editorial_profile else {}),
                     )
                     for w_txt in windows
                 )
@@ -540,6 +544,7 @@ class Orchestrator:
                 vod_duration=prep.gameplay.duration,
                 min_sec=preset.duration.min_sec,
                 max_sec=preset.duration.max_sec,
+                editorial_profile=editorial_profile,
             )[:target_clips]
             self.events.publish(
                 "budget_update",

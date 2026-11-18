@@ -53,7 +53,8 @@ class Store:
             return [{**dict(row), "payload": json.loads(row["payload"])}
                     for row in db.execute(query + " ORDER BY seq", params)]
 
-    def save_review(self, run_id, candidate, operation, expected, payload):
+    def save_review(self, run_id, candidate, operation, expected, payload, *,
+                    provenance="revision_editorial_explicita"):
         encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True)
         with self.connect(write=True) as db:
             previous = db.execute("SELECT * FROM highlight_revisions WHERE operation=?", (operation,)).fetchone()
@@ -67,5 +68,5 @@ class Store:
                 raise ValueError("La revisión cambió. Recarga el historial.")
             return db.execute(
                 "INSERT INTO highlight_revisions(run_id,candidate,provenance,operation,payload) VALUES(?,?,?,?,?)",
-                (run_id, candidate, "revision_editorial_explicita", operation, encoded),
+                (run_id, candidate, provenance, operation, encoded),
             ).lastrowid

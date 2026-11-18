@@ -26,14 +26,21 @@ class Start(BaseModel):
     fresh: bool = False
 
 
-class Review(BaseModel):
+class EditorialDecision(BaseModel):
     decision: Literal["interesante", "no_interesante", "dudoso"]
-    version: Literal["v1", "v2"]
     category: Category | None = None
     notes: str = Field(default="", max_length=3000)
-    segment: Segment | None = None
     operation: str = Field(min_length=1, max_length=80)
     expected: int | None = None
+
+
+class Review(EditorialDecision):
+    version: Literal["v1", "v2"]
+    segment: Segment | None = None
+
+
+class GeneratedReview(EditorialDecision):
+    proposal: Segment
 
 
 def frozen_result(root, sha256):
@@ -262,6 +269,37 @@ def register(app, orch):
             raise HTTPException(404, "Fotograma no disponible")
         return FileResponse(path, media_type="image/jpeg")
 
+    def generated_clip(clip_id):
+        clip = orch.db.get_clip(clip_id)
+        if clip is None:
+            raise HTTPException(404, "Clip desconocido")
+        return clip, "generated:" + clip["session_id"]
+
+    @router.get("/generated-clips/{clip_id}/reviews")
+    def generated_history(clip_id: str):
+        _, scope = generated_clip(clip_id)
+        return store.history(scope, clip_id)
+
+    @router.post("/generated-clips/{clip_id}/reviews")
+    def review_generated_clip(clip_id: str, body: GeneratedReview):
+        clip, scope = generated_clip(clip_id)
+        proposal = [clip["start_sec"], clip["end_sec"]]
+        if proposal != [body.proposal.start, body.proposal.end]:
+            raise HTTPException(409, "El corte cambió. Recarga el clip para valorar el corte actual.")
+        payload = body.model_dump(exclude={"operation", "expected", "proposal"})
+        payload.update({
+            "proposal": proposal,
+            "session_id": clip["session_id"],
+            "llm_score": clip["llm_score"],
+            "signal_score": clip["signal_score"],
+        })
+        try:
+            seq = store.save_review(scope, clip_id, body.operation, body.expected, payload,
+                                    provenance="revision_clip_generado")
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return {"seq": seq}
+
     @router.get("/runs/{run_id}/history/{candidate}")
     def history(run_id: str, candidate: str):
         get_run(run_id)
@@ -320,7 +358,7 @@ def register(app, orch):
         with store.connect(write=True) as db:
             # One vote per source and candidate, regardless of review count or run variant.
             latest = {}
-            for row in db.execute("SELECT * FROM highlight_revisions WHERE run_id IS NOT NULL ORDER BY seq"):
+            for row in db.execute("SELECT * FROM highlight_revisions WHERE provenance = 'revision_editorial_explicita' ORDER BY seq"):
                 item = json.loads(row["payload"])
                 latest[item["sha256"], row["candidate"]] = (row["seq"], row["candidate"], item)
             entries = sorted(latest.values())

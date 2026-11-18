@@ -207,6 +207,7 @@ class CuratedClip(BaseModel):
     llm_score: float = 0.0
     signal_score: float = 0.0
     final_score: float = 0.0
+    editorial_score: Optional[float] = None
     reason: str = ""
     reaction_peaks: List[float] = Field(default_factory=list)
     # False keeps the clip continuous (no jump cuts on long pauses); set from the editor

@@ -189,6 +189,7 @@ export interface ClipItem {
     emojis: { word: string; emoji: string }[];
     reaction_peaks: number[];
     jump_cuts?: boolean;
+    editorial_score?: number | null;
   } | null;
   editplan: EditPlan | null;
   has_draft: boolean;
