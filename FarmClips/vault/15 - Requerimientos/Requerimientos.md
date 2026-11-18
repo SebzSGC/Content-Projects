@@ -41,6 +41,7 @@ flowchart LR
 |---|---|---|
 | [[EP-02 Claridad y Experiencia de Usuario en Web Studio\|EP-02]] Claridad y Experiencia de Usuario en Web Studio | `██████████ 97 %` | 5 |
 | [[EP-03 Edición profesional en FilmCraft con copiloto MCP\|EP-03]] Edición profesional en FilmCraft con copiloto MCP | `██████████ 100 %` | 7 |
+| [[EP-04 Selección Editorial Calidad de Clips y Aprendizaje Continuo\|EP-04]] Selección Editorial Calidad de Clips y Aprendizaje Continuo | `██████████ 100 %` | 1 |
 
 ## 🗒️ Notas de origen
 
@@ -51,6 +52,7 @@ flowchart LR
 - [[2026-11-12 Plan de integracion FilmCraft y copiloto MCP]]
 - [[2026-11-13 Auditoría y rediseño integral del frontend con Astryx]]
 - [[2026-11-13 Selector de cantidad de clips por sesión]]
+- [[Plan de Mejora - Calidad de Clips, Costos y Personalización]]
 
 <!-- fin:indice-automatico -->
 

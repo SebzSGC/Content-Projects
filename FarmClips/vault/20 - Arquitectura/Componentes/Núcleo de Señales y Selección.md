@@ -4,7 +4,7 @@ tipo: componente
 estado: vigente
 audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
-actualizado: 2026-11-07
+actualizado: 2026-11-18
 etiquetas: [tipo/componente, area/core]
 ---
 
@@ -53,22 +53,23 @@ Transforma miles de palabras individuales en una transcripción estructurada en 
 - Asigna un identificador corto y único (`u0001`, `u0002`, ..., `u9999`).
 - Fusiona silencios naturales de respiración ($< 0.4\text{ s}$).
 - **Poda en 2 etapas por clusters de señales (`prune_utterances_by_signal_clusters`)**: En grabaciones largas ($\ge 10\text{ min}$), filtra automáticamente las zonas muertas sin picos acústicos ni actividad en el juego, conservando ventanas contextuales ($[-45\text{ s}, +60\text{ s}]$) alrededor de los núcleos de alta energía. Esto ahorra entre un **65 % y un 85 % adicional de tokens de entrada** en streams extensos.
-- Compacta el texto para enviar al LLM:
+- Compacta el texto para enviar al LLM incluyendo marcas de pausa entera ($\ge 3\text{ s}$) y etiquetas de reacción vocal:
   ```text
-  u0045 [4:12] ¡No puede ser, viene por la espalda!
+  u0045 [4:12] ¡No puede ser, viene por la espalda! [REACCIÓN]
   >>> PICO [4:14] (score=0.94 mic=0.88 juego=0.72)
-  u0046 [4:15] ¡Doble baja, bro, ganamos la ronda!
+  --- [PAUSA 4s] ---
+  u0046 [4:19] ¡Doble baja, bro, ganamos la ronda! [ALTA REACCIÓN]
   ```
 
 ---
 
-## ⏱️ 3. Resolvedor de Tiempos e Inferencia en CPU (`selection/resolver.py`)
+## ⏱️ 3. Resolvedor Editorial, Multi-Tramo y Cola Dinámica (`selection/resolver.py`)
 
-El LLM devuelve una propuesta como `{"start_id": "u0045", "end_id": "u0046"}`. El resolvedor local realiza el trabajo de precisión:
-1. Extrae la primera palabra de `u0045` y la última de `u0046`.
+El LLM devuelve propuestas en formato `individual` o `recopilacion`. El resolvedor local realiza el trabajo de precisión:
+1. Extrae la primera y última palabra de cada tramo (`EditorialSegment`) y valida que las recopilaciones reúnan al menos dos acontecimientos distinguibles con `evidence_ids` verificables dentro de la ventana de `600 s`.
 2. **Enriquecimiento local de énfasis y emojis (`infer_local_emphasis_and_emojis`)**: Si el LLM devuelve un JSON minificado sin `emphasis_words`, `emojis`, `hook` o `hashtags`, el resolvedor analiza las palabras del fragmento en CPU y asigna automáticamente las palabras clave de énfasis y sus códigos hex del catálogo de 42 emojis (`1f525`, `1f3c6`, `1f3af`, `1f480`, etc.) con costo \$0.00.
-3. **Ajuste del ataque acústico**: Retrocede entre 50 y 150 ms en la envolvente sonora a 100 Hz para encontrar el punto de silencio exacto antes de la primera consonante explosiva.
-4. **Márgenes de seguridad y validación de duración**: Añade *padding* configurable y ajusta los bordes de frase para mantener el clip dentro de $[20\text{ s}, 60\text{ s}]$.
+3. **Ajuste del ataque acústico y protección a 100 Hz**: Retrocede entre 50 y 150 ms en la envolvente sonora a 100 Hz para encontrar el ataque de voz exacto y protege silencios en `compute_jump_cut_ranges` cuando detecta ráfagas vocales sub-segundo (`100 Hz`), con soporte de efectos CC0 `boom`, `whoosh` y `pop`.
+4. **Cola dinámica (`compute_dynamic_tail_pad`) y suelo de exportación (`40 s`)**: Adapta el margen final según el decaimiento de `signals.reaction` (extendiendo si la risa continúa o cerrando en seco a `0.35 s` en silencio) y exige $\ge 40\text{ s}$ verificados con `FFprobe` para exportar el MP4 final (conservando candidatos cortos en `REVIEW_SHORT` sin rellenarlos a ciegas).
 
 ---
 
