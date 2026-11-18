@@ -112,18 +112,11 @@ async def test_full_golden_hybrid_pipeline_and_editor_cycle(tmp_path: Path) -> N
         assert len(plan_dict["source"]["ranges"]) >= 2
         assert len(plan_dict["captions"]["groups"]) >= 10
 
-        # Verify 1080p MP4 + metadata JSON delivered into Salidas/sesion_torneo_01/
+        # The fixture proposal cannot reach 40 seconds after jump cuts.
+        # It stays in the editor and cannot be automatically delivered.
         salidas_dir = drive_root / "Salidas" / "sesion_torneo_01"
-        salidas_mp4s = list(salidas_dir.glob("*.mp4"))
-        salidas_jsons = list(salidas_dir.glob("*.json"))
-        assert len(salidas_mp4s) == 1
-        assert len(salidas_jsons) == 1
-
-        mp4_meta = probe(salidas_mp4s[0])
-        assert mp4_meta.width == 1080
-        assert mp4_meta.height == 1920
-        assert mp4_meta.has_audio is True
-        assert 20.0 <= mp4_meta.duration <= 40.0
+        assert clip_row["state"] == "REVIEW_SHORT"
+        assert not list(salidas_dir.glob("*.mp4"))
 
         # 4. Principle #4 ("Never pay twice"): re-run session and verify ZERO new API calls!
         calls_before = orch.db.budget_summary(settings.max_budget_usd)["calls_count"]
@@ -158,10 +151,23 @@ async def test_full_golden_hybrid_pipeline_and_editor_cycle(tmp_path: Path) -> N
             draft_probe = probe(draft_path)
             assert (draft_probe.width, draft_probe.height) == (540, 960)
 
-            # Export 1080p final -> must REPLACE existing file in Salidas/ (still exactly 1 MP4 and 1 JSON!)
+            r_short = await client.post(f"/clips/{cid}/render", json={"quality": "final", "upload_to_drive": True})
+            assert r_short.status_code == 422
+            assert not list(salidas_dir.glob("*.mp4"))
+
+            # The manual edit retains source media and makes a long enough final.
+            expanded = await client.post(f"/clips/{cid}/retime",
+                                         json={"start": 0, "end": 42, "jump_cuts": False})
+            assert expanded.status_code == 200, expanded.text
+            clip_row = orch.db.get_clip(cid)
             r_final = await client.post(f"/clips/{cid}/render", json={"quality": "final", "upload_to_drive": True})
-            assert r_final.status_code == 200
-            assert len(list(salidas_dir.glob("*.mp4"))) == 1
+            assert r_final.status_code == 200, r_final.text
+            salidas_mp4s = list(salidas_dir.glob("*.mp4"))
+            salidas_jsons = list(salidas_dir.glob("*.json"))
+            assert len(salidas_mp4s) == len(salidas_jsons) == 1
+            mp4_meta = probe(salidas_mp4s[0])
+            assert (mp4_meta.width, mp4_meta.height) == (1080, 1920)
+            assert mp4_meta.has_audio and mp4_meta.duration >= 40
             updated_meta = json.loads(salidas_jsons[0].read_text(encoding="utf-8"))
             assert updated_meta["overlay_title"] == "EDITADO EN STUDIO 1v3"
 
@@ -171,7 +177,7 @@ async def test_full_golden_hybrid_pipeline_and_editor_cycle(tmp_path: Path) -> N
             plan_now["captions"]["groups"][1]["words"][0]["w"] = "CORREGIDO"
             assert (await client.put(f"/clips/{cid}/editplan", json=plan_now)).status_code == 200
             old_start, old_end = clip_row["start_sec"], clip_row["end_sec"]
-            new_start = max(0.0, old_start - 1.0)
+            new_start = old_start + 1.0
             r_retime = await client.post(
                 f"/clips/{cid}/retime", json={"start": new_start, "end": old_end, "jump_cuts": False}
             )

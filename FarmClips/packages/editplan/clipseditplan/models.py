@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from typing import List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -25,7 +26,7 @@ class SourcePlan(BaseModel):
         cleaned: List[Tuple[float, float]] = []
         for a, b in v:
             a_f, b_f = round(float(a), 3), round(float(b), 3)
-            if b_f <= a_f:
+            if not (math.isfinite(a_f) and math.isfinite(b_f) and 0 <= a_f < b_f):
                 raise ValueError(f"Rango inválido en EditPlan.source.ranges: [{a_f}, {b_f}]")
             if a_f < prev_end - 1e-4:
                 raise ValueError("Los rangos de EditPlan.source.ranges deben ir ordenados y sin solape.")

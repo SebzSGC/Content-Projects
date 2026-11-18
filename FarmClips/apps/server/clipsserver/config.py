@@ -193,6 +193,7 @@ class ServerSettings:
     # Upload only speech to STT (long silences cut, timestamps mapped back): same transcript, fewer billed minutes
     stt_speech_only: bool = True
     # LLM providers
+    related_window_sec: float = 600.0
     llm_primary: str = "gemini"          # gemini | openai_compat | fixture
     llm_model: str = "gemini-3.5-flash-lite"
     llm_backup: str = "openai_compat"    # openai_compat | gemini | none
@@ -287,6 +288,7 @@ class ServerSettings:
             default_keyterms=[t.strip() for t in keyterms_raw.split(",") if t.strip()],
             chunk_target_sec=float(os.environ.get("CLIPS_CHUNK_TARGET_SEC", "600")),
             stt_speech_only=_bool("CLIPS_STT_SPEECH_ONLY", True),
+            related_window_sec=max(1.0, float(os.environ.get("CLIPS_RELATED_WINDOW_SEC", "600"))),
             llm_primary=os.environ.get("CLIPS_LLM_PRIMARY", "gemini").strip().lower(),
             llm_model=os.environ.get("CLIPS_LLM_MODEL", "gemini-3.5-flash-lite").strip(),
             llm_backup=os.environ.get("CLIPS_LLM_BACKUP", "openai_compat").strip().lower(),

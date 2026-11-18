@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Sequence, TypeVar
+from typing import Any, Callable, Dict, List, Optional, Sequence, TypeVar
 
 from clipscore.directors import build_editplan
 from clipscore.domain import (
@@ -99,7 +99,7 @@ def worker_build_editplan(
     clip_dict: Dict[str, Any],
     utterances_list: Sequence[Dict[str, Any]],
     signals_parquet_str: Optional[str],
-    face_parquet_str: Optional[str],
+    face_parquet_str: Optional[str | List[str]],
     style_preset_id: str,
     speech_silences_list: Sequence[Dict[str, Any]],
     camera_wav16k: Optional[str],
@@ -110,14 +110,22 @@ def worker_build_editplan(
     clip = CuratedClip.model_validate(clip_dict)
     utts = [Utterance.model_validate(u) for u in utterances_list]
     signals = SignalSeries.from_parquet(Path(signals_parquet_str)) if signals_parquet_str and Path(signals_parquet_str).is_file() else None
-    face = FaceTrajectory.from_parquet(Path(face_parquet_str)) if face_parquet_str and Path(face_parquet_str).is_file() else None
+    paths = face_parquet_str if isinstance(face_parquet_str, list) else [face_parquet_str]
+    parts = [FaceTrajectory.from_parquet(Path(p)) for p in paths if p and Path(p).is_file()]
+    face = parts[0] if parts else None
+    if face and len(parts) > 1:
+        attributes = ("t_master", "present", "cx", "cy", "size", "confidence")
+        face = face.model_copy(update={
+            **{key: [value for part in parts for value in getattr(part, key)] for key in attributes},
+            "master_end": parts[-1].master_end,
+        })
     preset = load_preset(style_preset_id)
     silences = [SilenceSpan.model_validate(s) for s in speech_silences_list]
     sync = SyncResult.model_validate(sync_dict)
 
     mic_attack = None
     mic_env_start_master = clip.start
-    if camera_wav16k and Path(camera_wav16k).is_file():
+    if not clip.editorial_segments and camera_wav16k and Path(camera_wav16k).is_file():
         cam_a = max(0.0, sync.camera_time(clip.start))
         cam_b = max(cam_a + 0.5, sync.camera_time(clip.end))
         raw_attack, env_cam_s0 = compute_mic_envelope_100hz(camera_wav16k, cam_a, cam_b)

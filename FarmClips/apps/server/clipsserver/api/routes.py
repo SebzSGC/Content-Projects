@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import json
+import logging
 import os
 import re
 import shutil
@@ -18,6 +19,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 import httpx
 from clipscore.domain import SessionState, SignalSeries, SyncResult, new_id
+from clipscore.selection.editorial import MIN_FINAL_SECONDS
 from clipseditplan import EditPlan
 from clipsmedia.drive import (
     GoogleDriveOAuthConnector,
@@ -95,6 +97,7 @@ class RetimeClipBody(BaseModel):
     start: float = Field(ge=0.0, description="Nuevo inicio del clip en segundos del VOD")
     end: float = Field(gt=0.0, description="Nuevo final del clip en segundos del VOD")
     jump_cuts: bool = Field(default=True, description="Quitar las pausas largas (jump cuts)")
+    ranges: Optional[List[tuple[float, float]]] = None
 
 
 class RenderClipBody(BaseModel):
@@ -1182,7 +1185,7 @@ def create_app(
     @app.post("/clips/{clip_id}/retime")
     async def retime_clip_endpoint(clip_id: str, body: RetimeClipBody) -> Dict[str, Any]:
         try:
-            plan = await orch.retime_clip(clip_id, body.start, body.end, body.jump_cuts)
+            plan = await orch.retime_clip(clip_id, body.start, body.end, body.jump_cuts, body.ranges)
         except KeyError as exc:
             raise HTTPException(404, str(exc)) from exc
         except (ValueError, RuntimeError) as exc:
@@ -1196,22 +1199,31 @@ def create_app(
         crow = orch.db.get_clip(clip_id)
         if not crow:
             raise HTTPException(404, "Clip no encontrado")
-        if body.async_mode:
-            asyncio.create_task(
-                orch.render_and_deliver_clip(
-                    clip_id=clip_id,
-                    quality=body.quality,
-                    priority=1000.0,
-                    upload_to_drive=(body.quality == "final" and body.upload_to_drive),
-                )
+        if body.quality == "final" and crow.get("editplan_json"):
+            if EditPlan.model_validate_json(crow["editplan_json"]).total_duration() < MIN_FINAL_SECONDS:
+                raise HTTPException(422, "El montaje necesita al menos 40 segundos para exportar el MP4 final.")
+
+        async def render():
+            return await orch.render_and_deliver_clip(
+                clip_id=clip_id,
+                quality=body.quality,
+                priority=1000.0,
+                upload_to_drive=(body.quality == "final" and body.upload_to_drive),
             )
+
+        if body.async_mode:
+            async def render_in_background():
+                try:
+                    await render()
+                except Exception:
+                    logging.getLogger(__name__).exception("Fallo de render en segundo plano para %s", clip_id)
+
+            asyncio.create_task(render_in_background())
             return {"clip": _serialize_clip(crow), "mp4_path": None, "queued": True}
-        mp4 = await orch.render_and_deliver_clip(
-            clip_id=clip_id,
-            quality=body.quality,
-            priority=1000.0,  # Interactive editor requests always jump to front of render queue
-            upload_to_drive=(body.quality == "final" and body.upload_to_drive),
-        )
+        try:
+            mp4 = await render()
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
         updated = orch.db.get_clip(clip_id)
         assert updated is not None
         return {"clip": _serialize_clip(updated), "mp4_path": str(mp4), "queued": False}
@@ -1226,7 +1238,7 @@ def create_app(
         if not crow:
             raise HTTPException(404, "Clip no encontrado")
         p_str = crow.get("draft_mp4_path") if quality == "draft" else crow.get("final_mp4_path")
-        if not p_str and quality == "final":
+        if not p_str and quality == "final" and not download:
             p_str = crow.get("draft_mp4_path")
         if not p_str or not Path(p_str).is_file():
             raise HTTPException(404, f"Archivo MP4 ({quality}) aún no renderizado")

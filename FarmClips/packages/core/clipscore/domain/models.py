@@ -6,7 +6,7 @@ import time
 import uuid
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -190,6 +190,16 @@ class EmojiSuggestion(BaseModel):
     emoji: str  # Unicode emoji or hex id ("1f631" or "😱")
 
 
+class EditorialSegment(BaseModel):
+    id: str
+    start: float
+    end: float
+    event: str
+    role: str
+    evidence_ids: List[str]
+    relation: str
+
+
 class CuratedClip(BaseModel):
     id: str
     start_id: str
@@ -208,6 +218,11 @@ class CuratedClip(BaseModel):
     signal_score: float = 0.0
     final_score: float = 0.0
     editorial_score: Optional[float] = None
+    editorial_format: Literal["individual", "recopilacion"] = "individual"
+    editorial_segments: List[EditorialSegment] = Field(default_factory=list)
+    grouping_reason: str = ""
+    initial_context: str = ""
+    standalone_reason: str = ""
     reason: str = ""
     reaction_peaks: List[float] = Field(default_factory=list)
     # False keeps the clip continuous (no jump cuts on long pauses); set from the editor
@@ -217,6 +232,9 @@ class CuratedClip(BaseModel):
     @property
     def duration(self) -> float:
         return round(max(0.0, self.end - self.start), 3)
+
+    def source_ranges(self) -> List[tuple[float, float]]:
+        return [(item.start, item.end) for item in self.editorial_segments] or [(self.start, self.end)]
 
     def padded_range(self, margin_sec: float = 2.0, max_duration: Optional[float] = None) -> tuple[float, float]:
         a = max(0.0, self.start - margin_sec)

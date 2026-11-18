@@ -587,6 +587,10 @@ export default function SessionDetailPage() {
                 : clip.has_draft
                   ? `${API_PREFIX}/clips/${clip.id}/file?quality=draft&t=${Math.floor(clip.updated_at)}`
                   : null;
+              const parts = clip.curated?.editorial_segments ?? [];
+              const ranges = clip.editplan?.source.ranges ?? (parts.length
+                ? parts.map(part => [part.start, part.end]) : [[clip.start, clip.end]]);
+              const mountedDuration = ranges.reduce((total, [a, b]) => total + b - a, 0);
               const score = Math.round(clip.final_score);
               const isSelected = selectedClipIds.has(clip.id);
 
@@ -654,7 +658,7 @@ export default function SessionDetailPage() {
                               Borrador listo
                             </span>
                             <span className="rounded-md border border-white/[0.1] bg-black/70 px-2 py-0.5 font-mono tabular-nums backdrop-blur-xs">
-                              {Math.round(clip.end - clip.start)} s
+                              {mountedDuration.toFixed(1)} s
                             </span>
                           </div>
                         )}
@@ -714,6 +718,27 @@ export default function SessionDetailPage() {
                       {clip.post_title}
                     </h3>
 
+                    <p className="text-xs text-slate-400">
+                      {parts.length ? `Recopilación · ${parts.length} tramos` : "Individual"} · {mountedDuration.toFixed(1)} s
+                    </p>
+                    {(Math.round(mountedDuration * 1000) < 40000 || clip.state === "REVIEW_SHORT") && (
+                      <p className="text-xs text-amber-300">
+                        {mountedDuration < 40
+                          ? "Para revisión · El MP4 final requiere 40 s montados."
+                          : "Para revisión · El MP4 no alcanzó los requisitos de duración y sincronía."}
+                      </p>
+                    )}
+                    {!!parts.length && <details className="text-xs text-slate-300">
+                      <summary className="cursor-pointer">Contexto y tramos</summary>
+                      <p className="mt-2">{clip.curated?.initial_context}</p>
+                      <p>{clip.curated?.grouping_reason}</p>
+                      <ol className="mt-2 list-decimal space-y-1 pl-4">
+                        {parts.map(part => <li key={part.id}>
+                          {part.start.toFixed(1)}–{part.end.toFixed(1)} s · {part.role} · {part.event}
+                        </li>)}
+                      </ol>
+                    </details>}
+
                     <p className="line-clamp-2 text-xs leading-relaxed text-slate-400">
                       <strong className="text-slate-300">Por qué destaca:</strong> {clip.reason}
                     </p>
@@ -753,7 +778,7 @@ export default function SessionDetailPage() {
                         </>}
                       </InfoTip>
                     </div>
-                    {canReview && <ClipReview key={`${clip.id}:${clip.start}:${clip.end}`} clip={clip} />}
+                    {canReview && <ClipReview key={`${clip.id}:${JSON.stringify(ranges)}`} clip={clip} />}
                   </div>
                 </GlassCard>
               );

@@ -301,18 +301,19 @@ def build_editplan(
     source_fps: float = 60.0,
 ) -> EditPlan:
     """Compile all inputs into a declarative, self-contained EditPlan v2."""
+    source_ranges = clip.source_ranges()
     raw_words: List[TranscriptWord] = [
         w
         for u in utterances
         for w in u.words
-        if w.end > clip.start and w.start < clip.end
+        if any(w.end > start and w.start < end for start, end in source_ranges)
     ]
     snapped_words = snap_word_starts_to_attack(raw_words, mic_attack_100hz, mic_attack_start_sec)
 
     ranges = (
         compute_jump_cut_ranges(clip.start, clip.end, snapped_words, speech_silences, signals, preset)
-        if clip.jump_cuts
-        else [(round(clip.start, 3), round(clip.end, 3))]
+        if clip.jump_cuts and not clip.editorial_segments
+        else source_ranges
     )
     out_fps = min(preset.format.max_fps, max(24, int(round(source_fps or 60))))
 
@@ -346,7 +347,8 @@ def build_editplan(
     peak_candidates = list(clip.reaction_peaks)
     if signals is not None and signals.reaction and not peak_candidates:
         lo, hi = max(0, int(clip.start)), min(len(signals.reaction), int(clip.end) + 1)
-        ranked_secs = sorted(range(lo, hi), key=lambda s: signals.reaction[s], reverse=True)
+        ranked_secs = sorted((s for s in range(lo, hi) if plan.master_to_clip_time(s) is not None),
+                             key=lambda s: signals.reaction[s], reverse=True)
         for s in ranked_secs:
             if signals.reaction[s] >= 0.55 and all(abs(s - p) >= 4.0 for p in peak_candidates):
                 peak_candidates.append(float(s))
@@ -408,9 +410,10 @@ def build_editplan(
 
     # Optional gameplay horizontal centroid crop if motion_cx has meaningful panning
     if signals is not None and signals.motion_cx:
-        lo, hi = max(0, int(clip.start)), min(len(signals.motion_cx), int(clip.end) + 1)
-        if hi > lo:
-            avg_cx = round(float(np.median(signals.motion_cx[lo:hi])), 3)
+        centers = [cx for start, end in ranges
+                   for cx in signals.motion_cx[max(0, int(start)):int(end) + 1]]
+        if centers:
+            avg_cx = round(float(np.median(centers)), 3)
             if abs(avg_cx - 0.5) >= 0.08:
                 plan.gameplay_crop = [GameplayCropKeyframe(t=0.0, cx=avg_cx, cy=0.5, zoom=1.0)]
 

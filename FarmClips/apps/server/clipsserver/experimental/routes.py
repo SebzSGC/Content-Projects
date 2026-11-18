@@ -41,6 +41,7 @@ class Review(EditorialDecision):
 
 class GeneratedReview(EditorialDecision):
     proposal: Segment
+    source_ranges: list[tuple[float, float]] | None = None
 
 
 def frozen_result(root, sha256):
@@ -286,10 +287,20 @@ def register(app, orch):
         proposal = [clip["start_sec"], clip["end_sec"]]
         if proposal != [body.proposal.start, body.proposal.end]:
             raise HTTPException(409, "El corte cambió. Recarga el clip para valorar el corte actual.")
-        payload = body.model_dump(exclude={"operation", "expected", "proposal"})
+        curated = json.loads(clip.get("curated_json") or "{}")
+        editplan = json.loads(clip.get("editplan_json") or "{}")
+        ranges = editplan.get("source", {}).get("ranges")
+        if ranges is None:
+            ranges = [[segment["start"], segment["end"]]
+                      for segment in curated.get("editorial_segments", [])] or [proposal]
+        if body.source_ranges is not None and list(map(list, body.source_ranges)) != ranges:
+            raise HTTPException(409, "Los tramos cambiaron. Recarga el clip para valorar el montaje actual.")
+        payload = body.model_dump(exclude={"operation", "expected", "proposal", "source_ranges"})
         payload.update({
             "proposal": proposal,
             "session_id": clip["session_id"],
+            "editorial_format": curated.get("editorial_format", "individual"),
+            "source_ranges": ranges,
             "llm_score": clip["llm_score"],
             "signal_score": clip["signal_score"],
         })

@@ -163,6 +163,7 @@ export default function ClipEditorPage() {
   const [retimeStart, setRetimeStart] = useState(0);
   const [retimeEnd, setRetimeEnd] = useState(0);
   const [retimeJumpCuts, setRetimeJumpCuts] = useState(true);
+  const [retimeRanges, setRetimeRanges] = useState<[number, number][]>([]);
   const [retiming, setRetiming] = useState(false);
   const [emojiCategoryFilter, setEmojiCategoryFilter] = useState<string>("all");
   const [liveDuckPct, setLiveDuckPct] = useState<number>(0);
@@ -269,7 +270,8 @@ export default function ClipEditorPage() {
     setRetimeStart(Number(clip.start.toFixed(1)));
     setRetimeEnd(Number(clip.end.toFixed(1)));
     setRetimeJumpCuts(clip.curated?.jump_cuts ?? true);
-  }, [clip?.id, clip?.start, clip?.end, clip?.curated?.jump_cuts]); // eslint-disable-line react-hooks/exhaustive-deps
+    setRetimeRanges(clip.curated?.editorial_segments?.map(part => [part.start, part.end]) ?? []);
+  }, [clip?.id, clip?.start, clip?.end, clip?.curated?.jump_cuts, clip?.curated?.editorial_segments]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     loadAll();
@@ -1052,7 +1054,7 @@ export default function ClipEditorPage() {
         const saved = await handleSave();
         if (!saved) return;
       }
-      const res = await retimeClip(clip.id, retimeStart, retimeEnd, retimeJumpCuts);
+      const res = await retimeClip(clip.id, retimeStart, retimeEnd, retimeJumpCuts, retimeRanges.length ? retimeRanges : undefined);
       setClip(res.clip);
       replacePlan(res.editplan, { clean: true, resetHistory: true });
       seekTo(0);
@@ -1192,6 +1194,7 @@ export default function ClipEditorPage() {
   }
 
   const totalDur = getTotalClipDuration(plan);
+  const draftMontageDuration = retimeRanges.reduce((sum, [start, end]) => sum + end - start, 0);
   const curCrop = evaluateCameraCrop(plan.camera_crop, clipTime);
   const curCapRatio =
     plan.captions.vertical_ratio ?? preset?.captions.gameplay_top_third_ratio ?? 0.28;
@@ -1322,7 +1325,8 @@ export default function ClipEditorPage() {
           <button
             type="button"
             onClick={() => handleRender("final")}
-            disabled={renderingQuality !== null}
+            title={Math.round(totalDur * 1000) < 40000 ? "El MP4 final requiere 40 s montados" : undefined}
+            disabled={renderingQuality !== null || Math.round(totalDur * 1000) < 40000}
             className={btnPrimary}
           >
             {renderingQuality === "final" ? (
@@ -2345,7 +2349,38 @@ export default function ClipEditorPage() {
                 )}
               </div>
 
-              {/* Clip span on the VOD + jump cuts (rebuilt on the server) */}
+              {retimeRanges.length > 0 ? (
+                <div className="space-y-3 rounded-xl border border-zinc-800 p-3 text-xs">
+                  <p className="font-semibold">Tramos de la recopilación</p>
+                  {retimeRanges.map((range, index) => (
+                    <fieldset key={clip.curated?.editorial_segments?.[index]?.id ?? index}
+                      className="grid grid-cols-2 gap-2">
+                      <legend className="mb-1 text-zinc-300">
+                        {clip.curated?.editorial_segments?.[index]?.event ?? `Tramo ${index + 1}`}
+                      </legend>
+                      {([0, 1] as const).map(edge => (
+                        <label key={edge} className="space-y-1">
+                          <span className="block">{edge === 0 ? "Inicio" : "Fin"} en el VOD</span>
+                          <input type="number" min={0} step={0.001} value={range[edge]}
+                            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 p-1.5"
+                            onChange={event => {
+                              const value = event.target.valueAsNumber;
+                              if (!Number.isFinite(value)) return;
+                              setRetimeRanges(previous => previous.map(([a, b], i) =>
+                                i !== index ? [a, b] : edge === 0 ? [value, b] : [a, value]));
+                            }} />
+                        </label>
+                      ))}
+                    </fieldset>
+                  ))}
+                  <p>{draftMontageDuration.toFixed(1)} s montados</p>
+                  <button type="button" onClick={handleRetime} disabled={retiming ||
+                    retimeRanges.some(([a, b], i) => a < 0 || b <= a || (i > 0 && a < retimeRanges[i - 1][1]))}
+                    className="rounded-lg bg-[#FFD400] px-3 py-2 font-bold text-black disabled:opacity-40">
+                    Aplicar tramos
+                  </button>
+                </div>
+              ) : (
               <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-950/70 p-3.5 text-xs">
                 <span className="font-bold text-zinc-300">Inicio y final del clip</span>
                 <p className="text-[11px] text-zinc-500">
@@ -2421,13 +2456,15 @@ export default function ClipEditorPage() {
                 </div>
               </div>
 
+              )}
+
               {/* Jump cut ranges */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-zinc-300">
                     Tramos de partida incluidos ({plan.source.ranges.length})
                   </label>
-                  <span className="text-[11px] text-zinc-500">Pausas largas eliminadas</span>
+                  <span className="text-[11px] text-zinc-500">{retimeRanges.length ? "Orden del VOD" : "Pausas largas eliminadas"}</span>
                 </div>
                 {plan.source.ranges.map(([a, b], idx) => (
                   <div

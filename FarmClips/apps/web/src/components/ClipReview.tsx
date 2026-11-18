@@ -7,7 +7,7 @@ import { btnSecondary, inputBase } from "@/components/ui";
 type Decision = "interesante" | "no_interesante" | "dudoso";
 type Revision = {
   seq: number;
-  payload: { decision: Decision; category?: string; notes: string; proposal: [number, number] };
+  payload: { decision: Decision; category?: string; notes: string; proposal: [number, number]; source_ranges?: [number, number][] };
 };
 const labels: Record<Decision, string> = {
   interesante: "Interesante",
@@ -32,7 +32,9 @@ export function ClipReview({ clip }: { clip: ClipItem }) {
     const revisions: Revision[] = await response.json();
     setHistory(revisions);
     const previous = revisions.at(-1)?.payload;
-    if (previous?.proposal[0] === clip.start && previous.proposal[1] === clip.end) {
+    if (previous?.proposal[0] === clip.start && previous.proposal[1] === clip.end &&
+        (!previous.source_ranges || !clip.editplan ||
+          JSON.stringify(previous.source_ranges) === JSON.stringify(clip.editplan.source.ranges))) {
       setDecision(previous.decision);
       setCategory(previous.category ?? "");
       setNotes(previous.notes);
