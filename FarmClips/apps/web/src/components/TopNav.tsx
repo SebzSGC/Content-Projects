@@ -126,6 +126,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       active: Boolean(isSessions || isEditor),
       icon: Clapperboard,
     },
+    ...(health?.experimental_highlights ? [{
+      href: "/experimental/highlights",
+      label: "Highlights experimentales",
+      sublabel: "Revisión de VOD",
+      active: Boolean(pathname?.startsWith("/experimental/highlights")),
+      icon: Clapperboard,
+    }] : []),
     {
       href: "/analytics",
       label: "Consumo y Presupuesto",

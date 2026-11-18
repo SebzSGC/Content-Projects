@@ -370,6 +370,8 @@ def create_app(
     async def lifespan(_app: FastAPI):
         await orch.startup(enable_watcher=enable_drive_watcher)
         yield
+        if jobs := getattr(_app.state, "highlight_jobs", None):
+            await asyncio.gather(*jobs, return_exceptions=True)
         await orch.shutdown()
 
     app = FastAPI(
@@ -388,6 +390,11 @@ def create_app(
         allow_headers=["*"],
     )
 
+    if os.environ.get("CLIPS_EXPERIMENTAL_HIGHLIGHTS") == "1":
+        from ..experimental.routes import register
+
+        register(app, orch)
+
     @app.get("/health")
     def health() -> Dict[str, Any]:
         ff_bin = resolve_binary("ffmpeg")
@@ -399,6 +406,7 @@ def create_app(
             mp_ok = False
         return {
             "ok": True,
+            "experimental_highlights": hasattr(app.state, "highlight_jobs"),
             "ffmpeg": ff_ok,
             "mediapipe_face_detector": mp_ok,
             "stt_primary": cfg.stt_primary,

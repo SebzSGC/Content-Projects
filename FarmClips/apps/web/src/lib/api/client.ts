@@ -25,6 +25,7 @@ export interface BudgetSummary {
 }
 
 export interface ServerHealth {
+  experimental_highlights?: boolean;
   ok: boolean;
   ffmpeg: boolean;
   mediapipe_face_detector: boolean;
