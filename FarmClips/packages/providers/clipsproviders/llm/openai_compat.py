@@ -17,6 +17,17 @@ DEFAULT_OPENAI_MODEL = "gpt-6-luna"
 OPENAI_PRICING_PER_1M: Dict[str, Tuple[float, float]] = {
     "gpt-6-luna": (0.25, 2.00),
     "llama-3.3-70b-versatile": (0.59, 0.79),
+    "deepseek-flash": (0.15, 0.60),
+    "deepseek-chat": (0.27, 1.10),
+    "deepseek-reasoner": (0.55, 2.19),
+    "deepseek-v4-pro": (0.66, 1.98),
+}
+
+DEEPSEEK_CACHE_HIT_PRICING_PER_1M: Dict[str, float] = {
+    "deepseek-flash": 0.015,
+    "deepseek-chat": 0.07,
+    "deepseek-reasoner": 0.14,
+    "deepseek-v4-pro": 0.022,
 }
 
 
@@ -41,6 +52,7 @@ class OpenAICompatibleAdapter(LlmAdapter):
         self.api_key = (
             api_key
             or os.environ.get("OPENAI_API_KEY", "").strip()
+            or os.environ.get("DEEPSEEK_API_KEY", "").strip()
             or os.environ.get("GROQ_API_KEY", "").strip()
         )
         self.model_name = normalize_openai_model(model)
@@ -52,6 +64,10 @@ class OpenAICompatibleAdapter(LlmAdapter):
             unit_window_sec=60.0,
         )
         self._client = httpx.AsyncClient()
+
+    @property
+    def is_deepseek(self) -> bool:
+        return "deepseek" in self.model_name.lower() or "deepseek.com" in self.base_url.lower()
 
     async def generate_raw(
         self,
@@ -70,6 +86,7 @@ class OpenAICompatibleAdapter(LlmAdapter):
             headers["Authorization"] = f"Bearer {self.api_key}"
 
         est_tokens = max(500.0, len(user_text) / 3.8)
+        use_deepseek_mode = self.is_deepseek
 
         async def _post_with_format(use_strict_schema: bool) -> Tuple[Dict[str, Any], int]:
             sys_content = (
@@ -82,14 +99,15 @@ class OpenAICompatibleAdapter(LlmAdapter):
                 if use_strict_schema
                 else {"type": "json_object"}
             )
-            body = {
+            token_limit_key = "max_tokens" if use_deepseek_mode else "max_completion_tokens"
+            body: Dict[str, Any] = {
                 "model": self.model_name,
                 "messages": [
                     {"role": "system", "content": sys_content},
                     {"role": "user", "content": user_text},
                 ],
                 "response_format": resp_fmt,
-                "max_completion_tokens": max_output_tokens,
+                token_limit_key: max_output_tokens,
                 "temperature": 0.25,
             }
             t0 = time.perf_counter()
@@ -102,7 +120,7 @@ class OpenAICompatibleAdapter(LlmAdapter):
             return resp.json(), lat
 
         payload, latency_ms = await execute_with_retry(
-            lambda: _post_with_format(True),
+            lambda: _post_with_format(not use_deepseek_mode),
             limiter=self.limiter,
             estimated_units=est_tokens,
         )
@@ -115,7 +133,14 @@ class OpenAICompatibleAdapter(LlmAdapter):
         in_tok = int(usage.get("prompt_tokens") or int(est_tokens))
         out_tok = int(usage.get("completion_tokens") or max(1, len(raw_text) // 4))
         in_rate, out_rate = OPENAI_PRICING_PER_1M.get(self.model_name, (0.30, 2.00))
-        cost = round((in_tok / 1_000_000.0) * in_rate + (out_tok / 1_000_000.0) * out_rate, 6)
+        cache_hit_tok = max(0, min(in_tok, int(usage.get("prompt_cache_hit_tokens") or 0)))
+        if cache_hit_tok > 0:
+            hit_rate = DEEPSEEK_CACHE_HIT_PRICING_PER_1M.get(self.model_name, in_rate * 0.1)
+            miss_tok = in_tok - cache_hit_tok
+            in_cost = (miss_tok / 1_000_000.0) * in_rate + (cache_hit_tok / 1_000_000.0) * hit_rate
+        else:
+            in_cost = (in_tok / 1_000_000.0) * in_rate
+        cost = round(in_cost + (out_tok / 1_000_000.0) * out_rate, 6)
 
         return RawLlmCallOutput(
             provider=self.provider_name,

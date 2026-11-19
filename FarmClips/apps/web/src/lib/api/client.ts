@@ -25,6 +25,7 @@ export interface BudgetSummary {
 }
 
 export interface ServerHealth {
+  experimental_highlights?: boolean;
   ok: boolean;
   ffmpeg: boolean;
   mediapipe_face_detector: boolean;
@@ -188,6 +189,12 @@ export interface ClipItem {
     emojis: { word: string; emoji: string }[];
     reaction_peaks: number[];
     jump_cuts?: boolean;
+    editorial_score?: number | null;
+    editorial_format?: "individual" | "recopilacion";
+    editorial_segments?: { id: string; start: number; end: number; event: string; role: string;
+      evidence_ids: string[]; relation: string }[];
+    initial_context?: string;
+    grouping_reason?: string;
   } | null;
   editplan: EditPlan | null;
   has_draft: boolean;
@@ -746,10 +753,11 @@ export const saveClipEditPlan = (clipId: string, plan: EditPlan) =>
   });
 
 /** Move the clip's start/end on the VOD and/or toggle jump cuts; the server rebuilds the EditPlan. */
-export const retimeClip = (clipId: string, start: number, end: number, jumpCuts: boolean) =>
+export const retimeClip = (clipId: string, start: number, end: number, jumpCuts: boolean,
+                           ranges?: [number, number][]) =>
   apiJson<{ clip: ClipItem; editplan: EditPlan }>(`/clips/${encodeURIComponent(clipId)}/retime`, {
     method: "POST",
-    body: JSON.stringify({ start, end, jump_cuts: jumpCuts }),
+    body: JSON.stringify({ start, end, jump_cuts: jumpCuts, ranges }),
   });
 
 export const renderClip = (clipId: string, quality: "draft" | "final", upload_to_drive = true) =>

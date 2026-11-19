@@ -41,8 +41,11 @@ def compute_jump_cut_ranges(
     silences: Sequence[SilenceSpan],
     signals: Optional[SignalSeries],
     preset: StylePreset,
+    mic_attack_100hz: Optional[np.ndarray] = None,
+    mic_attack_start_sec: float = 0.0,
+    attack_hz: int = 100,
 ) -> List[Tuple[float, float]]:
-    """Cut silences > 0.7s leaving 0.15s margin, NEVER cutting during laughter/screams."""
+    """Cut silences > 0.7s leaving 0.15s margin, NEVER cutting during laughter/screams (1Hz + 100Hz protection)."""
     min_sil = preset.cuts.min_silence_sec
     margin = preset.cuts.margin_sec
     protect_reactions = preset.cuts.never_cut_laughter_or_scream
@@ -74,18 +77,24 @@ def compute_jump_cut_ranges(
         else:
             merged.append((a, b))
 
-    # Filter out gaps where streamer is laughing/screaming (high mic burst/reaction)
+    # Filter out gaps where streamer is laughing/screaming (high mic burst/reaction at 1Hz or 100Hz sub-second)
     cuts_to_remove: List[Tuple[float, float]] = []
     for a, b in merged:
         cut_a = a + margin
         cut_b = b - margin
         if cut_b - cut_a < 0.20:
             continue
-        if protect_reactions and signals is not None and signals.reaction:
-            lo_s = max(0, int(a))
-            hi_s = min(len(signals.reaction), int(b) + 1)
-            if hi_s > lo_s and max(signals.reaction[lo_s:hi_s]) >= 0.50:
-                continue
+        if protect_reactions:
+            if signals is not None and signals.reaction:
+                lo_s = max(0, int(a))
+                hi_s = min(len(signals.reaction), int(b) + 1)
+                if hi_s > lo_s and max(signals.reaction[lo_s:hi_s]) >= 0.50:
+                    continue
+            if mic_attack_100hz is not None and len(mic_attack_100hz) > 0:
+                lo_100 = max(0, int(round((cut_a - mic_attack_start_sec) * attack_hz)))
+                hi_100 = min(len(mic_attack_100hz), int(round((cut_b - mic_attack_start_sec) * attack_hz)) + 1)
+                if hi_100 > lo_100 and float(np.max(mic_attack_100hz[lo_100:hi_100])) >= 0.45:
+                    continue
         cuts_to_remove.append((round(cut_a, 3), round(cut_b, 3)))
 
     if not cuts_to_remove:
@@ -301,18 +310,28 @@ def build_editplan(
     source_fps: float = 60.0,
 ) -> EditPlan:
     """Compile all inputs into a declarative, self-contained EditPlan v2."""
+    source_ranges = clip.source_ranges()
     raw_words: List[TranscriptWord] = [
         w
         for u in utterances
         for w in u.words
-        if w.end > clip.start and w.start < clip.end
+        if any(w.end > start and w.start < end for start, end in source_ranges)
     ]
     snapped_words = snap_word_starts_to_attack(raw_words, mic_attack_100hz, mic_attack_start_sec)
 
     ranges = (
-        compute_jump_cut_ranges(clip.start, clip.end, snapped_words, speech_silences, signals, preset)
-        if clip.jump_cuts
-        else [(round(clip.start, 3), round(clip.end, 3))]
+        compute_jump_cut_ranges(
+            clip.start,
+            clip.end,
+            snapped_words,
+            speech_silences,
+            signals,
+            preset,
+            mic_attack_100hz=mic_attack_100hz,
+            mic_attack_start_sec=mic_attack_start_sec,
+        )
+        if clip.jump_cuts and not clip.editorial_segments
+        else source_ranges
     )
     out_fps = min(preset.format.max_fps, max(24, int(round(source_fps or 60))))
 
@@ -346,7 +365,8 @@ def build_editplan(
     peak_candidates = list(clip.reaction_peaks)
     if signals is not None and signals.reaction and not peak_candidates:
         lo, hi = max(0, int(clip.start)), min(len(signals.reaction), int(clip.end) + 1)
-        ranked_secs = sorted(range(lo, hi), key=lambda s: signals.reaction[s], reverse=True)
+        ranked_secs = sorted((s for s in range(lo, hi) if plan.master_to_clip_time(s) is not None),
+                             key=lambda s: signals.reaction[s], reverse=True)
         for s in ranked_secs:
             if signals.reaction[s] >= 0.55 and all(abs(s - p) >= 4.0 for p in peak_candidates):
                 peak_candidates.append(float(s))
@@ -408,9 +428,10 @@ def build_editplan(
 
     # Optional gameplay horizontal centroid crop if motion_cx has meaningful panning
     if signals is not None and signals.motion_cx:
-        lo, hi = max(0, int(clip.start)), min(len(signals.motion_cx), int(clip.end) + 1)
-        if hi > lo:
-            avg_cx = round(float(np.median(signals.motion_cx[lo:hi])), 3)
+        centers = [cx for start, end in ranges
+                   for cx in signals.motion_cx[max(0, int(start)):int(end) + 1]]
+        if centers:
+            avg_cx = round(float(np.median(centers)), 3)
             if abs(avg_cx - 0.5) >= 0.08:
                 plan.gameplay_crop = [GameplayCropKeyframe(t=0.0, cx=avg_cx, cy=0.5, zoom=1.0)]
 

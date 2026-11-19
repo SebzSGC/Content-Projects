@@ -5,7 +5,9 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from ..domain import CuratedClip, EmojiSuggestion, SignalSeries, Utterance, new_id
+from ..domain import CuratedClip, EditorialSegment, EmojiSuggestion, SignalSeries, Utterance, new_id
+
+from .editorial import DEFAULT_RELATED_WINDOW_SECONDS, MIN_FINAL_SECONDS, duration, shared_duration
 
 UTT_ID_RE = re.compile(r"u?(\d+)", re.IGNORECASE)
 
@@ -27,6 +29,44 @@ def _norm_uid(raw_id: str, valid_map: Dict[str, int]) -> Optional[int]:
     return None
 
 
+def compute_dynamic_tail_pad(
+    raw_end_sec: float,
+    signals: Optional[SignalSeries],
+    next_utterance_start: Optional[float] = None,
+    default_pad: float = 0.8,
+) -> float:
+    """Adapt clip tail padding using vocal reaction decay: extend for ongoing laughter/scream, trim on dead silence."""
+    if signals is None or not signals.reaction:
+        return default_pad
+    sec = max(0, int(raw_end_sec))
+    n_react = len(signals.reaction)
+    if sec >= n_react:
+        return default_pad
+
+    tail_pad = default_pad
+    cur_react = signals.reaction[sec]
+    next_react = signals.reaction[sec + 1] if sec + 1 < n_react else 0.0
+    later_react = signals.reaction[sec + 2] if sec + 2 < n_react else 0.0
+
+    if max(cur_react, next_react) >= 0.55:
+        if later_react >= 0.48:
+            tail_pad = 1.65
+        elif next_react >= 0.48:
+            tail_pad = 1.25
+        else:
+            tail_pad = 0.95
+    elif cur_react < 0.16 and next_react < 0.16:
+        mic_val = signals.mic_loudness[sec] if sec < len(signals.mic_loudness) else 0.5
+        if mic_val < 0.18:
+            tail_pad = 0.35
+
+    if next_utterance_start is not None and next_utterance_start > raw_end_sec:
+        gap = next_utterance_start - raw_end_sec
+        if gap > 0.25 and tail_pad > default_pad:
+            tail_pad = min(tail_pad, max(default_pad, round(gap - 0.12, 3)))
+    return round(tail_pad, 3)
+
+
 def adjust_utterance_span(
     start_idx: int,
     end_idx: int,
@@ -36,6 +76,7 @@ def adjust_utterance_span(
     max_sec: float = 60.0,
     lead_pad: float = 0.2,
     tail_pad: float = 0.8,
+    signals: Optional[SignalSeries] = None,
 ) -> Tuple[int, int, float, float]:
     """Expand or trim along utterance boundaries so clip stays in [min_sec, max_sec] without mid-sentence cuts."""
     n = len(utterances)
@@ -46,7 +87,17 @@ def adjust_utterance_span(
         u_a, u_b = utterances[a_i], utterances[b_i]
         w_start = u_a.words[0].start if u_a.words else u_a.start
         w_end = u_b.words[-1].end if u_b.words else u_b.end
-        return max(0.0, w_start - lead_pad), min(vod_duration, w_end + tail_pad)
+        next_u_start = (
+            (utterances[b_i + 1].words[0].start if utterances[b_i + 1].words else utterances[b_i + 1].start)
+            if b_i + 1 < n
+            else None
+        )
+        eff_tail = (
+            compute_dynamic_tail_pad(w_end, signals, next_u_start, default_pad=tail_pad)
+            if tail_pad > 0 and signals is not None
+            else tail_pad
+        )
+        return max(0.0, w_start - lead_pad), min(vod_duration, w_end + eff_tail)
 
     a, b = bounds(s_i, e_i)
 
@@ -116,11 +167,67 @@ def iou_1d(a: Tuple[float, float], b: Tuple[float, float]) -> float:
 
 
 def dedupe_clips(clips: Sequence[CuratedClip], max_iou: float = 0.35) -> List[CuratedClip]:
+    def rank(clip: CuratedClip) -> tuple[bool, float]:
+        score = clip.editorial_score if clip.editorial_score is not None else clip.final_score
+        return duration(clip.source_ranges()) >= MIN_FINAL_SECONDS, score
+
+    def duplicates(left, right):
+        a, b = left.source_ranges(), right.source_ranges()
+        common = shared_duration(a, b)
+        if common and left.end_id == right.end_id and (
+            left.editorial_score is not None or right.editorial_score is not None
+        ):
+            return True
+        if not left.editorial_segments and not right.editorial_segments:
+            return iou_1d(a[0], b[0]) >= max_iou
+        shorter = min(duration(a), duration(b))
+        if not shorter or common / shorter < max_iou:
+            return False
+        individual = left if not left.editorial_segments else right if not right.editorial_segments else None
+        if individual and individual.standalone_reason.strip() and individual.end_id != (
+            right.end_id if individual is left else left.end_id
+        ):
+            return common / shorter >= .85
+        return True
+
     kept: List[CuratedClip] = []
-    for c in sorted(clips, key=lambda x: x.final_score, reverse=True):
-        if all(iou_1d((c.start, c.end), (k.start, k.end)) < max_iou for k in kept):
-            kept.append(c)
+    for clip in sorted(clips, key=rank, reverse=True):
+        if not any(duplicates(clip, previous) for previous in kept):
+            kept.append(clip)
     return kept
+
+
+def resolve_editorial_segments(item, uid_map, utterances, vod_duration, window_sec):
+    if not item.get("grouping_reason", "").strip() or not item.get("initial_context", "").strip():
+        return []
+    segments = []
+    events = set()
+    for index, raw in enumerate(item.get("segments", [])):
+        start = _norm_uid(raw.get("start_id", ""), uid_map)
+        end = _norm_uid(raw.get("end_id", ""), uid_map)
+        event = raw.get("event", "").strip()
+        role = raw.get("role", "")
+        relation = raw.get("relation", "").strip()
+        evidence = [_norm_uid(uid, uid_map) for uid in raw.get("evidence_ids", [])]
+        if start is None or end is None or end < start or not event or not relation or not evidence:
+            return []
+        if any(idx is None or not start <= idx <= end or not utterances[idx].text.strip() for idx in evidence):
+            return []
+        _, _, a, b = adjust_utterance_span(start, end, utterances, vod_duration,
+                                          min_sec=0, max_sec=vod_duration, lead_pad=0, tail_pad=0)
+        if b <= a or (segments and a <= segments[-1].end):
+            return []
+        if role in ("desarrollo", "acontecimiento", "reaccion", "climax", "remate"):
+            events.add(" ".join(re.findall(r"\w+", event.casefold())))
+        segments.append(EditorialSegment(
+            id=f"tramo-{index + 1}", start=a, end=b, event=event, role=role,
+            evidence_ids=[utterances[idx].id for idx in evidence], relation=relation,
+        ))
+    if len(events) < 2 or segments[-1].end - segments[0].start > window_sec:
+        return []
+    if segments[-1].role not in ("reaccion", "climax", "remate"):
+        return []
+    return segments
 
 
 # Zero-token CPU fallback dictionary mapping common gaming/reaction words to 42-emoji catalog hex codes
@@ -203,6 +310,9 @@ def resolve_curated_clips(
     vod_duration: float,
     min_sec: float = 20.0,
     max_sec: float = 60.0,
+    *,
+    editorial_profile: bool = False,
+    related_window_sec: float = DEFAULT_RELATED_WINDOW_SECONDS,
 ) -> List[CuratedClip]:
     """Convert LLM utterance IDs into exact word-bounded CuratedClip objects with local CPU enrichment."""
     if not utterances or not llm_clips:
@@ -211,19 +321,39 @@ def resolve_curated_clips(
     resolved: List[CuratedClip] = []
 
     for item in llm_clips:
-        s_idx = _norm_uid(str(item.get("start_id", "")), uid_map)
-        e_idx = _norm_uid(str(item.get("end_id", "")), uid_map)
-        if s_idx is None or e_idx is None:
-            continue
-
-        s_i, e_i, start_t, end_t = adjust_utterance_span(
-            s_idx, e_idx, utterances, vod_duration, min_sec=min_sec, max_sec=max_sec
-        )
-        if end_t - start_t < 3.0:
+        segments = []
+        if item.get("editorial_format") == "recopilacion":
+            segments = resolve_editorial_segments(item, uid_map, utterances, vod_duration, related_window_sec)
+            if not segments:
+                continue
+        if segments:
+            start_t, end_t = segments[0].start, segments[-1].end
+            if duration([(part.start, part.end) for part in segments]) > max_sec:
+                continue
+            s_i = _norm_uid(item["segments"][0]["start_id"], uid_map)
+            e_i = _norm_uid(item["segments"][-1]["end_id"], uid_map)
+        else:
+            s_idx = _norm_uid(str(item.get("start_id", "")), uid_map)
+            e_idx = _norm_uid(str(item.get("end_id", "")), uid_map)
+            if s_idx is None or e_idx is None or e_idx < s_idx:
+                continue
+            s_i, e_i, start_t, end_t = adjust_utterance_span(
+                s_idx, e_idx, utterances, vod_duration,
+                min_sec=0 if editorial_profile else min_sec,
+                max_sec=vod_duration if editorial_profile else max_sec,
+                signals=signals,
+            )
+        if end_t - start_t < 3.0 or (not segments and end_t - start_t > max_sec):
             continue
 
         llm_score = float(max(0.0, min(100.0, float(item.get("score", 0)))))
         sig_score, r_peaks = compute_clip_signal_score(start_t, end_t, signals)
+        if segments:
+            scored = [(segment, compute_clip_signal_score(segment.start, segment.end, signals))
+                      for segment in segments]
+            sig_score = sum((segment.end - segment.start) * score
+                            for segment, (score, _) in scored) / duration([(s.start, s.end) for s in segments])
+            r_peaks = [peak for _, (_, peaks) in scored for peak in peaks]
         combined = round(min(100.0, 0.70 * llm_score + 30.0 * sig_score), 1)
 
         raw_emojis = item.get("emojis") or []
@@ -233,7 +363,8 @@ def resolve_curated_clips(
                 emojis.append(EmojiSuggestion(word=str(em["word"]).strip(), emoji=str(em["emoji"]).strip()))
 
         raw_emph = [str(w).strip() for w in (item.get("emphasis_words") or []) if str(w).strip()]
-        span_utts = utterances[s_i : e_i + 1]
+        span_utts = [u for u in utterances[s_i : e_i + 1]
+                     if not segments or any(u.end > part.start and u.start < part.end for part in segments)]
         emph_words, enriched_emojis = infer_local_emphasis_and_emojis(span_utts, raw_emph, emojis)
 
         raw_hashtags = [str(h).lstrip("#").strip().lower() for h in (item.get("hashtags") or []) if str(h).strip()]
@@ -268,6 +399,12 @@ def resolve_curated_clips(
                 llm_score=llm_score,
                 signal_score=sig_score,
                 final_score=combined,
+                editorial_score=round(0.85 * llm_score + 15.0 * sig_score, 1) if editorial_profile else None,
+                editorial_format="recopilacion" if segments else "individual",
+                editorial_segments=segments,
+                grouping_reason=item.get("grouping_reason", "") if segments else "",
+                initial_context=item.get("initial_context", "") if segments else "",
+                standalone_reason=item.get("standalone_reason", ""),
                 reason=str(item.get("reason", "")).strip() or "Seleccionado por alta energía y arco narrativo.",
                 reaction_peaks=r_peaks,
             )

@@ -4,7 +4,7 @@ tipo: cambios
 estado: vigente
 audiencia: [todos]
 responsable: Equipo FarmClips
-actualizado: 2026-11-13
+actualizado: 2026-11-18
 etiquetas: [tipo/cambios, area/general]
 ---
 
@@ -12,6 +12,38 @@ etiquetas: [tipo/cambios, area/general]
 
 > [!abstract] En pocas palabras
 > Registro cronológico de las versiones de FarmClips, nuevas funcionalidades, optimizaciones de rendimiento y ajustes en la arquitectura del sistema.
+
+## [2.11.0] — 2026-11-18 (Rama `feat/farmclips-seleccion-editorial`)
+
+### 🎬 Selección Editorial, Recopilaciones Multi-Tramo, Aprendizaje Continuo y Optimización de Costos (`HU-014`)
+
+Unificación de la selección editorial de formatos (`individual` y `recopilacion` con suelo final de `40 s`) con el Plan de Mejora de calidad de clips, costos LLM y aprendizaje continuo a partir de las valoraciones y ediciones del creador.
+
+#### Qué cambió
+- **Selección Editorial, Recopilaciones y Suelo de 40 s (`clipscore/selection/`, `clipseditplan`, `engine.py`, `ffmpeg.py`, `/editor/[clipId]`)**:
+  - Perfil editorial *FarmClips 1.0* (`85 %` curación / `15 %` señal) capaz de elegir entre clip `individual` o `recopilacion` multi-tramo cronológica (ventana configurable de `600 s` con `CLIPS_RELATED_WINDOW_SEC`, mínimo 2 acontecimientos distinguibles con `evidence_ids` verificables).
+  - Reutilización de `EditPlan.source.ranges` en reproducción, tracking por tramo, subtítulos, render y exportación a FilmCraft/OTIO, con edición de límites por tramo en `/editor/[clipId]`.
+  - Verificación estricta de duración final $\ge 40\text{ s}$ con `FFprobe` antes de entregar el MP4 final, reteniendo candidatos más breves en estado `REVIEW_SHORT` sin rellenarlos artificialmente.
+- **Contexto Acústico en Timeline, Cola Dinámica y Protección Sub-Segundo (`timeline/builder.py`, `selection/resolver.py`, `directors/hormozi.py`, `clipsstyles`)**:
+  - Marcas explícitas de pausa entera (`--- [PAUSA Xs] ---` para silencios $\ge 3\text{ s}$) y etiquetas `[REACCIÓN]` / `[ALTA REACCIÓN]` en `build_compact_timeline`.
+  - Ajuste dinámico de cola (`compute_dynamic_tail_pad`) guiado por el decaimiento de `signals.reaction` (extiende hasta `1.65 s` si continúa la risa o cierra en seco a `0.35 s` en silencio).
+  - Protección de ráfagas vocales a `100 Hz` en `compute_jump_cut_ranges` y síntesis CC0 para `boom`, `whoosh` y `pop` en `ensure_sfx_wav`.
+- **Optimización de Costos LLM y Soporte Nativo de DeepSeek (`openai_compat.py`, `gemini.py`, `/settings`)**:
+  - Tarifas exactas para `deepseek-flash`, `deepseek-chat`, `deepseek-reasoner` y `gemini-3.1-flash-lite`, incluyendo descuento por `prompt_cache_hit_tokens` en DeepSeek y envío directo de `json_object` + `max_tokens`.
+- **Evaluación Experimental, Valoración de Clips y Aprendizaje Continuo (`experimental/`, `ClipReview.tsx`, `engine.py`)**:
+  - Comparador offline V1/V2 en `/experimental/highlights` (con 0 llamadas a APIs facturables) y desplegable **Valorar clip** (`ClipReview.tsx`) en `/sessions/[id]` habilitado por defecto.
+  - Captura automática de diffs del editor (`summarize_editor_diff` $\to$ `edicion_estudio`) y síntesis de memoria editorial (`build_learned_editorial_guidance`) con preferencias por categoría, tendencias de edición y hasta 3 *Golden Clips* aprobados que retroalimentan futuras curaciones.
+  - Épica [[EP-04 Selección Editorial Calidad de Clips y Aprendizaje Continuo|EP-04]] e historia [[HU-014 Selección editorial recopilaciones y aprendizaje con optimización de costos|HU-014]].
+
+#### Por qué
+- Lograr clips y recopilaciones con contexto completo y remates que no se corten a mitad de una risa, reducir el costo por millón de tokens con proveedores compatibles como DeepSeek y hacer que el curador aprenda progresivamente del criterio del creador.
+
+> [!warning] ⚠️ Cambia para ti
+> - FarmClips ahora puede armar **recopilaciones de varios tramos** de una misma historia y retiene para revisión manual (`REVIEW_SHORT`) los clips de menos de `40 s` en vez de rellenarlos con silencio.
+> - En cada tarjeta de `/sessions/[id]` tienes **Valorar clip** activo por defecto, y tanto tus valoraciones como los recortes/títulos que guardes en el **Editor** enseñan al sistema tus preferencias para las siguientes sesiones.
+> - En **Ajustes (`/settings`)** puedes elegir `deepseek-flash`, `deepseek-chat`, `deepseek-reasoner` o `gemini-3.1-flash-lite` con cálculo exacto de presupuesto.
+
+---
 
 ## [2.10.0] — 2026-11-13 (Rama `feat/seleccion-cantidad-clips`)
 
