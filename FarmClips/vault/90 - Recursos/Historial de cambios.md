@@ -13,6 +13,21 @@ etiquetas: [tipo/cambios, area/general]
 > [!abstract] En pocas palabras
 > Registro cronológico de las versiones de FarmClips, nuevas funcionalidades, optimizaciones de rendimiento y ajustes en la arquitectura del sistema.
 
+## [3.1.0-mvp] — 2026-11-18 (Release MVP en `main`)
+
+### 🚀 Release MVP — Selección Editorial, Web Studio Astryx, Selector de Clips y Aprendizaje Continuo
+
+Consolidación en `main` de las capacidades clave del producto mínimo viable (MVP) de **FarmClips**:
+- **Selección Editorial y Recopilaciones (`HU-014`, `EP-04`)**: Perfil *FarmClips 1.0*, clips `individual` y `recopilacion` multi-tramo en ventana de `600 s`, suelo final de `40 s` verificado con `FFprobe`, timeline con pausas y etiquetas de reacción, cola dinámica por decaimiento de audio, protección a `100 Hz` en *jump cuts* y SFX CC0 (`boom`, `whoosh`, `pop`).
+- **Aprendizaje Editorial y Optimización de Costos (`HU-014`)**: **Valorar clip** activo por defecto, captura de diffs del editor (`edicion_estudio`), síntesis de *Golden Clips* (`build_learned_editorial_guidance`) y soporte nativo de DeepSeek (`deepseek-flash`, `deepseek-chat`, `deepseek-reasoner`) + `gemini-3.1-flash-lite`.
+- **Selector de Cantidad de Clips (`HU-013`)**: Control de `1–20` clips al crear o reprocesar sesión y valor predeterminado en Ajustes.
+- **Rediseño Web Studio Astryx (`HU-012`)**: Marco de escritorio `AppShell`, temas **Obsidiana / Grafito**, tipografía `Figtree` + `JetBrains Mono`, editor a `60 fps` y exportación a FilmCraft con puente `--control` (`v2.8.0`).
+
+> [!warning] ⚠️ Cambia para ti
+> - Esta versión consolida el **MVP** en `main` listo para uso diario de punta a punta: desde la selección editorial inteligente y recopilaciones multi-tramo hasta el aprendizaje continuo desde tus valoraciones y ediciones.
+
+---
+
 ## [2.11.0] — 2026-11-18 (Rama `feat/farmclips-seleccion-editorial`)
 
 ### 🎬 Selección Editorial, Recopilaciones Multi-Tramo, Aprendizaje Continuo y Optimización de Costos (`HU-014`)
