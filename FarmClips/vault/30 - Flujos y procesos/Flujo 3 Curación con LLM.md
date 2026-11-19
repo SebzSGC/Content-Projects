@@ -4,7 +4,7 @@ tipo: flujo
 estado: vigente
 audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
-actualizado: 2026-11-07
+actualizado: 2026-11-18
 etiquetas: [tipo/flujo, area/ia]
 ---
 
@@ -43,23 +43,22 @@ sequenceDiagram
 ### Paso 1: Partición en ventanas contextuales
 Si la partida dura varias horas, el sistema divide la línea de tiempo en bloques contextuales de unos 20 a 30 minutos con solapamiento, asegurando que el LLM no pierda el hilo narrativo ni supere los límites de contexto eficiente.
 
-### Paso 2: Selección por identificadores de frase y directivas cinematográficas
-El LLM recibe el sistema de instrucciones refinado (**Curation Prompt v2.1**) con enfoque *token-frugal*:
-- **Arco narrativo de 3 actos**: Planteamiento rápido (3-5s) $\to$ Clímax/Giro (jugada o susto) $\to$ Remate/Reacción del streamer.
-- **Corte limpio sin relleno**: Inicia directo en la acción y **corta de inmediato** 0.5s a 1.0s tras la carcajada o remate final. Se prohíbe explícitamente incluir silencios posteriores, charla intrascendente o despedidas del chat.
-- **Títulos de alto CTR**: Genera un título quemado en la unión (`overlay_title`, 3 a 6 palabras en presente activo y ortografía impecable) y un título de publicación (`post_title`, 100% en MAYÚSCULAS con gancho de curiosidad/emoción y 1 emoji al final).
-- **Dirección semántica de zooms (`zoom_word` y `zoom_focus`)**: La IA especifica la palabra exacta donde explota la emoción para anclar el zoom de impacto (`zoom_word`, ej. *"bomba"*, *"muerto"*, *"imposible"*) y el foco visual prioritario (`zoom_focus`: `"face"`, `"game"` o `"split"`). Todo esto con un coste mínimo de apenas $\sim 3$ tokens por clip.
+### Paso 2: Selección por identificadores de frase, formatos editoriales y aprendizaje
+El LLM recibe el sistema de instrucciones refinado (**Curation Prompt v2.1** + **Perfil editorial FarmClips 1.0**) con enfoque *token-frugal*:
+- **Pistas acústicas y emocionales en el timeline**: Además de `>>> PICO`, el timeline compacto incluye marcas explícitas de silencio (`--- [PAUSA Xs] ---` para pausas $\ge 3\text{ s}$) y etiquetas `[REACCIÓN]` o `[ALTA REACCIÓN]` junto a las frases donde la reacción vocal del streamer es intensa.
+- **Formato individual vs. recopilación (`editorial_format`)**:
+  - `individual`: un acontecimiento autónomo con planteamiento, giro y remate.
+  - `recopilacion`: dos o más tramos discontinuos en orden cronológico dentro de una ventana de `600 s` (`CLIPS_RELATED_WINDOW_SEC`), cada uno con `start_id`, `end_id`, `event`, `role`, `evidence_ids` y `relation`, más `initial_context` y `grouping_reason`.
+- **Memoria editorial aprendida (`build_learned_editorial_guidance`)**: Cuando el creador valora clips en **Valorar clip** (`ClipReview`) o ajusta tramos y títulos en el editor (`edicion_estudio`), el sistema sintetiza preferencias por categoría, tendencias de recorte y hasta 3 *Golden Clips* aprobados para orientar las siguientes curaciones.
+- **Títulos de alto CTR y dirección semántica (`zoom_word` y `zoom_focus`)**: Genera `overlay_title` (3 a 6 palabras), `post_title` en MAYÚSCULAS y la palabra clave del zoom de impacto (`zoom_word`) con su foco (`"face"`, `"game"` o `"split"`).
 - **Solo responde con IDs de frase de inicio y fin** (`start_id` y `end_id`), sin alucinar marcas de tiempo decimales.
 
-### Paso 3: Resolución, anclaje semántico y ajuste acústico
+### Paso 3: Resolución, cola dinámica y suelo de exportación de 40 s
 El módulo local `resolve_curated_clips()`:
-1. Convierte los IDs en marcas de tiempo reales en segundos.
-2. Si el modelo omitió `zoom_word` para ahorrar tokens, el resolver local en CPU infiere la palabra clave a partir de las palabras de énfasis o del catálogo de reacciones sin costo de API.
-3. El director `hormozi.py` ancla el impacto punch-in zoom en el segundo exacto de `zoom_word`, prioriza cámara completa de 2s si `zoom_focus == "face"` o protege la visibilidad del gameplay si `zoom_focus == "game"`.
-4. Analiza los primeros 150 ms en la curva de envolvente a 100 Hz para atrasar el corte unos milisegundos y capturar el **[[Glosario#Ataque Acústico|ataque acústico]]** natural de la voz.
-5. Calcula una puntuación combinada (**[[Glosario#Score|final_score]]**):
-   $$\text{score\_final} = 0.70 \cdot \text{score\_llm} + 30.0 \cdot \text{score\_señal}$$
-6. Registra los clips ordenados en la base de datos SQLite y selecciona los mejores candidatos (típicamente los que superan 60 puntos) para renderizado automático.
+1. Convierte los IDs en marcas de tiempo reales en segundos y valida que las recopilaciones contengan al menos dos acontecimientos distinguibles con `evidence_ids` verificables y cierre en `reaccion`, `climax` o `remate`.
+2. **Cola dinámica guiada por decaimiento de audio (`compute_dynamic_tail_pad`)**: Extiende el margen final (hasta `1.65 s`) si el streamer sigue riendo o reaccionando tras la última palabra, o aplica un corte seco (`0.35 s`) si cae inmediatamente a silencio.
+3. Calcula la puntuación combinada (`final_score = 0.70 * llm_score + 30.0 * sig_score`) y la puntuación editorial (`editorial_score = 0.85 * llm_score + 15.0 * sig_score`), eliminando duplicados o montajes redundantes.
+4. **Suelo de exportación final (`40 s`)**: Los candidatos con duración montada $\ge 40\text{ s}$ pasan al flujo de entrega automática (verificado con `FFprobe`), mientras que los cortes más breves se conservan en estado `REVIEW_SHORT` para revisión o ampliación manual en el editor.
 
 ---
 

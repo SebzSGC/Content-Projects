@@ -4,7 +4,7 @@ tipo: guia
 estado: vigente
 audiencia: [negocio, tecnico]
 responsable: Equipo FarmClips
-actualizado: 2026-11-07
+actualizado: 2026-11-18
 etiquetas: [tipo/guia, area/ia]
 ---
 
@@ -43,8 +43,9 @@ flowchart LR
 
 | Proveedor | Modelo recomendado | Dónde obtener la clave | Observaciones |
 |---|---|---|---|
-| **Google Gemini (Principal)** | `gemini-3.5-flash-lite` | [aistudio.google.com](https://aistudio.google.com) | Cuota gratuita muy generosa para desarrolladores. |
-| **OpenAI / Compatible (Respaldo)** | `gpt-6-luna` / `gpt-4o-mini` | [platform.openai.com](https://platform.openai.com) | Soporta también URLs locales (Ollama o vLLM). |
+| **Google Gemini (Principal)** | `gemini-3.5-flash-lite` / `gemini-3.1-flash-lite` | [aistudio.google.com](https://aistudio.google.com) | Esquema JSON nativo (`responseJsonSchema`) y excelente cuota gratuita. |
+| **DeepSeek (vía OpenAI-Compat)** | `deepseek-flash` / `deepseek-chat` / `deepseek-reasoner` | [platform.deepseek.com](https://platform.deepseek.com) | Ultra económico con descuento automático por *Prompt Cache Hit* (`prompt_cache_hit_tokens`) y envío directo de `json_object` + `max_tokens`. |
+| **OpenAI / Compatible (Respaldo)** | `gpt-6-luna` / `llama-3.3-70b-versatile` | [platform.openai.com](https://platform.openai.com) | Soporta también Groq, OpenRouter y URLs locales (Ollama o vLLM). |
 
 ---
 

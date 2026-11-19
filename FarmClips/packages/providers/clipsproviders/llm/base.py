@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional
+from typing import Literal, Any, Callable, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -18,6 +18,15 @@ class LlmEmojiItem(BaseModel):
 
     word: str
     emoji: str
+
+
+class LlmEditorialSegment(BaseModel):
+    start_id: str
+    end_id: str
+    event: str
+    role: Literal["contexto", "preparacion", "desarrollo", "acontecimiento", "reaccion", "transicion", "climax", "remate"]
+    evidence_ids: List[str] = Field(min_length=1)
+    relation: str
 
 
 class LlmClipProposal(BaseModel):
@@ -35,6 +44,11 @@ class LlmClipProposal(BaseModel):
     zoom_focus: str = Field(default="face", description="Foco prioritario en el zoom: 'face' (reacción facial), 'game' (jugada en pantalla) o 'split'")
     score: int = Field(ge=0, le=100, description="Puntuación de viralidad de 0 a 100")
     reason: str = Field(default="", description="Explicación ultra concisa (máx 8 palabras)")
+    editorial_format: Literal["individual", "recopilacion"] = "individual"
+    segments: List[LlmEditorialSegment] = Field(default_factory=list)
+    grouping_reason: str = ""
+    initial_context: str = ""
+    standalone_reason: str = ""
 
 
 class CurationEnvelope(BaseModel):
@@ -74,6 +88,27 @@ CURATION_JSON_SCHEMA: Dict[str, Any] = {
                     "zoom_focus": {"type": "string", "enum": ["face", "game", "split"]},
                     "score": {"type": "integer"},
                     "reason": {"type": "string"},
+                    "editorial_format": {"type": "string", "enum": ["individual", "recopilacion"]},
+                    "grouping_reason": {"type": "string"},
+                    "initial_context": {"type": "string"},
+                    "standalone_reason": {"type": "string"},
+                    "segments": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "start_id": {"type": "string"}, "end_id": {"type": "string"},
+                                "event": {"type": "string"}, "role": {"type": "string", "enum": [
+                                    "contexto", "preparacion", "desarrollo", "acontecimiento",
+                                    "reaccion", "transicion", "climax", "remate",
+                                ]},
+                                "evidence_ids": {"type": "array", "items": {"type": "string"}},
+                                "relation": {"type": "string"},
+                            },
+                            "required": ["start_id", "end_id", "event", "role", "evidence_ids", "relation"],
+                            "additionalProperties": False,
+                        },
+                    },
                 },
                 "required": [
                     "start_id",
@@ -183,6 +218,7 @@ class LlmAdapter(ABC):
         max_len: float = 60.0,
         max_clips: int = 12,
         on_raw_call: Optional[Callable[[RawLlmCallOutput], None]] = None,
+        editorial_guidance: str = "",
     ) -> LlmCurationResult:
         """Curate timeline with JSON Schema + Pydantic validation; retries once with compact error feedback."""
         sys_prompt = CURATION_SYSTEM_PROMPT.format(
@@ -191,6 +227,8 @@ class LlmAdapter(ABC):
             title=title or "Stream de gaming",
             max_clips=max_clips,
         )
+        if editorial_guidance:
+            sys_prompt += "\n\n" + editorial_guidance
         calls: List[RawLlmCallOutput] = []
         first = await self.generate_raw(sys_prompt, timeline_text, CURATION_JSON_SCHEMA)
         calls.append(first)

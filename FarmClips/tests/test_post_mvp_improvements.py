@@ -1078,6 +1078,55 @@ async def test_token_optimizations_and_performance_improvements(tmp_path: Path) 
         assert r_th2.headers.get("X-Frame-Cache") == "HIT"
 
 
+def test_session_max_clips_and_settings_top_k(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("", encoding="utf-8")
+    monkeypatch.setenv("CLIPS_ENV_FILE", str(env_file))
+    settings = ServerSettings(
+        data_dir=tmp_path / "max_clips_data",
+        drive_mode="local",
+        drive_local_dir=tmp_path / "drive_local",
+        stt_primary="fixture",
+        stt_backup="none",
+        llm_primary="fixture",
+        llm_backup="none",
+        fixtures_dir=FIXTURES_DIR,
+    )
+    app = create_app(settings, use_process_pool=False, enable_drive_watcher=False)
+    orch: Orchestrator = app.state.orchestrator
+    orch.launch_session = lambda _sid: None  # type: ignore[method-assign]
+
+    with TestClient(app) as client:
+        r_create = client.post(
+            "/sessions",
+            json={
+                "title": "Sesión Top 7",
+                "gameplay_path": str(GOLDEN_GAMEPLAY),
+                "camera_path": str(GOLDEN_CAMERA),
+                "max_clips": 7,
+                "auto_start": False,
+            },
+        )
+        assert r_create.status_code == 200
+        created = r_create.json()
+        assert created["max_clips"] == 7
+        sid = created["id"]
+
+        r_rerun = client.post(f"/sessions/{sid}/run", json={"max_clips": 3})
+        assert r_rerun.status_code == 200
+        assert r_rerun.json()["max_clips"] == 3
+
+        r_bad = client.post(f"/sessions/{sid}/run", json={"max_clips": 25})
+        assert r_bad.status_code == 422
+
+        r_set = client.post("/settings", json={"auto_render_top_k": 8})
+        assert r_set.status_code == 200
+        assert r_set.json()["auto_render_top_k"] == 8
+        assert "CLIPS_AUTO_RENDER_TOP_K=8" in env_file.read_text(encoding="utf-8")
+
+
 
 
 

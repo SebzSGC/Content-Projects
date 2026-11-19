@@ -78,8 +78,8 @@ flowchart TB
 - Si la ventana ya estaba abierta, FarmClips la trae al frente automáticamente sin cerrar tu sesión actual. Si por permisos de Windows no emerge, usa el botón **`[📁 Abrir carpeta]`** para abrir el archivo `.fcproj` con doble clic.
 
 > [!info]- Detalle técnico: lanzamiento seguro en Windows y control loopback
-> - **Control server y token:** FilmCraft requiere `FILMCRAFT_CONTROL_TOKEN` (64 caracteres hexadecimales) para su servidor de control loopback (`127.0.0.1:9876`). FarmClips lo genera y persiste automáticamente en `%LOCALAPPDATA%\FilmCraft\.farmclips_control_token` y en el entorno del usuario (`HKCU\Environment`).
-> - **Escritorio interactivo (`WinSta0\Default`):** FarmClips lanza `filmcraft.exe` mediante Win32 `CreateProcessW` con `lpDesktop = r"WinSta0\Default"` y `CREATE_BREAKAWAY_FROM_JOB`, evitando que quede aislado en consolas o escritorios virtuales secundarios.
+> - **Control server y token:** FilmCraft requiere `FILMCRAFT_CONTROL_TOKEN` (64 caracteres hexadecimales) para su servidor de control loopback (`127.0.0.1:9876`). FarmClips lo lee desde el entorno o `HKCU\Environment`, o lo genera y persiste automáticamente en `%LOCALAPPDATA%\FilmCraft\.farmclips_control_token` y en `HKCU\Environment`.
+> - **Escritorio interactivo (`WinSta0\Default`) y bridge MCP:** FarmClips lanza `filmcraft.exe` con `--control <puerto>` (por defecto `9876`) mediante Win32 `CreateProcessW` con `lpDesktop = r"WinSta0\Default"` y `CREATE_BREAKAWAY_FROM_JOB`, heredando `FILMCRAFT_CONTROL_TOKEN` para evitar aislamiento en escritorios virtuales y dejar operativo el bridge TCP para el copiloto MCP `filmcraft`.
 > - **Detección de ventana:** Mediante `EnumDesktopWindows` sobre `Default`, si hay ventana visible se trae al frente (`AttachThreadInput` + `SetForegroundWindow`) sin cerrar procesos activos; solo se limpian instancias colgadas sin ventana gráfica.
 
 ---

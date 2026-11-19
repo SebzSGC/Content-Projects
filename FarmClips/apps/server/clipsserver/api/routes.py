@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import json
+import logging
 import os
 import re
 import shutil
@@ -18,6 +19,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 import httpx
 from clipscore.domain import SessionState, SignalSeries, SyncResult, new_id
+from clipscore.selection.editorial import MIN_FINAL_SECONDS
 from clipseditplan import EditPlan
 from clipsmedia.drive import (
     GoogleDriveOAuthConnector,
@@ -66,6 +68,7 @@ class CreateSessionBody(BaseModel):
     recording_name: str = ""
     language: str = "es"
     style_preset: str = "hormozi-gaming"
+    max_clips: Optional[int] = Field(default=None, ge=1, le=20)
     auto_start: bool = True
 
 
@@ -77,7 +80,12 @@ class CreateDriveSessionBody(BaseModel):
     recording_name: str = ""
     language: str = "es"
     style_preset: str = "hormozi-gaming"
+    max_clips: Optional[int] = Field(default=None, ge=1, le=20)
     auto_start: bool = True
+
+
+class RerunSessionBody(BaseModel):
+    max_clips: Optional[int] = Field(default=None, ge=1, le=20)
 
 
 class ManualSyncBody(BaseModel):
@@ -89,6 +97,7 @@ class RetimeClipBody(BaseModel):
     start: float = Field(ge=0.0, description="Nuevo inicio del clip en segundos del VOD")
     end: float = Field(gt=0.0, description="Nuevo final del clip en segundos del VOD")
     jump_cuts: bool = Field(default=True, description="Quitar las pausas largas (jump cuts)")
+    ranges: Optional[List[tuple[float, float]]] = None
 
 
 class RenderClipBody(BaseModel):
@@ -122,6 +131,7 @@ class UpdateSettingsBody(BaseModel):
     llm_backup_model: Optional[str] = None
     llm_backup_base_url: Optional[str] = None
     max_budget_usd: Optional[float] = Field(default=None, ge=0.05, le=10000.0)
+    auto_render_top_k: Optional[int] = Field(default=None, ge=1, le=20)
     deepgram_api_key: Optional[str] = None
     groq_api_key: Optional[str] = None
     gemini_api_key: Optional[str] = None
@@ -338,6 +348,7 @@ def _serialize_session(orch: Orchestrator, row: Dict[str, Any]) -> Dict[str, Any
         "drive_folder_id": row["drive_folder_id"],
         "language": row["language"],
         "style_preset": row["style_preset"],
+        "max_clips": row.get("max_clips"),
         "detected_game": detected_game,
         "keyterms_count": len(resolved_terms),
         "sync": sync,
@@ -362,6 +373,8 @@ def create_app(
     async def lifespan(_app: FastAPI):
         await orch.startup(enable_watcher=enable_drive_watcher)
         yield
+        if jobs := getattr(_app.state, "highlight_jobs", None):
+            await asyncio.gather(*jobs, return_exceptions=True)
         await orch.shutdown()
 
     app = FastAPI(
@@ -380,6 +393,11 @@ def create_app(
         allow_headers=["*"],
     )
 
+    if os.environ.get("CLIPS_EXPERIMENTAL_HIGHLIGHTS", "1").strip().lower() not in ("0", "false", "no", "off"):
+        from ..experimental.routes import register
+
+        register(app, orch)
+
     @app.get("/health")
     def health() -> Dict[str, Any]:
         ff_bin = resolve_binary("ffmpeg")
@@ -391,6 +409,7 @@ def create_app(
             mp_ok = False
         return {
             "ok": True,
+            "experimental_highlights": hasattr(app.state, "highlight_jobs"),
             "ffmpeg": ff_ok,
             "mediapipe_face_detector": mp_ok,
             "stt_primary": cfg.stt_primary,
@@ -498,6 +517,8 @@ def create_app(
 
         if body.max_budget_usd is not None:
             env_updates["CLIPS_MAX_BUDGET_USD"] = f"{float(body.max_budget_usd):.2f}"
+        if body.auto_render_top_k is not None:
+            env_updates["CLIPS_AUTO_RENDER_TOP_K"] = str(int(body.auto_render_top_k))
         if body.webhook_url is not None:
             env_updates["CLIPS_WEBHOOK_URL"] = body.webhook_url.strip()
         if body.temp_ttl_days is not None:
@@ -982,6 +1003,7 @@ def create_app(
                 recording_name=body.recording_name,
                 language=body.language or "es",
                 style_preset=body.style_preset or cfg.style_preset,
+                max_clips=body.max_clips,
                 auto_start=body.auto_start,
             )
         except FileNotFoundError as exc:
@@ -1020,6 +1042,7 @@ def create_app(
             recording_name=body.recording_name.strip() or body.title.strip() or gp.stem,
             language=body.language or "es",
             style_preset=body.style_preset or cfg.style_preset,
+            max_clips=body.max_clips,
             initial_state=SessionState.DOWNLOADED,
         )
         if body.auto_start:
@@ -1036,10 +1059,15 @@ def create_app(
         return data
 
     @app.post("/sessions/{session_id}/run")
-    async def run_session_endpoint(session_id: str) -> Dict[str, Any]:
+    async def run_session_endpoint(
+        session_id: str,
+        body: Optional[RerunSessionBody] = None,
+    ) -> Dict[str, Any]:
         row = orch.db.get_session(session_id)
         if not row:
             raise HTTPException(404, "Sesión no encontrada")
+        if body and body.max_clips is not None:
+            orch.db.update_session(session_id, max_clips=body.max_clips)
         orch.launch_session(session_id)
         return _serialize_session(orch, orch.db.get_session(session_id) or row)
 
@@ -1157,7 +1185,7 @@ def create_app(
     @app.post("/clips/{clip_id}/retime")
     async def retime_clip_endpoint(clip_id: str, body: RetimeClipBody) -> Dict[str, Any]:
         try:
-            plan = await orch.retime_clip(clip_id, body.start, body.end, body.jump_cuts)
+            plan = await orch.retime_clip(clip_id, body.start, body.end, body.jump_cuts, body.ranges)
         except KeyError as exc:
             raise HTTPException(404, str(exc)) from exc
         except (ValueError, RuntimeError) as exc:
@@ -1171,22 +1199,31 @@ def create_app(
         crow = orch.db.get_clip(clip_id)
         if not crow:
             raise HTTPException(404, "Clip no encontrado")
-        if body.async_mode:
-            asyncio.create_task(
-                orch.render_and_deliver_clip(
-                    clip_id=clip_id,
-                    quality=body.quality,
-                    priority=1000.0,
-                    upload_to_drive=(body.quality == "final" and body.upload_to_drive),
-                )
+        if body.quality == "final" and crow.get("editplan_json"):
+            if EditPlan.model_validate_json(crow["editplan_json"]).total_duration() < MIN_FINAL_SECONDS:
+                raise HTTPException(422, "El montaje necesita al menos 40 segundos para exportar el MP4 final.")
+
+        async def render():
+            return await orch.render_and_deliver_clip(
+                clip_id=clip_id,
+                quality=body.quality,
+                priority=1000.0,
+                upload_to_drive=(body.quality == "final" and body.upload_to_drive),
             )
+
+        if body.async_mode:
+            async def render_in_background():
+                try:
+                    await render()
+                except Exception:
+                    logging.getLogger(__name__).exception("Fallo de render en segundo plano para %s", clip_id)
+
+            asyncio.create_task(render_in_background())
             return {"clip": _serialize_clip(crow), "mp4_path": None, "queued": True}
-        mp4 = await orch.render_and_deliver_clip(
-            clip_id=clip_id,
-            quality=body.quality,
-            priority=1000.0,  # Interactive editor requests always jump to front of render queue
-            upload_to_drive=(body.quality == "final" and body.upload_to_drive),
-        )
+        try:
+            mp4 = await render()
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
         updated = orch.db.get_clip(clip_id)
         assert updated is not None
         return {"clip": _serialize_clip(updated), "mp4_path": str(mp4), "queued": False}
@@ -1201,7 +1238,7 @@ def create_app(
         if not crow:
             raise HTTPException(404, "Clip no encontrado")
         p_str = crow.get("draft_mp4_path") if quality == "draft" else crow.get("final_mp4_path")
-        if not p_str and quality == "final":
+        if not p_str and quality == "final" and not download:
             p_str = crow.get("draft_mp4_path")
         if not p_str or not Path(p_str).is_file():
             raise HTTPException(404, f"Archivo MP4 ({quality}) aún no renderizado")

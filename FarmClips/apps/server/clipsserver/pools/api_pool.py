@@ -258,6 +258,7 @@ class ApiPool:
         min_len: float,
         max_len: float,
         max_clips: int = 12,
+        editorial_guidance: str = "",
     ) -> List[Dict[str, Any]]:
         """Curate compact timeline via LLM (cached by timeline + prompt version + model; raw saved before validation)."""
         task_hash = stable_hash(
@@ -267,7 +268,9 @@ class ApiPool:
                 "title": title,
                 "min_len": min_len,
                 "max_len": max_len,
+                "max_clips": max_clips,
                 "prompt_version": CURATION_PROMPT_VERSION,
+                **({"editorial_guidance": editorial_guidance} if editorial_guidance else {}),
                 "llm_primary": self.llm_router.primary.provider_name,
                 "llm_model": self.settings.llm_model,
             }
@@ -317,6 +320,7 @@ class ApiPool:
                     max_len=max_len,
                     max_clips=max_clips,
                     on_raw_call=_archive_raw,
+                    **({"editorial_guidance": editorial_guidance} if editorial_guidance else {}),
                 )
             )
         except Exception as exc:

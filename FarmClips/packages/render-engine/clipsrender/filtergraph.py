@@ -153,12 +153,12 @@ def compile_ffmpeg_plan(
     if n_seg == 1:
         a, b = ranges[0]
         ga, gb = max(0.0, a - game_seek), max(0.05, b - game_seek)
-        ca = max(0.0, sync.camera_time(a) - cam_seek + cam_lead_pad)
+        ca = max(0.0, (sync.camera_time(a) - cam_seek + cam_lead_pad) / sync.scale)
         cb = max(ca + 0.05, ca + (b - a))
         fg.append(f"[0:v]{cam_pre},trim=start={ca:.3f}:end={cb:.3f},setpts=PTS-STARTPTS[cam_trim]")
         fg.append(f"[1:v]fps={fps},trim=start={ga:.3f}:end={gb:.3f},setpts=PTS-STARTPTS[game_trim]")
         if clean_game_audio_stream is not None:
-            fg.append(f"[0:a:0]atrim=start={max(0.0, sync.camera_time(a) - cam_seek):.3f}:end={max(0.05, sync.camera_time(b) - cam_seek):.3f},asetpts=PTS-STARTPTS[mic_a]")
+            fg.append(f"[0:a:0]atrim=start={max(0.0, sync.camera_time(a) - cam_seek):.3f}:end={max(0.05, sync.camera_time(b) - cam_seek):.3f},asetpts=PTS-STARTPTS,atempo={sync.scale:.6f}[mic_a]")
             fg.append(f"[1:a:{clean_game_audio_stream}]atrim=start={ga:.3f}:end={gb:.3f},asetpts=PTS-STARTPTS[game_a]")
         else:
             fg.append(f"[1:a:0]atrim=start={ga:.3f}:end={gb:.3f},asetpts=PTS-STARTPTS[mix_a]")
@@ -173,14 +173,14 @@ def compile_ffmpeg_plan(
 
         for i, (a, b) in enumerate(ranges):
             ga, gb = max(0.0, a - game_seek), max(0.05, b - game_seek)
-            ca = max(0.0, sync.camera_time(a) - cam_seek + cam_lead_pad)
+            ca = max(0.0, (sync.camera_time(a) - cam_seek + cam_lead_pad) / sync.scale)
             cb = max(ca + 0.05, ca + (b - a))
             fg.append(f"[cv{i}]trim=start={ca:.3f}:end={cb:.3f},setpts=PTS-STARTPTS[cvs{i}]")
             fg.append(f"[gv{i}]trim=start={ga:.3f}:end={gb:.3f},setpts=PTS-STARTPTS[gvs{i}]")
             if clean_game_audio_stream is not None:
                 mca = max(0.0, sync.camera_time(a) - cam_seek)
                 mcb = max(mca + 0.05, sync.camera_time(b) - cam_seek)
-                fg.append(f"[ma{i}]atrim=start={mca:.3f}:end={mcb:.3f},asetpts=PTS-STARTPTS[mas{i}]")
+                fg.append(f"[ma{i}]atrim=start={mca:.3f}:end={mcb:.3f},asetpts=PTS-STARTPTS,atempo={sync.scale:.6f}[mas{i}]")
                 fg.append(f"[ga{i}]atrim=start={ga:.3f}:end={gb:.3f},asetpts=PTS-STARTPTS[gas{i}]")
             else:
                 fg.append(f"[xa{i}]atrim=start={ga:.3f}:end={gb:.3f},asetpts=PTS-STARTPTS[xas{i}]")
@@ -275,12 +275,13 @@ def compile_ffmpeg_plan(
     if clean_game_audio_stream is not None:
         # Attenuate clean game track when streamer speaks using sidechaincompress
         ratio = max(2.0, min(12.0, abs(duck_db) * 0.7))
-        fg.append(f"[mic_a]aresample=48000,highpass=f=75,volume={mic_gain:.1f}dB,asplit=2[mic_sc][mic_mix]")
+        fg.append(f"[mic_a]aresample=48000,highpass=f=75,volume={mic_gain:.1f}dB,asplit=2[mic_control][mic_mix]")
+        fg.append("[mic_control]apad[mic_sc]")
         fg.append(f"[game_a]aresample=48000[game_rs]")
         fg.append(
             f"[game_rs][mic_sc]sidechaincompress=threshold=0.035:ratio={ratio:.1f}:attack=15:release=260[game_duck]"
         )
-        fg.append("[mic_mix][game_duck]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[base_a]")
+        fg.append("[mic_mix][game_duck]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[base_a]")
     else:
         boost = mic_gain * 0.5
         fg.append(

@@ -147,10 +147,10 @@ def test_filmcraft_reveal_endpoint(client):
 
 def test_filmcraft_launcher_windows_helpers(tmp_path):
     from clipsserver.filmcraft import (
+        _build_launch_args,
         find_filmcraft_hwnd_windows,
         has_visible_filmcraft_window,
         launch_filmcraft_windows,
-        bring_filmcraft_to_front,
     )
 
     # find_filmcraft_hwnd_windows & has_visible_filmcraft_window can be called safely
@@ -158,16 +158,68 @@ def test_filmcraft_launcher_windows_helpers(tmp_path):
     assert hwnd is None or isinstance(hwnd, int)
     assert isinstance(has_visible_filmcraft_window(), bool)
 
-    # launch_filmcraft_windows mock test
     dummy_app = tmp_path / "filmcraft.exe"
     dummy_app.write_text("dummy")
     dummy_proj = tmp_path / "test.fcproj"
     dummy_proj.write_text("{}")
 
+    assert _build_launch_args(dummy_proj, 9876) == ["--control", "9876", str(dummy_proj)]
+    assert _build_launch_args(dummy_proj, None) == [str(dummy_proj)]
+
     with patch("os.startfile", return_value=None) as mock_startfile:
-        # If CreateProcess fails, it falls back to os.startfile
-        ok = launch_filmcraft_windows(dummy_app, dummy_proj)
-        assert ok is True or mock_startfile.called
+        # If CreateProcess fails, it falls back to os.startfile with --control
+        ok = launch_filmcraft_windows(dummy_app, dummy_proj, bridge_port=9876)
+        assert ok is True
+        if mock_startfile.called:
+            _, kwargs = mock_startfile.call_args
+            assert "--control 9876" in kwargs.get("arguments", "")
+
+
+def test_filmcraft_launcher_open_project_passes_control_bridge(tmp_path, monkeypatch):
+    dummy_app = tmp_path / "filmcraft.exe"
+    dummy_app.write_text("dummy")
+    dummy_cli = tmp_path / "filmcraft-cli.exe"
+    dummy_cli.write_text("dummy")
+    dummy_proj = tmp_path / "clip.fcproj"
+    dummy_proj.write_text("{}")
+
+    token = "a" * 64
+    monkeypatch.setenv("FILMCRAFT_CONTROL_TOKEN", token)
+
+    launcher = FilmCraftLauncher(
+        app_path=str(dummy_app),
+        cli_path=str(dummy_cli),
+        bridge_port=9888,
+    )
+
+    with (
+        patch.object(launcher, "is_bridge_listening", return_value=False),
+        patch("clipsserver.filmcraft.is_filmcraft_process_running", return_value=False),
+        patch("clipsserver.filmcraft.cleanup_orphaned_recovery"),
+        patch("clipsserver.filmcraft.register_windows_association"),
+        patch("clipsserver.filmcraft._async_bring_to_front"),
+        patch("clipsserver.filmcraft.launch_filmcraft_windows", return_value=True) as mock_launch,
+    ):
+        res = launcher.open_project(dummy_proj)
+        assert res.launched is True
+        assert res.reused_instance is False
+        mock_launch.assert_called_once()
+        _, kwargs = mock_launch.call_args
+        assert kwargs.get("bridge_port") == 9888
+
+
+def test_ensure_control_token_reads_user_env_fallback(tmp_path, monkeypatch):
+    from clipsserver.filmcraft import ensure_control_token
+
+    monkeypatch.delenv("FILMCRAFT_CONTROL_TOKEN", raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    reg_token = "b" * 64
+
+    with patch("clipsserver.filmcraft._read_user_env_token", return_value=reg_token):
+        tok = ensure_control_token()
+
+    assert tok == reg_token
+    assert (tmp_path / "FilmCraft" / ".farmclips_control_token").read_text(encoding="utf-8") == reg_token
 
 
 def test_session_filmcraft_export_all_and_filtered(client):

@@ -53,7 +53,7 @@ def run_ffmpeg(args: Sequence[str], timeout: Optional[float] = None) -> str:
     return proc.stderr
 
 
-def probe(path: str | Path) -> StreamProbe:
+def _probe_json(path: str | Path) -> dict:
     p = str(path)
     cmd = [
         resolve_binary("ffprobe"),
@@ -68,7 +68,12 @@ def probe(path: str | Path) -> StreamProbe:
     proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         raise FfmpegError(f"ffprobe falló para {p}: {proc.stderr.strip()}")
-    info = json.loads(proc.stdout)
+    return json.loads(proc.stdout)
+
+
+def probe(path: str | Path) -> StreamProbe:
+    p = str(path)
+    info = _probe_json(path)
     streams = info.get("streams", [])
     video = next((st for st in streams if st.get("codec_type") == "video"), None)
     if video is None:
@@ -102,6 +107,24 @@ def probe(path: str | Path) -> StreamProbe:
         has_audio=len(audio_streams) > 0,
         audio_streams=audio_streams,
     )
+
+
+
+def verify_final_av_duration(path: str | Path, minimum: float) -> bool:
+    """Verify container and video duration without rounding across the minimum."""
+    info = _probe_json(path)
+    streams = info.get("streams", [])
+    video = next((s for s in streams if s.get("codec_type") == "video"), {})
+    audio = next((s for s in streams if s.get("codec_type") == "audio"), {})
+    try:
+        video_duration = float(video.get("duration") or 0)
+        audio_duration = float(audio.get("duration") or 0)
+        container_duration = float(info.get("format", {}).get("duration") or 0)
+        av_offset = abs(float(video.get("start_time") or 0) - float(audio.get("start_time") or 0))
+    except (ValueError, TypeError):
+        return False
+    return (video_duration >= minimum and container_duration >= minimum and audio_duration > 0
+            and abs(video_duration - audio_duration) <= 0.15 and av_offset <= 0.05)
 
 
 def detect_clean_game_audio_stream(gameplay_probe: StreamProbe) -> Optional[int]:

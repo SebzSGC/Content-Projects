@@ -567,43 +567,36 @@ export default function AnalyticsDashboardPage() {
   const outputTokPct = summary && summary.total_tokens > 0 ? Math.round((100 - inputTokPct) * 10) / 10 : 0;
 
   return (
-    <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-6">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <Link
-            href="/sessions"
-            className="mb-2 inline-flex items-center gap-1.5 text-xs font-bold text-slate-400 transition-colors hover:text-slate-200"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Volver a Sesiones
-          </Link>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="flex items-center gap-3 text-2xl font-black tracking-tight text-slate-50 sm:text-3xl">
-              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-400/15 text-amber-300 ring-1 ring-amber-300/30">
-                <BarChart3 className="h-5 w-5" />
-              </span>
+          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-amber-400/90">
+            <BarChart3 className="h-3.5 w-3.5" /> Telemetría financiera · Presupuesto e IA
+          </div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-xl font-bold tracking-tight text-slate-50 sm:text-2xl">
               Control de Consumo e IA
             </h1>
             {summary && (
               <span
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-extrabold ${alertMeta.badgeClass}`}
+                className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-0.5 text-xs font-semibold ${alertMeta.badgeClass}`}
               >
                 <AlertIcon className="h-3.5 w-3.5" />
                 {alertMeta.label}
               </span>
             )}
           </div>
-          <p className="mt-1 text-sm text-slate-400">
-            Monitorea con total transparencia cuánto inviertes en transcripción de voz y curación de clips, revisa tu saldo disponible y simula costos antes de subir partidas.
+          <p className="mt-1 max-w-2xl text-xs sm:text-sm text-slate-400">
+            Monitorea cuánto inviertes en transcripción de voz y curación de clips, revisa tus cuotas gratuitas y simula costos antes de procesar partidas.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           {lastUpdated && (
             <span className="text-xs text-slate-500">
               Actualizado:{" "}
-              <span className="font-mono text-slate-300">
+              <span className="font-mono text-slate-300 tabular-nums">
                 {lastUpdated.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
               </span>
             </span>
@@ -612,14 +605,14 @@ export default function AnalyticsDashboardPage() {
             type="button"
             onClick={() => loadAnalytics(true)}
             disabled={refreshing || loading}
-            className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-bold text-slate-100 transition-all hover:border-amber-300/40 hover:bg-amber-400/15 hover:text-amber-200 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-white/[0.09] bg-white/[0.04] px-3.5 py-2 text-xs font-medium text-slate-200 transition-colors hover:border-white/[0.16] hover:bg-white/[0.08] hover:text-white disabled:opacity-50 cursor-pointer"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin text-amber-300" : ""}`} />
             {refreshing ? "Actualizando..." : "Actualizar datos"}
           </button>
           <Link
             href="/settings"
-            className="inline-flex items-center gap-1.5 rounded-full bg-amber-400 px-4 py-2 text-xs font-black text-slate-950 shadow-lg shadow-amber-500/20 transition-all hover:bg-amber-300"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-400 px-3.5 py-2 text-xs font-semibold text-slate-950 shadow-[0_1px_2px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.35)] transition-colors hover:bg-amber-300"
           >
             <Wallet className="h-3.5 w-3.5" />
             Ajustar Presupuesto
@@ -628,106 +621,106 @@ export default function AnalyticsDashboardPage() {
       </div>
 
       {error && (
-        <div className="mb-6 flex items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-          <AlertTriangle className="h-5 w-5 shrink-0 text-rose-400" />
+        <div className="flex items-center gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs sm:text-sm text-rose-200">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-rose-400" />
           <span>{error}</span>
         </div>
       )}
 
       {/* 1. KPI Cards */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Card 1: Gasto Total USD */}
-        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/75 p-5 shadow-xl">
+        <div className="ax-card relative overflow-hidden p-5">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Inversión Total</span>
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-400/15 text-amber-300">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Inversión Total</span>
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-400/12 text-amber-300">
               <DollarSign className="h-4 w-4" />
             </span>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="font-mono text-3xl font-black text-slate-50">
+            <span className="font-mono text-2xl sm:text-3xl font-bold text-slate-50 tabular-nums">
               ${(summary?.spent_usd ?? 0).toFixed(4)}
             </span>
-            <span className="text-xs font-bold text-slate-400">USD</span>
+            <span className="text-xs font-semibold text-slate-400">USD</span>
           </div>
-          <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2.5 text-xs text-slate-400">
+          <div className="mt-3 flex items-center justify-between border-t border-white/[0.06] pt-2.5 text-xs text-slate-400">
             <span>
-              Transcripción: <strong className="font-mono text-emerald-300">${(summary?.stt_cost_usd ?? 0).toFixed(4)}</strong>
+              Transcripción: <strong className="font-mono text-emerald-300 tabular-nums">${(summary?.stt_cost_usd ?? 0).toFixed(4)}</strong>
             </span>
             <span>
-              Curación IA: <strong className="font-mono text-sky-300">${(summary?.llm_cost_usd ?? 0).toFixed(4)}</strong>
+              Curación IA: <strong className="font-mono text-sky-300 tabular-nums">${(summary?.llm_cost_usd ?? 0).toFixed(4)}</strong>
             </span>
           </div>
         </div>
 
         {/* Card 2: Saldo Restante */}
-        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/75 p-5 shadow-xl">
+        <div className="ax-card relative overflow-hidden p-5">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Saldo Disponible</span>
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Saldo Disponible</span>
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-400/12 text-emerald-300">
               <Wallet className="h-4 w-4" />
             </span>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="font-mono text-3xl font-black text-emerald-300">
+            <span className="font-mono text-2xl sm:text-3xl font-bold text-emerald-300 tabular-nums">
               ${(summary?.remaining_usd ?? 0).toFixed(4)}
             </span>
-            <span className="text-xs font-bold text-slate-400">
+            <span className="text-xs font-semibold text-slate-400 tabular-nums">
               / ${(summary?.max_budget_usd ?? 9.0).toFixed(2)} límite
             </span>
           </div>
-          <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2.5 text-xs text-slate-400">
+          <div className="mt-3 flex items-center justify-between border-t border-white/[0.06] pt-2.5 text-xs text-slate-400">
             <span>
-              Uso: <strong className="font-mono text-slate-200">{(summary?.usage_pct ?? 0).toFixed(1)}%</strong>
+              Uso: <strong className="font-mono text-slate-200 tabular-nums">{(summary?.usage_pct ?? 0).toFixed(1)}%</strong>
             </span>
             <span>
-              Clips creados: <strong className="font-mono text-amber-300">{summary?.total_clips_rendered ?? 0}</strong>
+              Clips creados: <strong className="font-mono text-amber-300 tabular-nums">{summary?.total_clips_rendered ?? 0}</strong>
             </span>
           </div>
         </div>
 
         {/* Card 3: Tokens Totales */}
-        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/75 p-5 shadow-xl">
+        <div className="ax-card relative overflow-hidden p-5">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Palabras Procesadas (Tokens)</span>
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-400/15 text-sky-300">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Palabras Procesadas (Tokens)</span>
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-400/12 text-sky-300">
               <Sparkles className="h-4 w-4" />
             </span>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="font-mono text-3xl font-black text-slate-50">
+            <span className="font-mono text-2xl sm:text-3xl font-bold text-slate-50 tabular-nums">
               {(summary?.total_tokens ?? 0).toLocaleString("es-CO")}
             </span>
-            <span className="text-xs font-bold text-slate-400">tokens</span>
+            <span className="text-xs font-semibold text-slate-400">tokens</span>
           </div>
-          <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2.5 text-xs text-slate-400">
+          <div className="mt-3 flex items-center justify-between border-t border-white/[0.06] pt-2.5 text-xs text-slate-400">
             <span>
-              Lectura: <strong className="font-mono text-slate-200">{(summary?.input_tokens ?? 0).toLocaleString("es-CO")}</strong>
+              Lectura: <strong className="font-mono text-slate-200 tabular-nums">{(summary?.input_tokens ?? 0).toLocaleString("es-CO")}</strong>
             </span>
             <span>
               Respuestas IA:{" "}
-              <strong className="font-mono text-sky-300">{(summary?.output_tokens ?? 0).toLocaleString("es-CO")}</strong>
+              <strong className="font-mono text-sky-300 tabular-nums">{(summary?.output_tokens ?? 0).toLocaleString("es-CO")}</strong>
             </span>
           </div>
         </div>
 
         {/* Card 4: Horas de Audio Facturadas */}
-        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/75 p-5 shadow-xl">
+        <div className="ax-card relative overflow-hidden p-5">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Horas de Stream Escuchadas</span>
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-400/15 text-violet-300">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Horas de Stream Escuchadas</span>
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-400/12 text-violet-300">
               <Headphones className="h-4 w-4" />
             </span>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="font-mono text-3xl font-black text-slate-50">
+            <span className="font-mono text-2xl sm:text-3xl font-bold text-slate-50 tabular-nums">
               {(summary?.audio_hours_billed ?? 0).toFixed(2)}
             </span>
-            <span className="text-xs font-bold text-slate-400">
+            <span className="text-xs font-semibold text-slate-400 tabular-nums">
               horas ({(summary?.audio_minutes_billed ?? 0).toFixed(1)} min)
             </span>
           </div>
-          <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2.5 text-xs text-slate-400">
+          <div className="mt-3 flex items-center justify-between border-t border-white/[0.06] pt-2.5 text-xs text-slate-400">
             <span>
               Consultas: <strong className="font-mono text-slate-200">{summary?.total_calls ?? 0}</strong> ({summary?.stt_calls ?? 0} audio · {summary?.llm_calls ?? 0} IA)
             </span>

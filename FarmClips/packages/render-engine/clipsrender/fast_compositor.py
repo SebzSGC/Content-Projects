@@ -130,7 +130,7 @@ def build_audio_filtergraph(
         if clean_game_audio_stream is not None:
             mca = max(0.0, sync.camera_time(a) - cam_seek)
             mcb = max(mca + 0.05, sync.camera_time(b) - cam_seek)
-            fg.append(f"[{cam_input_idx}:a:0]atrim=start={mca:.3f}:end={mcb:.3f},asetpts=PTS-STARTPTS[mic_a]")
+            fg.append(f"[{cam_input_idx}:a:0]atrim=start={mca:.3f}:end={mcb:.3f},asetpts=PTS-STARTPTS,atempo={sync.scale:.6f}[mic_a]")
             fg.append(f"[{game_input_idx}:a:{clean_game_audio_stream}]atrim=start={ga:.3f}:end={gb:.3f},asetpts=PTS-STARTPTS[game_a]")
         else:
             fg.append(f"[{game_input_idx}:a:0]atrim=start={ga:.3f}:end={gb:.3f},asetpts=PTS-STARTPTS[mix_a]")
@@ -146,7 +146,7 @@ def build_audio_filtergraph(
             if clean_game_audio_stream is not None:
                 mca = max(0.0, sync.camera_time(a) - cam_seek)
                 mcb = max(mca + 0.05, sync.camera_time(b) - cam_seek)
-                fg.append(f"[ma{i}]atrim=start={mca:.3f}:end={mcb:.3f},asetpts=PTS-STARTPTS[mas{i}]")
+                fg.append(f"[ma{i}]atrim=start={mca:.3f}:end={mcb:.3f},asetpts=PTS-STARTPTS,atempo={sync.scale:.6f}[mas{i}]")
                 fg.append(f"[ga{i}]atrim=start={ga:.3f}:end={gb:.3f},asetpts=PTS-STARTPTS[gas{i}]")
             else:
                 fg.append(f"[xa{i}]atrim=start={ga:.3f}:end={gb:.3f},asetpts=PTS-STARTPTS[xas{i}]")
@@ -161,10 +161,11 @@ def build_audio_filtergraph(
     duck_db = plan.audio.duck_game_db
     if clean_game_audio_stream is not None:
         ratio = max(2.0, min(12.0, abs(duck_db) * 0.7))
-        fg.append(f"[mic_a]aresample=48000,highpass=f=75,volume={mic_gain:.1f}dB,asplit=2[mic_sc][mic_mix]")
+        fg.append(f"[mic_a]aresample=48000,highpass=f=75,volume={mic_gain:.1f}dB,asplit=2[mic_control][mic_mix]")
+        fg.append("[mic_control]apad[mic_sc]")
         fg.append("[game_a]aresample=48000[game_rs]")
         fg.append(f"[game_rs][mic_sc]sidechaincompress=threshold=0.035:ratio={ratio:.1f}:attack=15:release=260[game_duck]")
-        fg.append("[mic_mix][game_duck]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[base_a]")
+        fg.append("[mic_mix][game_duck]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[base_a]")
     else:
         boost = mic_gain * 0.5
         fg.append(f"[mix_a]aresample=48000,highpass=f=70,equalizer=f=3000:t=q:w=1.2:g=2.5,volume={boost:.1f}dB[base_a]")

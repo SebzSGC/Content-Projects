@@ -25,6 +25,7 @@ export interface BudgetSummary {
 }
 
 export interface ServerHealth {
+  experimental_highlights?: boolean;
   ok: boolean;
   ffmpeg: boolean;
   mediapipe_face_detector: boolean;
@@ -120,6 +121,7 @@ export interface SessionSummary {
   drive_folder_id: string | null;
   language: string;
   style_preset: string;
+  max_clips?: number | null;
   detected_game?: string | null;
   keyterms_count?: number;
   sync: SyncInfo | null;
@@ -187,6 +189,12 @@ export interface ClipItem {
     emojis: { word: string; emoji: string }[];
     reaction_peaks: number[];
     jump_cuts?: boolean;
+    editorial_score?: number | null;
+    editorial_format?: "individual" | "recopilacion";
+    editorial_segments?: { id: string; start: number; end: number; event: string; role: string;
+      evidence_ids: string[]; relation: string }[];
+    initial_context?: string;
+    grouping_reason?: string;
   } | null;
   editplan: EditPlan | null;
   has_draft: boolean;
@@ -295,6 +303,7 @@ export interface UpdateSettingsPayload {
   llm_backup_model?: string;
   llm_backup_base_url?: string;
   max_budget_usd?: number;
+  auto_render_top_k?: number;
   deepgram_api_key?: string;
   groq_api_key?: string;
   gemini_api_key?: string;
@@ -670,6 +679,7 @@ export const createDriveSession = (body: {
   recording_name?: string;
   language?: string;
   style_preset?: string;
+  max_clips?: number;
   auto_start?: boolean;
 }) => apiJson<SessionSummary>("/drive/sessions", { method: "POST", body: JSON.stringify(body) });
 export const fetchEmojiCatalog = () => apiJson<EmojiCatalogItem[]>("/emojis");
@@ -701,11 +711,15 @@ export const createSession = (body: {
   recording_name?: string;
   language?: string;
   style_preset?: string;
+  max_clips?: number;
   auto_start?: boolean;
 }) => apiJson<SessionSummary>("/sessions", { method: "POST", body: JSON.stringify(body) });
 
-export const rerunSession = (id: string) =>
-  apiJson<SessionSummary>(`/sessions/${encodeURIComponent(id)}/run`, { method: "POST" });
+export const rerunSession = (id: string, maxClips?: number) =>
+  apiJson<SessionSummary>(`/sessions/${encodeURIComponent(id)}/run`, {
+    method: "POST",
+    ...(maxClips !== undefined ? { body: JSON.stringify({ max_clips: maxClips }) } : {}),
+  });
 
 export const cancelSession = (id: string) =>
   apiJson<SessionSummary>(`/sessions/${encodeURIComponent(id)}/cancel`, { method: "POST" });
@@ -739,10 +753,11 @@ export const saveClipEditPlan = (clipId: string, plan: EditPlan) =>
   });
 
 /** Move the clip's start/end on the VOD and/or toggle jump cuts; the server rebuilds the EditPlan. */
-export const retimeClip = (clipId: string, start: number, end: number, jumpCuts: boolean) =>
+export const retimeClip = (clipId: string, start: number, end: number, jumpCuts: boolean,
+                           ranges?: [number, number][]) =>
   apiJson<{ clip: ClipItem; editplan: EditPlan }>(`/clips/${encodeURIComponent(clipId)}/retime`, {
     method: "POST",
-    body: JSON.stringify({ start, end, jump_cuts: jumpCuts }),
+    body: JSON.stringify({ start, end, jump_cuts: jumpCuts, ranges }),
   });
 
 export const renderClip = (clipId: string, quality: "draft" | "final", upload_to_drive = true) =>

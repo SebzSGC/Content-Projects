@@ -1,6 +1,7 @@
 from .resolver import (
     adjust_utterance_span,
     compute_clip_signal_score,
+    compute_dynamic_tail_pad,
     dedupe_clips,
     iou_1d,
     resolve_curated_clips,
@@ -9,6 +10,7 @@ from .resolver import (
 __all__ = [
     "adjust_utterance_span",
     "compute_clip_signal_score",
+    "compute_dynamic_tail_pad",
     "dedupe_clips",
     "iou_1d",
     "resolve_curated_clips",

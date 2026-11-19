@@ -167,7 +167,8 @@ class LocalFfmpegRenderBackend:
         on_progress: Optional[ProgressCallback] = None,
     ) -> Path:
         out_dir.mkdir(parents=True, exist_ok=True)
-        render_key = plan.plan_hash(style_hash=preset.content_hash(), quality=quality)
+        # Old cached renders can have camera-audio drift across discontinuous ranges.
+        render_key = plan.plan_hash(style_hash=f"{preset.content_hash()}:av-sync-v2", quality=quality)
         final_mp4 = out_dir / f"{plan.clip_id or 'clip'}_{quality}_{render_key[:10]}.mp4"
 
         if self.cache_dir is not None:

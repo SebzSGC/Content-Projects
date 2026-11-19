@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import shutil
 from pathlib import Path
+from math import isfinite
 from typing import Any, Dict, List, Optional
 
 from clipscore.domain import (
@@ -19,8 +21,10 @@ from clipscore.domain import (
     Utterance,
 )
 from clipscore.selection import resolve_curated_clips
+from clipscore.selection.editorial import MIN_FINAL_SECONDS, duration
 from clipscore.timeline import build_timeline_windows_if_needed, group_words_into_utterances
 from clipseditplan import EditPlan
+from clipsmedia.ffmpeg import verify_final_av_duration
 from clipsmedia.drive import (
     DriveConnector,
     GoogleDriveOAuthConnector,
@@ -33,6 +37,8 @@ from clipsrender import RenderQuality
 from clipsstyles import load_preset, resolve_game_keyterms
 
 from ..config import ServerSettings
+from ..experimental.generation import selection_guidance, summarize_editor_diff
+from ..experimental.storage import Store
 from ..pools.api_pool import ApiPool
 from ..pools.cpu_pool import (
     CpuPool,
@@ -62,6 +68,10 @@ def _file_sig(path_str: str) -> Dict[str, Any]:
 # Bounds for a clip edited by hand in the Web Studio editor
 MIN_CLIP_SEC = 5.0
 MAX_CLIP_SEC = 180.0
+
+
+class FinalDurationError(ValueError):
+    """The current edit cannot be delivered as a final MP4."""
 
 
 def carry_over_user_text(old_plan: EditPlan, new_plan: EditPlan) -> None:
@@ -244,6 +254,7 @@ class Orchestrator:
         recording_name: str = "",
         language: str = "es",
         style_preset: Optional[str] = None,
+        max_clips: Optional[int] = None,
         auto_start: bool = True,
     ) -> Dict[str, Any]:
         if self.drive is None:
@@ -285,6 +296,7 @@ class Orchestrator:
             drive_folder_id=(folder_id or "").strip() or gp_entry.id,
             language=language or "es",
             style_preset=style_preset or self.settings.style_preset,
+            max_clips=max_clips,
             initial_state=SessionState.NEW,
         )
         sid = ses["id"]
@@ -514,7 +526,10 @@ class Orchestrator:
             self._set_state(session_id, SessionState.TRANSCRIBED, message=f"{len(utterances)} frases detectadas")
 
             # 3 & 4. TIMELINE + CURAR CON LLM (API Pool)
-            self.events.publish("stage_progress", session_id=session_id, stage="curate", progress=0.55, message="Eligiendo las mejores jugadas y momentos divertidos…")
+            target_clips = max(1, min(20, int(row.get("max_clips") or self.settings.auto_render_top_k or 5)))
+            self.events.publish("stage_progress", session_id=session_id, stage="curate", progress=0.55, message=f"Eligiendo las mejores {target_clips} jugadas y momentos divertidos…")
+            related_window_sec = self.settings.related_window_sec
+            guidance = selection_guidance(related_window_sec, db_path=self.db.db_path)
             windows = build_timeline_windows_if_needed(utterances, signals)
             window_proposals = await asyncio.gather(
                 *(
@@ -522,21 +537,32 @@ class Orchestrator:
                         session_id=session_id,
                         timeline_text=w_txt,
                         title=row.get("title") or "Stream",
-                        min_len=preset.duration.min_sec,
-                        max_len=preset.duration.max_sec,
+                        min_len=MIN_FINAL_SECONDS,
+                        max_len=MAX_CLIP_SEC,
+                        max_clips=target_clips,
+                        editorial_guidance=guidance,
                     )
                     for w_txt in windows
                 )
             )
             flat_proposals: List[Dict[str, Any]] = [item for sub in window_proposals for item in sub]
-            curated_clips = resolve_curated_clips(
+            resolved_clips = resolve_curated_clips(
                 llm_clips=flat_proposals,
                 utterances=utterances,
                 signals=signals,
                 vod_duration=prep.gameplay.duration,
-                min_sec=preset.duration.min_sec,
-                max_sec=preset.duration.max_sec,
+                min_sec=MIN_FINAL_SECONDS,
+                max_sec=MAX_CLIP_SEC,
+                editorial_profile=True,
+                related_window_sec=related_window_sec,
             )
+            eligible = [c for c in resolved_clips if duration(c.source_ranges()) >= MIN_FINAL_SECONDS]
+            short = [c for c in resolved_clips if duration(c.source_ranges()) < MIN_FINAL_SECONDS]
+            curated_clips = eligible[:target_clips] + (short[:target_clips] if not eligible else short[:1])
+            (sdir / "editorial_proposals.json").write_text(json.dumps({
+                "proposals": flat_proposals,
+                "resolved": [c.model_dump(mode="json") for c in resolved_clips],
+            }, ensure_ascii=False, indent=2), encoding="utf-8")
             self.events.publish(
                 "budget_update",
                 session_id=session_id,
@@ -544,12 +570,14 @@ class Orchestrator:
             )
 
             # Persist curated clips in deterministic rank order; reuse stable IDs if re-running same session
-            existing_by_span = {
-                (round(c["start_sec"], 1), round(c["end_sec"], 1)): c["id"]
-                for c in self.db.list_clips(session_id)
-            }
+            existing_by_span = {}
+            for stored in self.db.list_clips(session_id):
+                data = json.loads(stored.get("curated_json") or "{}")
+                ranges = [(part["start"], part["end"]) for part in data.get("editorial_segments", [])]
+                key = tuple(ranges or [(stored["start_sec"], stored["end_sec"])])
+                existing_by_span[key] = stored["id"]
             for rank_idx, clip in enumerate(curated_clips, start=1):
-                reused_id = existing_by_span.get((round(clip.start, 1), round(clip.end, 1)))
+                reused_id = existing_by_span.get(tuple(clip.source_ranges()))
                 if reused_id:
                     clip.id = reused_id
                 self.db.upsert_clip(
@@ -572,13 +600,13 @@ class Orchestrator:
 
             self._set_state(session_id, SessionState.CURATED, message=f"{len(curated_clips)} momentos seleccionados")
 
-            # Identify top-5 clips > 60/100 for automatic 1080p render & Drive delivery
+            # Identify top-K clips > min_score for automatic 1080p render & Drive delivery
             auto_render_ids = {
                 c.id
                 for c in curated_clips
-                if c.final_score >= self.settings.auto_render_min_score
+                if c.final_score >= self.settings.auto_render_min_score and duration(c.source_ranges()) >= MIN_FINAL_SECONDS
             }
-            top_ordered = [c.id for c in curated_clips if c.id in auto_render_ids][: self.settings.auto_render_top_k]
+            top_ordered = [c.id for c in curated_clips if c.id in auto_render_ids][:target_clips]
             auto_render_set = set(top_ordered)
 
             self._set_state(session_id, SessionState.PLANNING, message="Centrando tu cámara y preparando los subtítulos de cada clip…")
@@ -613,7 +641,7 @@ class Orchestrator:
                         webhook_url=self.settings.webhook_url,
                         session_id=session_id,
                         title=str(row.get("title") or row.get("recording_name") or session_id),
-                        clips=self.db.list_clips(session_id),
+                        clips=[c for c in self.db.list_clips(session_id) if c["state"] != "REVIEW_SHORT"],
                         public_web_url=self.settings.public_web_url,
                     )
                     self.events.publish("webhook_sent", session_id=session_id, **wh_res)
@@ -644,27 +672,25 @@ class Orchestrator:
         cdir = self.session_dir(sid) / "clips" / clip.id
         cdir.mkdir(parents=True, exist_ok=True)
 
-        # Step 5: MediaPipe Face Tracking ONLY on clip.padded_range (2s margin)
-        pad_a, pad_b = clip.padded_range(margin_sec=2.0, max_duration=prep.gameplay.duration)
-        face_parquet = cdir / "face.parquet"
-        if not (face_parquet.is_file() and not Path(prep.camera.path).is_file()):
-            await self._run_cached_cpu(
-                sid,
-                "track_face",
-                {
-                    "cam": _file_sig(prep.camera.path),
-                    "range": [pad_a, pad_b],
-                    "sync": sync_dict,
-                },
-                face_parquet,
-                worker_track_face,
-                prep.camera.path,
-                pad_a,
-                pad_b,
-                sync_dict,
-                str(face_parquet),
-                clip_id=clip.id,
-            )
+        # Track only the retained ranges of a compilation. Individual cuts keep their normal padding.
+        spans = clip.source_ranges() if clip.editorial_segments else [
+            clip.padded_range(margin_sec=2.0, max_duration=prep.gameplay.duration)
+        ]
+        face_paths = []
+        for index, (pad_a, pad_b) in enumerate(spans):
+            name = f"face-{index + 1}.parquet" if clip.editorial_segments else "face.parquet"
+            face_parquet = cdir / name
+            if not (face_parquet.is_file() and not Path(prep.camera.path).is_file()):
+                cached_face = await self._run_cached_cpu(
+                    sid, "track_face",
+                    {"cam": _file_sig(prep.camera.path), "range": [pad_a, pad_b], "sync": sync_dict},
+                    face_parquet, worker_track_face, prep.camera.path, pad_a, pad_b,
+                    sync_dict, str(face_parquet), clip_id=clip.id,
+                )
+                if cached_face != face_parquet and not clip.editorial_segments:
+                    shutil.copyfile(cached_face, face_parquet)
+                face_parquet = cached_face
+            face_paths.append(str(face_parquet))
 
         # Step 6: Build declarative EditPlan v2 (re-runs cheaply if preset changes without touching STT/LLM/Face!)
         existing_clip_row = self.db.get_clip(clip.id)
@@ -684,7 +710,7 @@ class Orchestrator:
             clip.model_dump(mode="json"),
             utts_dicts,
             str(signals_parquet),
-            str(face_parquet),
+            face_paths,
             preset_id,
             silences_dicts,
             prep.camera_wav16k,
@@ -704,14 +730,23 @@ class Orchestrator:
         self.events.publish("clip_updated", session_id=sid, clip_id=clip.id, state="PLANNED")
 
         # Step 7: Automatic 1080p render for top-K (> min_score)
+        if plan.total_duration() < MIN_FINAL_SECONDS:
+            self.db.update_clip(clip.id, state="REVIEW_SHORT")
+            self.events.publish("clip_updated", session_id=sid, clip_id=clip.id, state="REVIEW_SHORT")
+            return
+
         if should_auto_render:
             self.db.update_session(sid, state=SessionState.RENDERING.value)
-            await self.render_and_deliver_clip(
-                clip_id=clip.id,
-                quality="final",
-                priority=clip.final_score,
-                upload_to_drive=True,
-            )
+            try:
+                await self.render_and_deliver_clip(
+                    clip_id=clip.id,
+                    quality="final",
+                    priority=clip.final_score,
+                    upload_to_drive=True,
+                )
+            except FinalDurationError:
+                self.db.update_clip(clip.id, state="REVIEW_SHORT")
+                self.events.publish("clip_updated", session_id=sid, clip_id=clip.id, state="REVIEW_SHORT")
 
     async def save_clip_editplan(self, clip_id: str, plan: EditPlan) -> EditPlan:
         row = self.db.get_clip(clip_id)
@@ -723,10 +758,20 @@ class Orchestrator:
         raw_json = plan.model_dump_json(indent=2, exclude_none=True)
         (cdir / "editplan.user.json").write_text(raw_json + "\n", encoding="utf-8")
         self.db.update_clip(clip_id, editplan_json=raw_json, state="EDITED")
+        try:
+            diff_payload = summarize_editor_diff(row, json.loads(raw_json))
+            if diff_payload is not None:
+                op_key = f"editor:{clip_id}:{stable_hash(diff_payload)[:16]}"
+                Store(self.db.db_path).record_editor_diff(row["session_id"], clip_id, op_key, diff_payload)
+        except Exception:
+            pass
         self.events.publish("clip_updated", session_id=row["session_id"], clip_id=clip_id, state="EDITED")
         return plan
 
-    async def retime_clip(self, clip_id: str, start: float, end: float, jump_cuts: bool = True) -> EditPlan:
+    async def retime_clip(
+        self, clip_id: str, start: float, end: float, jump_cuts: bool = True,
+        ranges: Optional[List[tuple[float, float]]] = None,
+    ) -> EditPlan:
         """Move a clip's start/end on the VOD and/or turn jump cuts on or off, then rebuild its EditPlan.
 
         Face tracking and the plan are recomputed for the new span (cached by span, so going back is free).
@@ -741,12 +786,33 @@ class Orchestrator:
         if ses_row is None or not ses_row.get("prepared_json") or not row.get("curated_json"):
             raise RuntimeError("La sesión aún no terminó de procesarse.")
         prep = PreparedMedia.model_validate_json(ses_row["prepared_json"])
-        start = round(max(0.0, float(start)), 3)
-        end = round(min(float(prep.gameplay.duration), float(end)), 3)
-        if end - start < MIN_CLIP_SEC:
-            raise ValueError(f"El clip debe durar al menos {MIN_CLIP_SEC:.0f} segundos.")
-        if end - start > MAX_CLIP_SEC:
-            raise ValueError(f"El clip no puede durar más de {MAX_CLIP_SEC:.0f} segundos.")
+        clip = CuratedClip.model_validate_json(row["curated_json"])
+        segments = clip.editorial_segments
+        if segments:
+            if ranges is None:
+                ranges = [(start, segments[0].end), *clip.source_ranges()[1:-1],
+                          (segments[-1].start, end)]
+            if len(ranges) != len(segments) or any(
+                not (isfinite(a) and isfinite(b) and 0 <= a < b <= prep.gameplay.duration)
+                for a, b in ranges
+            ):
+                raise ValueError("Revisa los límites de cada tramo de la recopilación.")
+            ranges = [(round(a, 3), round(b, 3)) for a, b in ranges]
+            if any(b <= a or (i and a < ranges[i - 1][1]) for i, (a, b) in enumerate(ranges)):
+                raise ValueError("Los tramos deben conservar el orden del VOD y no solaparse.")
+            start, end = ranges[0][0], ranges[-1][1]
+            segments = [segment.model_copy(update={"start": a, "end": b})
+                        for segment, (a, b) in zip(segments, ranges)]
+        else:
+            if ranges is not None:
+                raise ValueError("El clip individual se ajusta con sus límites de inicio y fin.")
+            start = round(max(0.0, float(start)), 3)
+            end = round(min(float(prep.gameplay.duration), float(end)), 3)
+            ranges = [(start, end)]
+        if duration(ranges) < MIN_CLIP_SEC:
+            raise ValueError(f"El clip necesita al menos {MIN_CLIP_SEC:.0f} segundos para previsualizarse.")
+        if duration(ranges) > MAX_CLIP_SEC:
+            raise ValueError(f"El editor admite hasta {MAX_CLIP_SEC:.0f} segundos montados.")
 
         sdir = self.session_dir(sid)
         utts_file = sdir / "utterances.json"
@@ -756,10 +822,13 @@ class Orchestrator:
         utts_dicts = json.loads(utts_file.read_text(encoding="utf-8"))
         old_plan = EditPlan.model_validate_json(row["editplan_json"]) if row.get("editplan_json") else None
 
-        clip = CuratedClip.model_validate_json(row["curated_json"])
-        clip = clip.model_copy(update={"start": start, "end": end, "jump_cuts": bool(jump_cuts)})
+        clip = clip.model_copy(update={
+            "start": start, "end": end, "jump_cuts": bool(jump_cuts) and not segments,
+            "editorial_segments": segments,
+        })
         self.db.update_clip(
-            clip_id, start_sec=start, end_sec=end, curated_json=clip.model_dump_json(), state="PLANNED"
+            clip_id, start_sec=start, end_sec=end, curated_json=clip.model_dump_json(),
+            draft_mp4_path=None, final_mp4_path=None, state="PLANNED"
         )
         preset = load_preset(ses_row.get("style_preset") or self.settings.style_preset)
         await self._clip_pipeline(
@@ -801,6 +870,8 @@ class Orchestrator:
 
         prep = PreparedMedia.model_validate_json(ses_row["prepared_json"])
         plan = EditPlan.model_validate_json(clip_row["editplan_json"])
+        if quality == "final" and plan.total_duration() < MIN_FINAL_SECONDS:
+            raise FinalDurationError("El montaje necesita al menos 40 segundos para exportar el MP4 final.")
         preset = load_preset(plan.output.style or ses_row.get("style_preset") or self.settings.style_preset)
 
         out_dir = self.session_dir(sid) / "renders"
@@ -817,18 +888,26 @@ class Orchestrator:
                 message=msg,
             )
 
-        mp4_path = await self.render_pool.submit(
-            plan=plan,
-            preset=preset,
-            gameplay_path=Path(prep.gameplay.path),
-            camera_path=Path(prep.camera.path),
-            sync=prep.sync,
-            out_dir=out_dir,
-            quality=quality,
-            priority=priority,
-            clean_game_audio_stream=prep.gameplay_clean_audio_stream,
-            on_progress=_on_prog,
-        )
+        try:
+            mp4_path = await self.render_pool.submit(
+                plan=plan,
+                preset=preset,
+                gameplay_path=Path(prep.gameplay.path),
+                camera_path=Path(prep.camera.path),
+                sync=prep.sync,
+                out_dir=out_dir,
+                quality=quality,
+                priority=priority,
+                clean_game_audio_stream=prep.gameplay_clean_audio_stream,
+                on_progress=_on_prog,
+            )
+            if quality == "final":
+                if not await asyncio.to_thread(verify_final_av_duration, mp4_path, MIN_FINAL_SECONDS):
+                    raise FinalDurationError("FFprobe no confirmó audio y un mínimo de 40 segundos en el MP4 final.")
+        except Exception:
+            self.db.update_clip(clip_id, state="RENDER_FAILED")
+            self.events.publish("clip_updated", session_id=sid, clip_id=clip_id, state="RENDER_FAILED")
+            raise
 
         field_key = "draft_mp4_path" if quality == "draft" else "final_mp4_path"
         new_state = "DRAFT_READY" if quality == "draft" else "RENDERED"
@@ -852,6 +931,8 @@ class Orchestrator:
                 "overlay_title": overlay_title,
                 "hashtags": json.loads(clip_row.get("hashtags_json") or "[]"),
                 "source_ranges": [list(r) for r in plan.source.ranges],
+                "editorial_format": json.loads(clip_row.get("curated_json") or "{}").get("editorial_format", "individual"),
+                "duration_seconds": plan.total_duration(),
                 "score": clip_row["final_score"],
                 "llm_score": clip_row["llm_score"],
                 "signal_score": clip_row["signal_score"],

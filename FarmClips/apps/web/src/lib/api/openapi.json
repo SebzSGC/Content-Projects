@@ -6,6 +6,665 @@
     "version": "0.2.0"
   },
   "paths": {
+    "/experimental/highlights/v1/sources": {
+      "get": {
+        "summary": "List Sources",
+        "operationId": "list_sources_experimental_highlights_v1_sources_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/experimental/highlights/v1/runs": {
+      "get": {
+        "summary": "List Runs",
+        "operationId": "list_runs_experimental_highlights_v1_runs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Start",
+        "operationId": "start_experimental_highlights_v1_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Start"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/experimental/highlights/v1/runs/{run_id}": {
+      "get": {
+        "summary": "Status",
+        "operationId": "status_experimental_highlights_v1_runs__run_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/experimental/highlights/v1/runs/{run_id}/media": {
+      "get": {
+        "summary": "Media",
+        "operationId": "media_experimental_highlights_v1_runs__run_id__media_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/experimental/highlights/v1/runs/{run_id}/preview": {
+      "get": {
+        "summary": "Preview",
+        "operationId": "preview_experimental_highlights_v1_runs__run_id__preview_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "minimum": 0,
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "title": "End"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/experimental/highlights/v1/runs/{run_id}/candidates": {
+      "get": {
+        "summary": "Candidates",
+        "operationId": "candidates_experimental_highlights_v1_runs__run_id__candidates_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "ranking",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "v1",
+                "v2"
+              ],
+              "type": "string",
+              "default": "v1",
+              "title": "Ranking"
+            }
+          },
+          {
+            "name": "budget",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 120,
+              "minimum": 0,
+              "default": 12,
+              "title": "Budget"
+            }
+          },
+          {
+            "name": "show_all",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Show All"
+            }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Profile"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/experimental/highlights/v1/runs/{run_id}/frame/{second}": {
+      "get": {
+        "summary": "Frame",
+        "operationId": "frame_experimental_highlights_v1_runs__run_id__frame__second__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "second",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Second"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/experimental/highlights/v1/generated-clips/{clip_id}/reviews": {
+      "get": {
+        "summary": "Generated History",
+        "operationId": "generated_history_experimental_highlights_v1_generated_clips__clip_id__reviews_get",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Clip Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Review Generated Clip",
+        "operationId": "review_generated_clip_experimental_highlights_v1_generated_clips__clip_id__reviews_post",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Clip Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratedReview"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/experimental/highlights/v1/runs/{run_id}/history/{candidate}": {
+      "get": {
+        "summary": "History",
+        "operationId": "history_experimental_highlights_v1_runs__run_id__history__candidate__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "candidate",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Candidate"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/experimental/highlights/v1/runs/{run_id}/reviews/{candidate}": {
+      "post": {
+        "summary": "Review",
+        "operationId": "review_experimental_highlights_v1_runs__run_id__reviews__candidate__post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "candidate",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Candidate"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Review"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/experimental/highlights/v1/runs/{run_id}/export": {
+      "get": {
+        "summary": "Export",
+        "operationId": "export_experimental_highlights_v1_runs__run_id__export_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/experimental/highlights/v1/feedback/import": {
+      "post": {
+        "summary": "Import Feedback",
+        "operationId": "import_feedback_experimental_highlights_v1_feedback_import_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/experimental/highlights/v1/feedback": {
+      "get": {
+        "summary": "Historical Feedback",
+        "operationId": "historical_feedback_experimental_highlights_v1_feedback_get",
+        "parameters": [
+          {
+            "name": "candidate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Candidate"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/experimental/highlights/v1/learned-guidance": {
+      "get": {
+        "summary": "Learned Guidance",
+        "operationId": "learned_guidance_experimental_highlights_v1_learned_guidance_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/experimental/highlights/v1/profiles": {
+      "get": {
+        "summary": "Profiles",
+        "operationId": "profiles_experimental_highlights_v1_profiles_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Preview Profile",
+        "operationId": "preview_profile_experimental_highlights_v1_profiles_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health",
@@ -1256,6 +1915,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RerunSessionBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2633,6 +3309,19 @@
             "title": "Style Preset",
             "default": "hormozi-gaming"
           },
+          "max_clips": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 20.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Clips"
+          },
           "auto_start": {
             "type": "boolean",
             "title": "Auto Start",
@@ -2671,6 +3360,19 @@
             "type": "string",
             "title": "Style Preset",
             "default": "hormozi-gaming"
+          },
+          "max_clips": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 20.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Clips"
           },
           "auto_start": {
             "type": "boolean",
@@ -2912,6 +3614,97 @@
         ],
         "title": "GameplayCropKeyframe"
       },
+      "GeneratedReview": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "interesante",
+              "no_interesante",
+              "dudoso"
+            ],
+            "title": "Decision"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "llamada",
+                  "humor",
+                  "susto",
+                  "historia",
+                  "combate",
+                  "tarea",
+                  "resultado",
+                  "otro"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 3000,
+            "title": "Notes",
+            "default": ""
+          },
+          "operation": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Operation"
+          },
+          "expected": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected"
+          },
+          "proposal": {
+            "$ref": "#/components/schemas/Segment"
+          },
+          "source_ranges": {
+            "anyOf": [
+              {
+                "items": {
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "type": "array",
+                  "maxItems": 2,
+                  "minItems": 2
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ranges"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision",
+          "operation",
+          "proposal"
+        ],
+        "title": "GeneratedReview"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3088,6 +3881,25 @@
         "type": "object",
         "title": "RenderClipBody"
       },
+      "RerunSessionBody": {
+        "properties": {
+          "max_clips": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 20.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Clips"
+          }
+        },
+        "type": "object",
+        "title": "RerunSessionBody"
+      },
       "RetimeClipBody": {
         "properties": {
           "start": {
@@ -3107,6 +3919,30 @@
             "title": "Jump Cuts",
             "description": "Quitar las pausas largas (jump cuts)",
             "default": true
+          },
+          "ranges": {
+            "anyOf": [
+              {
+                "items": {
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "type": "array",
+                  "maxItems": 2,
+                  "minItems": 2
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ranges"
           }
         },
         "type": "object",
@@ -3115,6 +3951,108 @@
           "end"
         ],
         "title": "RetimeClipBody"
+      },
+      "Review": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "interesante",
+              "no_interesante",
+              "dudoso"
+            ],
+            "title": "Decision"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "llamada",
+                  "humor",
+                  "susto",
+                  "historia",
+                  "combate",
+                  "tarea",
+                  "resultado",
+                  "otro"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 3000,
+            "title": "Notes",
+            "default": ""
+          },
+          "operation": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Operation"
+          },
+          "expected": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected"
+          },
+          "version": {
+            "type": "string",
+            "enum": [
+              "v1",
+              "v2"
+            ],
+            "title": "Version"
+          },
+          "segment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Segment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision",
+          "operation",
+          "version"
+        ],
+        "title": "Review"
+      },
+      "Segment": {
+        "properties": {
+          "start": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Start"
+          },
+          "end": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "End"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "Segment"
       },
       "SessionFilmCraftExportBody": {
         "properties": {
@@ -3195,6 +4133,24 @@
           "ranges"
         ],
         "title": "SourcePlan"
+      },
+      "Start": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "fresh": {
+            "type": "boolean",
+            "title": "Fresh",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "source"
+        ],
+        "title": "Start"
       },
       "TestConnectionBody": {
         "properties": {
@@ -3413,6 +4369,19 @@
               }
             ],
             "title": "Max Budget Usd"
+          },
+          "auto_render_top_k": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 20.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Render Top K"
           },
           "deepgram_api_key": {
             "anyOf": [

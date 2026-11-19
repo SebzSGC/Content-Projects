@@ -4,7 +4,7 @@ tipo: cambios
 estado: vigente
 audiencia: [todos]
 responsable: Equipo FarmClips
-actualizado: 2026-11-12
+actualizado: 2026-11-18
 etiquetas: [tipo/cambios, area/general]
 ---
 
@@ -13,7 +13,123 @@ etiquetas: [tipo/cambios, area/general]
 > [!abstract] En pocas palabras
 > Registro cronológico de las versiones de FarmClips, nuevas funcionalidades, optimizaciones de rendimiento y ajustes en la arquitectura del sistema.
 
-## [2.8.0] — 2026-11-12 (Versión actual)
+## [3.1.0-mvp] — 2026-11-18 (Release MVP en `main`)
+
+### 🚀 Release MVP — Selección Editorial, Web Studio Astryx, Selector de Clips y Aprendizaje Continuo
+
+Consolidación en `main` de las capacidades clave del producto mínimo viable (MVP) de **FarmClips**:
+- **Selección Editorial y Recopilaciones (`HU-014`, `EP-04`)**: Perfil *FarmClips 1.0*, clips `individual` y `recopilacion` multi-tramo en ventana de `600 s`, suelo final de `40 s` verificado con `FFprobe`, timeline con pausas y etiquetas de reacción, cola dinámica por decaimiento de audio, protección a `100 Hz` en *jump cuts* y SFX CC0 (`boom`, `whoosh`, `pop`).
+- **Aprendizaje Editorial y Optimización de Costos (`HU-014`)**: **Valorar clip** activo por defecto, captura de diffs del editor (`edicion_estudio`), síntesis de *Golden Clips* (`build_learned_editorial_guidance`) y soporte nativo de DeepSeek (`deepseek-flash`, `deepseek-chat`, `deepseek-reasoner`) + `gemini-3.1-flash-lite`.
+- **Selector de Cantidad de Clips (`HU-013`)**: Control de `1–20` clips al crear o reprocesar sesión y valor predeterminado en Ajustes.
+- **Rediseño Web Studio Astryx (`HU-012`)**: Marco de escritorio `AppShell`, temas **Obsidiana / Grafito**, tipografía `Figtree` + `JetBrains Mono`, editor a `60 fps` y exportación a FilmCraft con puente `--control` (`v2.8.0`).
+
+> [!warning] ⚠️ Cambia para ti
+> - Esta versión consolida el **MVP** en `main` listo para uso diario de punta a punta: desde la selección editorial inteligente y recopilaciones multi-tramo hasta el aprendizaje continuo desde tus valoraciones y ediciones.
+
+---
+
+## [2.11.0] — 2026-11-18 (Rama `feat/farmclips-seleccion-editorial`)
+
+### 🎬 Selección Editorial, Recopilaciones Multi-Tramo, Aprendizaje Continuo y Optimización de Costos (`HU-014`)
+
+Unificación de la selección editorial de formatos (`individual` y `recopilacion` con suelo final de `40 s`) con el Plan de Mejora de calidad de clips, costos LLM y aprendizaje continuo a partir de las valoraciones y ediciones del creador.
+
+#### Qué cambió
+- **Selección Editorial, Recopilaciones y Suelo de 40 s (`clipscore/selection/`, `clipseditplan`, `engine.py`, `ffmpeg.py`, `/editor/[clipId]`)**:
+  - Perfil editorial *FarmClips 1.0* (`85 %` curación / `15 %` señal) capaz de elegir entre clip `individual` o `recopilacion` multi-tramo cronológica (ventana configurable de `600 s` con `CLIPS_RELATED_WINDOW_SEC`, mínimo 2 acontecimientos distinguibles con `evidence_ids` verificables).
+  - Reutilización de `EditPlan.source.ranges` en reproducción, tracking por tramo, subtítulos, render y exportación a FilmCraft/OTIO, con edición de límites por tramo en `/editor/[clipId]`.
+  - Verificación estricta de duración final $\ge 40\text{ s}$ con `FFprobe` antes de entregar el MP4 final, reteniendo candidatos más breves en estado `REVIEW_SHORT` sin rellenarlos artificialmente.
+- **Contexto Acústico en Timeline, Cola Dinámica y Protección Sub-Segundo (`timeline/builder.py`, `selection/resolver.py`, `directors/hormozi.py`, `clipsstyles`)**:
+  - Marcas explícitas de pausa entera (`--- [PAUSA Xs] ---` para silencios $\ge 3\text{ s}$) y etiquetas `[REACCIÓN]` / `[ALTA REACCIÓN]` en `build_compact_timeline`.
+  - Ajuste dinámico de cola (`compute_dynamic_tail_pad`) guiado por el decaimiento de `signals.reaction` (extiende hasta `1.65 s` si continúa la risa o cierra en seco a `0.35 s` en silencio).
+  - Protección de ráfagas vocales a `100 Hz` en `compute_jump_cut_ranges` y síntesis CC0 para `boom`, `whoosh` y `pop` en `ensure_sfx_wav`.
+- **Optimización de Costos LLM y Soporte Nativo de DeepSeek (`openai_compat.py`, `gemini.py`, `/settings`)**:
+  - Tarifas exactas para `deepseek-flash`, `deepseek-chat`, `deepseek-reasoner` y `gemini-3.1-flash-lite`, incluyendo descuento por `prompt_cache_hit_tokens` en DeepSeek y envío directo de `json_object` + `max_tokens`.
+- **Evaluación Experimental, Valoración de Clips y Aprendizaje Continuo (`experimental/`, `ClipReview.tsx`, `engine.py`)**:
+  - Comparador offline V1/V2 en `/experimental/highlights` (con 0 llamadas a APIs facturables) y desplegable **Valorar clip** (`ClipReview.tsx`) en `/sessions/[id]` habilitado por defecto.
+  - Captura automática de diffs del editor (`summarize_editor_diff` $\to$ `edicion_estudio`) y síntesis de memoria editorial (`build_learned_editorial_guidance`) con preferencias por categoría, tendencias de edición y hasta 3 *Golden Clips* aprobados que retroalimentan futuras curaciones.
+  - Épica [[EP-04 Selección Editorial Calidad de Clips y Aprendizaje Continuo|EP-04]] e historia [[HU-014 Selección editorial recopilaciones y aprendizaje con optimización de costos|HU-014]].
+
+#### Por qué
+- Lograr clips y recopilaciones con contexto completo y remates que no se corten a mitad de una risa, reducir el costo por millón de tokens con proveedores compatibles como DeepSeek y hacer que el curador aprenda progresivamente del criterio del creador.
+
+> [!warning] ⚠️ Cambia para ti
+> - FarmClips ahora puede armar **recopilaciones de varios tramos** de una misma historia y retiene para revisión manual (`REVIEW_SHORT`) los clips de menos de `40 s` en vez de rellenarlos con silencio.
+> - En cada tarjeta de `/sessions/[id]` tienes **Valorar clip** activo por defecto, y tanto tus valoraciones como los recortes/títulos que guardes en el **Editor** enseñan al sistema tus preferencias para las siguientes sesiones.
+> - En **Ajustes (`/settings`)** puedes elegir `deepseek-flash`, `deepseek-chat`, `deepseek-reasoner` o `gemini-3.1-flash-lite` con cálculo exacto de presupuesto.
+
+---
+
+## [2.10.0] — 2026-11-13 (Rama `feat/seleccion-cantidad-clips`)
+
+### 🎯 Selector de cantidad de clips a extraer por sesión (`HU-013`)
+
+Ahora el creador puede elegir exactamente cuántos clips (`1` a `20`) extraer de cada grabación al crear una sesión, al reprocesar una sesión existente o como valor predeterminado en Ajustes.
+
+#### Qué cambió
+- **Persistencia y Orquestación (`db.py`, `api_pool.py`, `engine.py`, `routes.py`)**:
+  - Nueva columna `max_clips INTEGER` en `sessions` con migración automática segura en SQLite.
+  - Propagación de `max_clips` al `task_hash` de curación LLM (`curate_window_cached`) y recorte de clips resueltos y auto-renderizados al límite elegido (`target_clips`).
+  - Nuevos campos en `POST /sessions`, `POST /drive/sessions`, `POST /sessions/{id}/run` (`max_clips`) y `POST /settings` (`auto_render_top_k`).
+- **Web Studio (`/sessions`, `/sessions/[id]`, `/settings`, `client.ts`)**:
+  - Selector con presets rápidos (`3`, `5`, `8`, `10`) e input numérico (`1–20`) en el formulario de nueva sesión.
+  - Badge de objetivo y selector compacto junto a **«Reprocesar gratis»** en el detalle de sesión.
+  - Campo **«Clips por sesión (por defecto)»** en Ajustes.
+  - Historia [[HU-013 Selección de cantidad de clips a extraer por sesión|HU-013]] en [[EP-02 Claridad y Experiencia de Usuario en Web Studio]].
+
+#### Por qué
+- Permitir al usuario adaptar la cantidad de Shorts generados según la duración de su partida y reducir tiempos de renderizado cuando solo necesita unos pocos clips.
+
+> [!warning] ⚠️ Cambia para ti
+> - Al crear una sesión en **Sesiones** o antes de pulsar **Reprocesar gratis**, ahora puedes elegir exactamente cuántos clips (`1–20`) quieres extraer, y definir tu valor predeterminado en **Ajustes**.
+
+---
+
+## [2.9.0] — 2026-11-13
+
+### 🎨 Rediseño Integral del Web Studio inspirado en Astryx de Meta (`HU-012`)
+
+Transformación visual, tipográfica y arquitectónica de `apps/web` tomando como referencia los fundamentos y patrones de **Astryx de Meta** (`@astryxdesign/core` y `@astryxdesign/theme-neutral`) y la ergonomía de aplicaciones profesionales de escritorio en macOS.
+
+#### Qué cambió
+- **Sistema de Design Tokens Astryx (`apps/web/src/app/globals.css` y `apps/web/src/app/layout.tsx`)**:
+  - Jerarquía de superficies en 5 niveles (`body`, `surface`, `card`, `popover`, `muted`), iluminación cenital por bisel de 1 px (`--shadow-low/med/high`), radios concéntricos (`--radius-inner` a `--radius-page`), transiciones precisas de `120ms` y soporte de temas (**Obsidiana Estudio** y **Grafito Puro**).
+  - Tipografía **`Figtree`** para interfaz y **`JetBrains Mono`** (`tabular-nums`) para códigos de tiempo, costos y telemetría, manteniendo `"Montserrat ExtraBold"` para el lienzo `<canvas>` 9:16.
+- **Marco de escritorio `AppShell` con `SideNav` colapsable (`apps/web/src/components/TopNav.tsx`)**:
+  - Barra lateral de navegación colapsable con estado en tiempo real del motor (`NVENC`/`CPU`, `STT`, `LLM`) y barra superior contextual con migas de pan, billetera y selector de tema. En `/editor/[clipId]`, el `SideNav` se compacta automáticamente para maximizar el área de edición.
+- **Primitivas y módulos unificados (`ui.tsx`, `StepProgress.tsx`, `/sessions`, `/sessions/[id]`, `/editor/[clipId]`, `/settings`, `/analytics`)**:
+  - Nuevas primitivas reutilizables: `Card` con variantes, `TabList`, `StatusDot`, `Kbd`, `SectionHeader`, `EmptyState` y `AlertDialog`.
+  - Buscador instantáneo y filtro de estado en `/sessions`, filas estilo Finder en el explorador de Google Drive, navegación lateral por categorías (`settings-sidebar`) en `/settings`, unificación visual del editor a 60 fps y reemplazo del `window.confirm` nativo por `AlertDialog` en `handleRetime`.
+  - Historia [[HU-012 Rediseño integral del Web Studio inspirado en Astryx de Meta|HU-012]] en [[EP-02 Claridad y Experiencia de Usuario en Web Studio]].
+
+#### Por qué
+- Unificar el lenguaje visual entre el editor de clips y el resto del estudio, eliminar elementos decorativos innecesarios (manchas difuminadas de fondo y escalados bruscos en hover) y ofrecer una experiencia de aplicación nativa de escritorio más limpia, rápida y legible.
+
+> [!warning] ⚠️ Cambia para ti
+> - Ahora cuentas con una **barra lateral colapsable (`SideNav`)** a la izquierda, un selector de tema (**Obsidiana / Grafito**) en la barra superior, buscador y filtros por estado en **Sesiones**, navegación lateral por categorías en **Ajustes** y un diálogo visual integrado al cambiar el tramo de un clip en el **Editor**.
+
+---
+
+## [2.8.0] — 2026-11-12
+
+### 🔧 Corrección: Bridge de control (`--control 9876`) habilitado al abrir FilmCraft
+
+Se restauró el paso del parámetro `--control <puerto>` y la herencia de `FILMCRAFT_CONTROL_TOKEN` al lanzar FilmCraft desde FarmClips, permitiendo que el servidor MCP `filmcraft` y la reutilización de ventana se conecten automáticamente.
+
+#### Qué cambió
+- **Lanzador de FilmCraft (`apps/server/clipsserver/filmcraft.py`)**:
+  - `launch_filmcraft_windows` (y sus fallbacks de apertura) vuelven a incluir `--control <bridge_port>` (`9876` por defecto) sobre `WinSta0\Default` mediante `CreateProcessW` heredando `FILMCRAFT_CONTROL_TOKEN`.
+  - `ensure_control_token()` adopta un token válido ya configurado en `HKCU\Environment` antes de generar uno nuevo si aún no existe `.farmclips_control_token`.
+- **Pruebas unitarias (`tests/test_filmcraft_api.py`)**:
+  - Verificación de argumentos `--control` en `launch_filmcraft_windows`, `FilmCraftLauncher.open_project` y lectura de token desde `HKCU\Environment`.
+
+#### Por qué
+- Al simplificar el lanzamiento nativo en Windows, el argumento `--control` había quedado omitido, por lo que `filmcraft.exe` abría sin escuchar en `127.0.0.1:9876` y rechazaba las conexiones del MCP `filmcraft` (`os error 10061`).
+
+> [!warning] ⚠️ Cambia para ti
+> - Cada vez que abras un clip o una sesión en FilmCraft desde FarmClips, el puente de control (`127.0.0.1:9876`) quedará activo automáticamente para que tu copiloto MCP pueda leer y editar el proyecto abierto en vivo.
+
+---
 
 ### 🧩 Exportación Global de Sesión a FilmCraft (Master VOD + Sub-secuencias anidadas)
 
